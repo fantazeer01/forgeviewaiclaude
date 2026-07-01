@@ -1,17 +1,20 @@
 import requests
+import json
 import logging
 import datetime
+import time
 from typing import Optional
 from config.settings import POLYMARKET_GAMMA_BASE
 
 logger = logging.getLogger(__name__)
 
 class MarketFetcher:
-    ASSET_KEYWORDS = {
-        "BTC": ["bitcoin", "btc"],
-        "ETH": ["ethereum", "eth"],
-        "SOL": ["solana", "sol"],
+    ASSET_SLUG_PREFIX = {
+        "BTC": "btc",
+        "ETH": "eth",
+        "SOL": "sol",
     }
+    WINDOW_SEC = 300
 
     def __init__(self):
         self.session = requests.Session()
@@ -19,15 +22,16 @@ class MarketFetcher:
 
     def get_active_5min_markets(self) -> list[dict]:
         try:
-            markets = self._fetch_gamma_markets()
+            now = time.time()
+            boundary = self._current_boundary(now)
+            slugs = [f"{prefix}-updown-5m-{boundary}" for prefix in self.ASSET_SLUG_PREFIX.values()]
+            events = self._fetch_events_by_slug(slugs)
             result = []
-            for m in markets:
-                asset = self._detect_asset(m.get("question", ""))
+            for event in events:
+                asset = self._asset_from_slug(event.get("slug", ""))
                 if asset is None:
                     continue
-                if not self._is_5min_updown(m):
-                    continue
-                parsed = self._parse_market(m, asset)
+                parsed = self._parse_event(event, asset, now)
                 if parsed:
                     result.append(parsed)
             logger.info(f"Found {len(result)} active 5-min markets")
@@ -36,61 +40,61 @@ class MarketFetcher:
             logger.error(f"MarketFetcher error: {e}")
             return []
 
-    def _fetch_gamma_markets(self) -> list[dict]:
-        url = f"{POLYMARKET_GAMMA_BASE}/markets"
-        params = {"active": "true", "closed": "false", "limit": 200}
+    def _current_boundary(self, now: float) -> int:
+        now_int = int(now)
+        return now_int - (now_int % self.WINDOW_SEC)
+
+    def _asset_from_slug(self, slug: str) -> Optional[str]:
+        for asset, prefix in self.ASSET_SLUG_PREFIX.items():
+            if slug.startswith(f"{prefix}-updown-5m-"):
+                return asset
+        return None
+
+    def _fetch_events_by_slug(self, slugs: list[str]) -> list[dict]:
+        url = f"{POLYMARKET_GAMMA_BASE}/events"
+        params = [("slug", s) for s in slugs]
         resp = self.session.get(url, params=params, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
             return data
-        return data.get("markets", [])
+        return data.get("events", [])
 
-    def _detect_asset(self, question: str) -> Optional[str]:
-        q = question.lower()
-        for asset, keywords in self.ASSET_KEYWORDS.items():
-            if any(kw in q for kw in keywords):
-                return asset
-        return None
-
-    def _is_5min_updown(self, market: dict) -> bool:
-        question = market.get("question", "").lower()
-        has_direction = any(w in question for w in ["up", "down", "above", "below"])
-        duration = market.get("duration", 0)
-        if isinstance(duration, (int, float)):
-            return has_direction and 240 <= duration <= 360
-        return has_direction and any(w in question for w in ["5", "five", "minute"])
-
-    def _parse_market(self, m: dict, asset: str) -> Optional[dict]:
+    def _parse_event(self, event: dict, asset: str, now: float) -> Optional[dict]:
         try:
-            tokens = m.get("tokens", [])
-            yes_price, no_price = 0.5, 0.5
-            for t in tokens:
-                outcome = (t.get("outcome") or "").upper()
-                price = float(t.get("price", 0.5))
-                if outcome == "YES":
-                    yes_price = price
-                elif outcome == "NO":
-                    no_price = price
-            end_date = m.get("endDate") or m.get("end_date_iso") or ""
+            markets = event.get("markets", [])
+            if not markets:
+                return None
+            m = markets[0]
+            if m.get("closed"):
+                return None
+            outcomes = json.loads(m.get("outcomes", "[]"))
+            prices = json.loads(m.get("outcomePrices", "[]"))
+            price_by_label = {
+                str(label).strip().lower(): float(price)
+                for label, price in zip(outcomes, prices)
+            }
+            yes_price = price_by_label.get("up", 0.5)
+            no_price = price_by_label.get("down", 0.5)
+            end_date = m.get("endDate") or event.get("endDate") or ""
             minutes_remaining = 5.0
             if end_date:
                 try:
                     end_dt = datetime.datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-                    now = datetime.datetime.now(datetime.timezone.utc)
-                    minutes_remaining = max(0, (end_dt - now).total_seconds() / 60)
+                    now_dt = datetime.datetime.now(datetime.timezone.utc)
+                    minutes_remaining = max(0.0, (end_dt - now_dt).total_seconds() / 60)
                 except Exception:
                     pass
             return {
                 "market_id": m.get("conditionId") or m.get("id", ""),
                 "asset": asset,
-                "question": m.get("question", ""),
+                "question": m.get("question", event.get("title", "")),
                 "end_date_iso": end_date,
                 "yes_price": yes_price,
                 "no_price": no_price,
-                "volume": float(m.get("volume", 0)),
+                "volume": float(m.get("volumeNum") or m.get("volume") or 0),
                 "minutes_remaining": minutes_remaining,
             }
         except Exception as e:
-            logger.warning(f"_parse_market error: {e}")
+            logger.warning(f"_parse_event error: {e}")
             return None
