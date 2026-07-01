@@ -25,13 +25,13 @@ class MarketFetcher:
             now = time.time()
             boundary = self._current_boundary(now)
             slugs = [f"{prefix}-updown-5m-{boundary}" for prefix in self.ASSET_SLUG_PREFIX.values()]
-            events = self._fetch_events_by_slug(slugs)
+            markets = self._fetch_markets_by_slug(slugs)
             result = []
-            for event in events:
-                asset = self._asset_from_slug(event.get("slug", ""))
+            for m in markets:
+                asset = self._asset_from_slug(m.get("slug", ""))
                 if asset is None:
                     continue
-                parsed = self._parse_event(event, asset, now)
+                parsed = self._parse_market(m, asset, now)
                 if parsed:
                     result.append(parsed)
             logger.info(f"Found {len(result)} active 5-min markets")
@@ -50,22 +50,18 @@ class MarketFetcher:
                 return asset
         return None
 
-    def _fetch_events_by_slug(self, slugs: list[str]) -> list[dict]:
-        url = f"{POLYMARKET_GAMMA_BASE}/events"
-        params = [("slug", s) for s in slugs]
+    def _fetch_markets_by_slug(self, slugs: list[str]) -> list[dict]:
+        url = f"{POLYMARKET_GAMMA_BASE}/markets"
+        params = [("slug", s) for s in slugs] + [("limit", len(slugs))]
         resp = self.session.get(url, params=params, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
             return data
-        return data.get("events", [])
+        return data.get("markets", [])
 
-    def _parse_event(self, event: dict, asset: str, now: float) -> Optional[dict]:
+    def _parse_market(self, m: dict, asset: str, now: float) -> Optional[dict]:
         try:
-            markets = event.get("markets", [])
-            if not markets:
-                return None
-            m = markets[0]
             if m.get("closed"):
                 return None
             outcomes = json.loads(m.get("outcomes", "[]"))
@@ -76,7 +72,7 @@ class MarketFetcher:
             }
             yes_price = price_by_label.get("up", 0.5)
             no_price = price_by_label.get("down", 0.5)
-            end_date = m.get("endDate") or event.get("endDate") or ""
+            end_date = m.get("endDate") or ""
             minutes_remaining = 5.0
             if end_date:
                 try:
@@ -88,7 +84,7 @@ class MarketFetcher:
             return {
                 "market_id": m.get("conditionId") or m.get("id", ""),
                 "asset": asset,
-                "question": m.get("question", event.get("title", "")),
+                "question": m.get("question", ""),
                 "end_date_iso": end_date,
                 "yes_price": yes_price,
                 "no_price": no_price,
@@ -96,5 +92,5 @@ class MarketFetcher:
                 "minutes_remaining": minutes_remaining,
             }
         except Exception as e:
-            logger.warning(f"_parse_event error: {e}")
+            logger.warning(f"_parse_market error: {e}")
             return None
