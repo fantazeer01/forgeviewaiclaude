@@ -38,10 +38,10 @@ def test_detect_returns_none_with_insufficient_history():
 @pytest.mark.parametrize("minutes_remaining", [0.5, 4.6])
 def test_detect_returns_none_outside_time_window(minutes_remaining):
     detector = RepricingDetector()
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m1"] = [
         {"ts": old_ts, "yes": 0.9, "no": 0.1},
-        {"ts": datetime.datetime.utcnow(), "yes": 0.5, "no": 0.5},
+        {"ts": datetime.datetime.now(datetime.timezone.utc), "yes": 0.5, "no": 0.5},
     ]
     market = make_market(minutes_remaining=minutes_remaining)
     assert detector.detect(market) is None
@@ -56,7 +56,7 @@ def test_detect_returns_none_when_no_old_observation():
 
 def test_detect_yes_drop_triggers_signal():
     detector = RepricingDetector()
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.9, "no": 0.1}]
     detector.update_prices("m1", 0.5, 0.5)
     signal = detector.detect(make_market(yes_price=0.5, no_price=0.5))
@@ -68,7 +68,7 @@ def test_detect_yes_drop_triggers_signal():
 
 def test_detect_no_drop_triggers_signal():
     detector = RepricingDetector()
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.1, "no": 0.9}]
     detector.update_prices("m1", 0.5, 0.5)
     signal = detector.detect(make_market(yes_price=0.5, no_price=0.5))
@@ -79,7 +79,7 @@ def test_detect_no_drop_triggers_signal():
 
 def test_detect_below_threshold_returns_none():
     detector = RepricingDetector()
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.51, "no": 0.49}]
     detector.update_prices("m1", 0.50, 0.50)
     assert detector.detect(make_market(yes_price=0.50, no_price=0.50)) is None
@@ -87,7 +87,7 @@ def test_detect_below_threshold_returns_none():
 
 def test_detect_confidence_scales_with_drop_size():
     detector = RepricingDetector()
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.60, "no": 0.40}]
     detector.update_prices("m1", 0.55, 0.45)
     signal = detector.detect(make_market(yes_price=0.55, no_price=0.45))
@@ -100,7 +100,7 @@ def test_detect_confidence_scales_with_drop_size():
 def test_update_prices_prunes_old_entries():
     detector = RepricingDetector()
     max_window = REPRICING_FROZEN["max_time_window_sec"]
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=max_window + 10)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=max_window + 10)
     detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.9, "no": 0.1}]
     detector.update_prices("m1", 0.5, 0.5)
     assert len(detector._price_history["m1"]) == 1

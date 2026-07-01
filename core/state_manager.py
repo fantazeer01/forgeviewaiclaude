@@ -59,12 +59,12 @@ class StateManager:
                 with open(self.state_file) as f:
                     saved = json.load(f)
                 self.state = {**self.DEFAULT_STATE, **saved}
-                self.state["session_start"] = datetime.datetime.utcnow().isoformat()
+                self.state["session_start"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 return
             except Exception as e:
                 logger.warning(f"StateManager load error: {e}")
         self.state = dict(self.DEFAULT_STATE)
-        self.state["session_start"] = datetime.datetime.utcnow().isoformat()
+        self.state["session_start"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         self._save()
 
     def _save(self):

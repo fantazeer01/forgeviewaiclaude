@@ -37,7 +37,7 @@ def main():
         return
 
     tg.send_text("ForgeViewAI paper trading started")
-    last_report_ts = datetime.datetime.utcnow()
+    last_report_ts = datetime.datetime.now(datetime.timezone.utc)
 
     while True:
         try:
@@ -63,11 +63,11 @@ def main():
                     if trade:
                         tg.send_signal(signal, trade)
                         _log_signal(signal)
-            if (datetime.datetime.utcnow() - last_report_ts).total_seconds() > 3600:
+            if (datetime.datetime.now(datetime.timezone.utc) - last_report_ts).total_seconds() > 3600:
                 report = stats_rep.generate_report()
                 logger.info(report)
                 tg.send_text(report)
-                last_report_ts = datetime.datetime.utcnow()
+                last_report_ts = datetime.datetime.now(datetime.timezone.utc)
             time.sleep(MARKET_POLL_INTERVAL_SEC)
         except KeyboardInterrupt:
             logger.info("Shutting down")
@@ -84,7 +84,7 @@ def _determine_outcome(market: dict):
     return None
 
 def _maybe_reset_daily(state: StateManager):
-    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
     if state.get("last_daily_reset", "") != today:
         state.reset_daily()
         state.set("last_daily_reset", today)

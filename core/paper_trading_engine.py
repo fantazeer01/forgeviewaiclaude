@@ -77,7 +77,7 @@ class PaperTradingEngine:
             signal_confidence=signal.confidence,
             signal_reason=signal.reason,
             signal_source=source,
-            open_ts=datetime.datetime.utcnow().isoformat(),
+            open_ts=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             minutes_at_open=signal.minutes_remaining,
         )
         self._open_trades[signal.market_id] = trade
@@ -95,7 +95,7 @@ class PaperTradingEngine:
         else:
             close_price, result = 0.0, "LOSS"
         pnl = trade.size_tokens * (close_price - trade.entry_price)
-        trade.close_ts = datetime.datetime.utcnow().isoformat()
+        trade.close_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
         trade.close_price = close_price
         trade.pnl_usd = round(pnl, 4)
         trade.result = result

@@ -26,7 +26,7 @@ def test_process_market_detects_and_sets_cooldown(tmp_path):
     state = StateManager(state_file=str(tmp_path / "state.json"))
     detector = RepricingDetector()
     generator = RepricingSignalGenerator(detector, state)
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.9, "no": 0.1}]
     signal = generator.process_market(make_market("m1", yes_price=0.5, no_price=0.5))
     assert signal is not None
@@ -36,10 +36,10 @@ def test_process_market_detects_and_sets_cooldown(tmp_path):
 
 def test_process_market_suppressed_during_cooldown(tmp_path):
     state = StateManager(state_file=str(tmp_path / "state.json"))
-    state.set("last_signal_ts", {"BTC": datetime.datetime.utcnow().isoformat()})
+    state.set("last_signal_ts", {"BTC": datetime.datetime.now(datetime.timezone.utc).isoformat()})
     detector = RepricingDetector()
     generator = RepricingSignalGenerator(detector, state)
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m2"] = [{"ts": old_ts, "yes": 0.9, "no": 0.1}]
     signal = generator.process_market(make_market("m2", asset="BTC", yes_price=0.5, no_price=0.5))
     assert signal is None
@@ -47,11 +47,11 @@ def test_process_market_suppressed_during_cooldown(tmp_path):
 
 def test_cooldown_expired_allows_detection(tmp_path):
     state = StateManager(state_file=str(tmp_path / "state.json"))
-    expired_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=SIGNAL_COOLDOWN_SEC + 5)
+    expired_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=SIGNAL_COOLDOWN_SEC + 5)
     state.set("last_signal_ts", {"BTC": expired_ts.isoformat()})
     detector = RepricingDetector()
     generator = RepricingSignalGenerator(detector, state)
-    old_ts = datetime.datetime.utcnow() - datetime.timedelta(seconds=70)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m3"] = [{"ts": old_ts, "yes": 0.9, "no": 0.1}]
     signal = generator.process_market(make_market("m3", asset="BTC", yes_price=0.5, no_price=0.5))
     assert signal is not None
@@ -72,7 +72,7 @@ def test_is_in_cooldown_handles_malformed_timestamp(tmp_path):
 
 def test_process_market_updates_detector_history_even_in_cooldown(tmp_path):
     state = StateManager(state_file=str(tmp_path / "state.json"))
-    state.set("last_signal_ts", {"BTC": datetime.datetime.utcnow().isoformat()})
+    state.set("last_signal_ts", {"BTC": datetime.datetime.now(datetime.timezone.utc).isoformat()})
     detector = RepricingDetector()
     generator = RepricingSignalGenerator(detector, state)
     generator.process_market(make_market("m4", asset="BTC"))

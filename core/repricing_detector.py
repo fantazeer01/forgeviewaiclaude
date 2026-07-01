@@ -15,7 +15,7 @@ class RepricingSignal:
     no_price: float
     confidence: float
     reason: str
-    timestamp: str = field(default_factory=lambda: datetime.datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     minutes_remaining: float = 5.0
 
     def to_dict(self) -> dict:
@@ -37,7 +37,7 @@ class RepricingDetector:
         self._price_history: dict[str, list[dict]] = {}
 
     def update_prices(self, market_id: str, yes_price: float, no_price: float):
-        ts = datetime.datetime.utcnow()
+        ts = datetime.datetime.now(datetime.timezone.utc)
         if market_id not in self._price_history:
             self._price_history[market_id] = []
         self._price_history[market_id].append({"ts": ts, "yes": yes_price, "no": no_price})
@@ -56,7 +56,7 @@ class RepricingDetector:
         history = self._price_history.get(market_id, [])
         if len(history) < 2:
             return None
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         min_cutoff = now - datetime.timedelta(seconds=self.params["min_time_window_sec"])
         old_obs = next((p for p in history if p["ts"] <= min_cutoff), None)
         if old_obs is None:

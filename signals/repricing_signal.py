@@ -28,11 +28,11 @@ class RepricingSignalGenerator:
             return False
         try:
             last_ts = datetime.datetime.fromisoformat(last_ts_str)
-            return (datetime.datetime.utcnow() - last_ts).total_seconds() < SIGNAL_COOLDOWN_SEC
+            return (datetime.datetime.now(datetime.timezone.utc) - last_ts).total_seconds() < SIGNAL_COOLDOWN_SEC
         except Exception:
             return False
 
     def _set_cooldown(self, asset: str):
         last_ts_map = self.state.get("last_signal_ts", {}) or {}
-        last_ts_map[asset] = datetime.datetime.utcnow().isoformat()
+        last_ts_map[asset] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         self.state.set("last_signal_ts", last_ts_map)
