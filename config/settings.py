@@ -1,0 +1,20 @@
+REPRICING_FROZEN = {
+    "min_price_move": 0.03,
+    "min_time_window_sec": 60,
+    "max_time_window_sec": 240,
+    "confidence_threshold": 0.55,
+    "assets": ["BTC", "ETH", "SOL"],
+    "market_duration_min": 5,
+}
+PAPER_TRADE_SIZE_USD = 10.0
+MAX_OPEN_POSITIONS = 3
+MAX_DAILY_LOSS_USD = 50.0
+MAX_LOSS_STREAK = 5
+MARKET_POLL_INTERVAL_SEC = 15
+SIGNAL_COOLDOWN_SEC = 300
+POLYMARKET_API_BASE = "https://clob.polymarket.com"
+POLYMARKET_GAMMA_BASE = "https://gamma-api.polymarket.com"
+TELEGRAM_ENABLED = True
+STATE_FILE = "data/state.json"
+TRADES_LOG = "data/paper_trades.jsonl"
+SIGNALS_LOG = "data/signals_log.jsonl"
