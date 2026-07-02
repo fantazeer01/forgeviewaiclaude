@@ -3,7 +3,7 @@ REPRICING_FROZEN = {
     "min_time_window_sec": 60,
     "max_time_window_sec": 240,
     "confidence_threshold": 0.55,
-    "assets": ["BTC", "ETH", "SOL"],
+    "assets": ["BTC", "ETH"],
     "market_duration_min": 5,
     "min_yes_price": 0.30,
     "max_yes_price": 0.60,

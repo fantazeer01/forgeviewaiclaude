@@ -12,7 +12,6 @@ class MarketFetcher:
     ASSET_SLUG_PREFIX = {
         "BTC": "btc",
         "ETH": "eth",
-        "SOL": "sol",
     }
     WINDOW_SEC = 300
 

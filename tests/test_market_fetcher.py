@@ -49,9 +49,13 @@ def test_asset_from_slug_matches_known_prefixes():
     fetcher = MarketFetcher()
     assert fetcher._asset_from_slug("btc-updown-5m-1782945000") == "BTC"
     assert fetcher._asset_from_slug("eth-updown-5m-1782945000") == "ETH"
-    assert fetcher._asset_from_slug("sol-updown-5m-1782945000") == "SOL"
-    assert fetcher._asset_from_slug("xrp-updown-5m-1782945000") is None
     assert fetcher._asset_from_slug("some-unrelated-market") is None
+
+
+def test_asset_from_slug_does_not_match_sol_or_other_unlisted_assets():
+    fetcher = MarketFetcher()
+    assert fetcher._asset_from_slug("sol-updown-5m-1782945000") is None
+    assert fetcher._asset_from_slug("xrp-updown-5m-1782945000") is None
 
 
 def test_fetch_markets_by_slug_sends_slug_params_and_handles_list_response(mocker):
