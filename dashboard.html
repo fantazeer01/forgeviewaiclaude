@@ -134,16 +134,40 @@
   .panel-body { padding: 12px 14px; }
 
   /* ---- pnl curve ---- */
+  .pnl-chart-wrap { position: relative; }
   .pnl-chart-wrap svg { display: block; width: 100%; height: 180px; overflow: visible; }
   .pnl-line { fill: none; stroke: var(--bright); stroke-width: 2; }
   .pnl-line.negative { stroke: var(--critical); }
   .pnl-area { opacity: 0.15; }
   .pnl-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
-  .pnl-dot { fill: var(--bg); stroke: var(--bright); stroke-width: 2; }
+  .pnl-dot { fill: var(--bg); stroke: var(--bright); stroke-width: 2; transition: r 0.1s; }
   .pnl-dot.negative { stroke: var(--critical); }
+  .pnl-point:hover .pnl-dot { r: 5.5; filter: drop-shadow(0 0 4px var(--bright)); }
+  .pnl-point:hover .pnl-dot.negative { filter: drop-shadow(0 0 4px var(--critical)); }
+  .pnl-hit { fill: transparent; cursor: crosshair; }
   .pnl-label { font-size: 10px; fill: var(--dim); }
   .pnl-label.value { fill: var(--bright); font-weight: 700; }
   .pnl-label.value.critical { fill: var(--critical); }
+
+  .pnl-tooltip {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    background: #060806;
+    border: 1px solid var(--bright);
+    box-shadow: 0 0 10px rgba(57,255,106,0.3);
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--dim);
+    white-space: nowrap;
+    z-index: 20;
+  }
+  .pnl-tooltip b { color: var(--bright); }
+  .pnl-tooltip .tt-title { color: var(--bright); font-weight: 700; margin-bottom: 2px; }
+  .pnl-tooltip .tt-result { font-weight: 700; }
+  .pnl-tooltip .tt-result.win { color: var(--good); }
+  .pnl-tooltip .tt-result.loss { color: var(--critical); }
 
   /* ---- execution log ---- */
   .log {
@@ -435,20 +459,73 @@
 
     const linePath = points.map((v, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
     const areaPath = linePath + ` L${x(points.length - 1).toFixed(1)},${zeroY} L${x(0).toFixed(1)},${zeroY} Z`;
-    const dots = points.map((v, i) =>
-      `<circle class="pnl-dot${cls}" cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3"><title>#${i + 1} ${sorted[i].asset} ${fmtUsd(v)} cumulative</title></circle>`
-    ).join('');
+    // each point is a <g>: a visible dot (styled, non-interactive) plus a larger
+    // transparent hit circle (the actual mouseover/mousemove/mouseleave target,
+    // per the mark spec: hit targets should be bigger than the visible mark)
+    const pointsSvg = points.map((v, i) => {
+      const pointCls = v < 0 ? ' negative' : '';
+      const cx = x(i).toFixed(1), cy = y(v).toFixed(1);
+      return `
+        <g class="pnl-point">
+          <circle class="pnl-dot${pointCls}" cx="${cx}" cy="${cy}" r="3"></circle>
+          <circle class="pnl-hit" data-i="${i}" cx="${cx}" cy="${cy}" r="9"></circle>
+        </g>
+      `;
+    }).join('');
 
     wrap.innerHTML = `
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
         <line class="pnl-zero" x1="0" y1="${zeroY.toFixed(1)}" x2="${W}" y2="${zeroY.toFixed(1)}"/>
         <path class="pnl-area${cls}" fill="${negative ? 'var(--critical)' : 'var(--bright)'}" d="${areaPath}"/>
         <path class="pnl-line${cls}" d="${linePath}"/>
-        ${dots}
+        ${pointsSvg}
         <text class="pnl-label" x="4" y="12">${points.length} closed trades</text>
         <text class="pnl-label value${cls}" x="${W - 4}" y="12" text-anchor="end">${fmtUsd(final)}</text>
       </svg>
+      <div class="pnl-tooltip" id="pnl-tooltip"></div>
     `;
+
+    const tooltip = document.getElementById('pnl-tooltip');
+
+    function tooltipHtml(i) {
+      const t = sorted[i];
+      const resultCls = t.result === 'WIN' ? 'win' : (t.result === 'LOSS' ? 'loss' : '');
+      const resultText = t.status === 'open' ? 'OPEN' : (t.result || '—');
+      return `
+        <div class="tt-title">TRADE #${i + 1}</div>
+        <div>ASSET&nbsp;&nbsp;<b>${t.asset}</b> ${t.direction}</div>
+        <div>ENTRY&nbsp;&nbsp;<b>${t.entry_price.toFixed(3)}</b></div>
+        <div>RESULT&nbsp;<span class="tt-result ${resultCls}">${resultText}</span></div>
+        <div>TRADE PNL&nbsp;&nbsp;<b>${fmtUsd(t.pnl_usd)}</b></div>
+        <div>CUMULATIVE&nbsp;&nbsp;<b>${fmtUsd(points[i])}</b></div>
+      `;
+    }
+
+    function positionTooltip(evt) {
+      const rect = wrap.getBoundingClientRect();
+      const relX = evt.clientX - rect.left;
+      const relY = evt.clientY - rect.top;
+      const tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
+      let left = relX + 14;
+      if (left + tw > rect.width) left = relX - tw - 14;
+      let top = relY - th - 14;
+      if (top < 0) top = relY + 14;
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+    }
+
+    wrap.querySelectorAll('.pnl-hit').forEach(hit => {
+      const i = parseInt(hit.dataset.i, 10);
+      hit.addEventListener('mouseenter', evt => {
+        tooltip.innerHTML = tooltipHtml(i);
+        tooltip.style.display = 'block';
+        positionTooltip(evt);
+      });
+      hit.addEventListener('mousemove', positionTooltip);
+      hit.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+      });
+    });
   }
 
   // ---------- execution log ----------
