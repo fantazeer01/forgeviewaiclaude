@@ -66,15 +66,40 @@ def test_detect_yes_drop_triggers_signal():
     assert "YES dropped" in signal.reason
 
 
-def test_detect_no_drop_triggers_signal():
+def test_detect_no_drop_does_not_trigger_signal():
     detector = RepricingDetector()
     old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
     detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.1, "no": 0.9}]
     detector.update_prices("m1", 0.5, 0.5)
+    assert detector.detect(make_market(yes_price=0.5, no_price=0.5)) is None
+
+
+def test_detect_only_ever_returns_yes_direction():
+    detector = RepricingDetector()
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
+    detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.9, "no": 0.1}]
+    detector.update_prices("m1", 0.5, 0.5)
     signal = detector.detect(make_market(yes_price=0.5, no_price=0.5))
     assert signal is not None
-    assert signal.direction == "NO"
-    assert "NO dropped" in signal.reason
+    assert signal.direction == "YES"
+
+
+def test_detect_skips_signal_when_yes_price_below_floor():
+    detector = RepricingDetector()
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
+    detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.15, "no": 0.85}]
+    detector.update_prices("m1", 0.07, 0.93)
+    assert detector.detect(make_market(yes_price=0.07, no_price=0.93)) is None
+
+
+def test_detect_allows_signal_when_yes_price_at_floor():
+    detector = RepricingDetector()
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
+    detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.20, "no": 0.80}]
+    detector.update_prices("m1", 0.08, 0.92)
+    signal = detector.detect(make_market(yes_price=0.08, no_price=0.92))
+    assert signal is not None
+    assert signal.direction == "YES"
 
 
 def test_detect_below_threshold_returns_none():

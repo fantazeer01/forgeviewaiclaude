@@ -53,6 +53,8 @@ class RepricingDetector:
         minutes_remaining = market.get("minutes_remaining", 5.0)
         if minutes_remaining < 1.0 or minutes_remaining > 4.5:
             return None
+        if yes_price < self.params["min_yes_price"]:
+            return None
         history = self._price_history.get(market_id, [])
         if len(history) < 2:
             return None
@@ -62,7 +64,6 @@ class RepricingDetector:
         if old_obs is None:
             return None
         yes_drop = old_obs["yes"] - yes_price
-        no_drop = old_obs["no"] - no_price
         threshold = self.params["min_price_move"]
         conf_threshold = self.params["confidence_threshold"]
         if yes_drop >= threshold:
@@ -73,16 +74,6 @@ class RepricingDetector:
                     yes_price=yes_price, no_price=no_price,
                     confidence=round(confidence, 3),
                     reason=f"YES dropped {yes_drop:.3f} in {self.params['min_time_window_sec']}s",
-                    minutes_remaining=minutes_remaining,
-                )
-        elif no_drop >= threshold:
-            confidence = min(0.95, conf_threshold + (no_drop - threshold) * 2)
-            if confidence >= conf_threshold:
-                return RepricingSignal(
-                    asset=market["asset"], market_id=market_id, direction="NO",
-                    yes_price=yes_price, no_price=no_price,
-                    confidence=round(confidence, 3),
-                    reason=f"NO dropped {no_drop:.3f} in {self.params['min_time_window_sec']}s",
                     minutes_remaining=minutes_remaining,
                 )
         return None
