@@ -45,18 +45,9 @@ def main():
                 tg.send_stop(state.get("stop_reason", ""))
                 break
             _maybe_reset_daily(state)
+            _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep)
             markets = fetcher.get_active_5min_markets()
             for market in markets:
-                mid = market["market_id"]
-                open_trade = next((t for t in engine.get_open_trades() if t.market_id == mid), None)
-                if open_trade and market.get("minutes_remaining", 5.0) <= 0:
-                    outcome = _determine_outcome(market)
-                    if outcome:
-                        closed = engine.close_trade(mid, outcome)
-                        if closed:
-                            tg.send_close(closed, tracker.compute_stats())
-                            logger.info(stats_rep.generate_report())
-                    continue
                 signal = signal_gen.process_market(market)
                 if signal:
                     trade = engine.open_trade(signal)
@@ -77,11 +68,18 @@ def main():
             logger.error(f"Loop error: {e}", exc_info=True)
             time.sleep(30)
 
-def _determine_outcome(market: dict):
-    yes_price = market.get("yes_price", 0.5)
-    if yes_price >= 0.95: return "YES"
-    if yes_price <= 0.05: return "NO"
-    return None
+def _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep):
+    for trade in engine.get_open_trades():
+        resolution = fetcher.get_market_resolution(trade.market_id)
+        if not resolution:
+            continue
+        outcome = fetcher.resolve_outcome(resolution)
+        if outcome is None:
+            continue
+        closed = engine.close_trade(trade.market_id, outcome)
+        if closed:
+            tg.send_close(closed, tracker.compute_stats())
+            logger.info(stats_rep.generate_report())
 
 def _maybe_reset_daily(state: StateManager):
     today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")

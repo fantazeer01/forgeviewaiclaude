@@ -16,5 +16,6 @@ POLYMARKET_API_BASE = "https://clob.polymarket.com"
 POLYMARKET_GAMMA_BASE = "https://gamma-api.polymarket.com"
 TELEGRAM_ENABLED = True
 STATE_FILE = "data/state.json"
+DEDUP_STATE_FILE = "data/dedup_state.json"
 TRADES_LOG = "data/paper_trades.jsonl"
 SIGNALS_LOG = "data/signals_log.jsonl"

@@ -1,12 +1,12 @@
 import json
 import logging
 import os
-from config.settings import STATE_FILE
+from config.settings import DEDUP_STATE_FILE
 
 logger = logging.getLogger(__name__)
 
 class DedupGuard:
-    def __init__(self, state_file: str = STATE_FILE):
+    def __init__(self, state_file: str = DEDUP_STATE_FILE):
         self.state_file = state_file
         self._open_market_ids: set[str] = set()
         self._load()

@@ -204,3 +204,69 @@ def test_get_active_5min_markets_returns_empty_on_error(mocker):
     fetcher = MarketFetcher()
     mocker.patch.object(fetcher, "_fetch_markets_by_slug", side_effect=RuntimeError("boom"))
     assert fetcher.get_active_5min_markets() == []
+
+
+def test_get_market_resolution_sends_condition_id_in_url(mocker):
+    fetcher = MarketFetcher()
+    resp = mocker.Mock()
+    resp.raise_for_status = mocker.Mock()
+    resp.json.return_value = {"closed": True}
+    get_mock = mocker.patch.object(fetcher.session, "get", return_value=resp)
+    result = fetcher.get_market_resolution("0xabc123")
+    assert result == {"closed": True}
+    called_url = get_mock.call_args.args[0]
+    assert called_url.endswith("/markets/0xabc123")
+
+
+def test_get_market_resolution_returns_none_on_error(mocker):
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher.session, "get", side_effect=RuntimeError("boom"))
+    assert fetcher.get_market_resolution("0xabc123") is None
+
+
+def test_resolve_outcome_returns_yes_when_up_token_wins():
+    fetcher = MarketFetcher()
+    resolution = {
+        "closed": True,
+        "tokens": [
+            {"outcome": "Up", "price": 1, "winner": True},
+            {"outcome": "Down", "price": 0, "winner": False},
+        ],
+    }
+    assert fetcher.resolve_outcome(resolution) == "YES"
+
+
+def test_resolve_outcome_returns_no_when_down_token_wins():
+    fetcher = MarketFetcher()
+    resolution = {
+        "closed": True,
+        "tokens": [
+            {"outcome": "Up", "price": 0, "winner": False},
+            {"outcome": "Down", "price": 1, "winner": True},
+        ],
+    }
+    assert fetcher.resolve_outcome(resolution) == "NO"
+
+
+def test_resolve_outcome_returns_none_when_not_closed():
+    fetcher = MarketFetcher()
+    resolution = {
+        "closed": False,
+        "tokens": [
+            {"outcome": "Up", "price": 0.5, "winner": False},
+            {"outcome": "Down", "price": 0.5, "winner": False},
+        ],
+    }
+    assert fetcher.resolve_outcome(resolution) is None
+
+
+def test_resolve_outcome_returns_none_when_no_winner_flagged():
+    fetcher = MarketFetcher()
+    resolution = {
+        "closed": True,
+        "tokens": [
+            {"outcome": "Up", "price": 0.5, "winner": False},
+            {"outcome": "Down", "price": 0.5, "winner": False},
+        ],
+    }
+    assert fetcher.resolve_outcome(resolution) is None

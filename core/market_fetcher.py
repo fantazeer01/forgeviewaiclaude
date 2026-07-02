@@ -44,6 +44,33 @@ class MarketFetcher:
         now_int = int(now)
         return now_int - (now_int % self.WINDOW_SEC)
 
+    def get_market_resolution(self, condition_id: str) -> Optional[dict]:
+        try:
+            url = f"{POLYMARKET_API_BASE}/markets/{condition_id}"
+            resp = self.session.get(url, timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error(f"MarketFetcher error fetching resolution condition_id={condition_id}: {e}")
+            return None
+
+    def resolve_outcome(self, resolution: dict) -> Optional[str]:
+        try:
+            if not resolution.get("closed"):
+                return None
+            for token in resolution.get("tokens", []):
+                if not token.get("winner"):
+                    continue
+                outcome = str(token.get("outcome", "")).strip().lower()
+                if outcome == "up":
+                    return "YES"
+                if outcome == "down":
+                    return "NO"
+            return None
+        except Exception as e:
+            logger.warning(f"resolve_outcome error: {e}")
+            return None
+
     def _asset_from_slug(self, slug: str) -> Optional[str]:
         for asset, prefix in self.ASSET_SLUG_PREFIX.items():
             if slug.startswith(f"{prefix}-updown-5m-"):
