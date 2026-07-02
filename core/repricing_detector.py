@@ -53,7 +53,7 @@ class RepricingDetector:
         minutes_remaining = market.get("minutes_remaining", 5.0)
         if minutes_remaining < 1.0 or minutes_remaining > 4.5:
             return None
-        if yes_price < self.params["min_yes_price"]:
+        if yes_price < self.params["min_yes_price"] or yes_price >= self.params["max_yes_price"]:
             return None
         history = self._price_history.get(market_id, [])
         if len(history) < 2:

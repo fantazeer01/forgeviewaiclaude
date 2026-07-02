@@ -5,7 +5,8 @@ REPRICING_FROZEN = {
     "confidence_threshold": 0.55,
     "assets": ["BTC", "ETH", "SOL"],
     "market_duration_min": 5,
-    "min_yes_price": 0.08,
+    "min_yes_price": 0.30,
+    "max_yes_price": 0.60,
 }
 PAPER_TRADE_SIZE_USD = 10.0
 MAX_OPEN_POSITIONS = 3

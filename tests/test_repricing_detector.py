@@ -86,20 +86,44 @@ def test_detect_only_ever_returns_yes_direction():
 
 def test_detect_skips_signal_when_yes_price_below_floor():
     detector = RepricingDetector()
+    floor = REPRICING_FROZEN["min_yes_price"]
     old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
-    detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.15, "no": 0.85}]
-    detector.update_prices("m1", 0.07, 0.93)
-    assert detector.detect(make_market(yes_price=0.07, no_price=0.93)) is None
+    detector._price_history["m1"] = [{"ts": old_ts, "yes": floor + 0.10, "no": 1 - (floor + 0.10)}]
+    below = floor - 0.01
+    detector.update_prices("m1", below, 1 - below)
+    assert detector.detect(make_market(yes_price=below, no_price=1 - below)) is None
 
 
 def test_detect_allows_signal_when_yes_price_at_floor():
     detector = RepricingDetector()
+    floor = REPRICING_FROZEN["min_yes_price"]
     old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
-    detector._price_history["m1"] = [{"ts": old_ts, "yes": 0.20, "no": 0.80}]
-    detector.update_prices("m1", 0.08, 0.92)
-    signal = detector.detect(make_market(yes_price=0.08, no_price=0.92))
+    detector._price_history["m1"] = [{"ts": old_ts, "yes": floor + 0.10, "no": 1 - (floor + 0.10)}]
+    detector.update_prices("m1", floor, 1 - floor)
+    signal = detector.detect(make_market(yes_price=floor, no_price=1 - floor))
     assert signal is not None
     assert signal.direction == "YES"
+
+
+def test_detect_allows_signal_just_below_ceiling():
+    detector = RepricingDetector()
+    ceiling = REPRICING_FROZEN["max_yes_price"]
+    just_below = ceiling - 0.01
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
+    detector._price_history["m1"] = [{"ts": old_ts, "yes": just_below + 0.10, "no": 1 - (just_below + 0.10)}]
+    detector.update_prices("m1", just_below, 1 - just_below)
+    signal = detector.detect(make_market(yes_price=just_below, no_price=1 - just_below))
+    assert signal is not None
+    assert signal.direction == "YES"
+
+
+def test_detect_skips_signal_when_yes_price_at_or_above_ceiling():
+    detector = RepricingDetector()
+    ceiling = REPRICING_FROZEN["max_yes_price"]
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
+    detector._price_history["m1"] = [{"ts": old_ts, "yes": ceiling + 0.10, "no": 1 - (ceiling + 0.10)}]
+    detector.update_prices("m1", ceiling, 1 - ceiling)
+    assert detector.detect(make_market(yes_price=ceiling, no_price=1 - ceiling)) is None
 
 
 def test_detect_below_threshold_returns_none():
