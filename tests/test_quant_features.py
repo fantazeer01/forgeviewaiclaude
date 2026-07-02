@@ -75,14 +75,14 @@ def test_price_acceleration_positive_when_velocity_increasing():
     assert accel > 0
 
 
-def test_imbalance_from_top_positive_when_more_bid_size():
-    top = {"best_bid_price": 0.40, "best_bid_size": 100.0, "best_ask_price": 0.42, "best_ask_size": 20.0}
-    assert QuantFeatureExtractor._imbalance_from_top(top) == pytest.approx((100 - 20) / 120)
+def test_imbalance_from_top_positive_when_more_bid_depth():
+    top = {"total_bid_depth": 1000.0, "total_ask_depth": 200.0}
+    assert QuantFeatureExtractor._imbalance_from_top(top) == pytest.approx((1000 - 200) / 1200)
 
 
 def test_imbalance_from_top_none_when_missing():
     assert QuantFeatureExtractor._imbalance_from_top(None) is None
-    assert QuantFeatureExtractor._imbalance_from_top({"best_bid_size": None, "best_ask_size": 5}) is None
+    assert QuantFeatureExtractor._imbalance_from_top({"total_bid_depth": None, "total_ask_depth": 5}) is None
 
 
 def test_spread_from_top_computes_ask_minus_bid():
@@ -97,19 +97,22 @@ def test_spread_from_top_none_when_missing():
 def test_extract_returns_all_expected_keys():
     extractor = QuantFeatureExtractor()
     fetcher = FakeFetcher(top={"best_bid_price": 0.39, "best_bid_size": 50.0,
-                                "best_ask_price": 0.41, "best_ask_size": 30.0})
+                                "best_ask_price": 0.41, "best_ask_size": 30.0,
+                                "total_bid_depth": 1500.0, "total_ask_depth": 500.0})
     market = make_market(yes_price=0.40, no_price=0.60, minutes_remaining=2.5)
     snapshot = extractor.extract(market, fetcher)
     assert set(snapshot.keys()) == {
         "yes_price", "no_price", "price_velocity", "price_acceleration",
         "order_book_imbalance", "volume_24h", "time_remaining_pct", "spread",
+        "spread_compression",
     }
     assert snapshot["yes_price"] == 0.40
     assert snapshot["no_price"] == 0.60
     assert snapshot["time_remaining_pct"] == pytest.approx(2.5 / 5.0)
     assert snapshot["volume_24h"] == 1000.0
-    assert snapshot["order_book_imbalance"] == pytest.approx((50 - 30) / 80)
+    assert snapshot["order_book_imbalance"] == pytest.approx((1500 - 500) / 2000)
     assert snapshot["spread"] == pytest.approx(0.02)
+    assert snapshot["spread_compression"] is None  # no prior spread observed yet
     assert fetcher.calls == ["up-tok"]
 
 
@@ -120,4 +123,30 @@ def test_extract_handles_missing_up_token_id_gracefully():
     snapshot = extractor.extract(market, fetcher)
     assert snapshot["order_book_imbalance"] is None
     assert snapshot["spread"] is None
+    assert snapshot["spread_compression"] is None
     assert fetcher.calls == []
+
+
+def test_spread_compression_none_on_first_observation():
+    extractor = QuantFeatureExtractor()
+    assert extractor._spread_compression("m1", 0.05) is None
+
+
+def test_spread_compression_positive_when_spread_narrows():
+    extractor = QuantFeatureExtractor()
+    extractor._spread_compression("m1", 0.05)
+    compression = extractor._spread_compression("m1", 0.03)
+    assert compression == pytest.approx(0.02)
+
+
+def test_spread_compression_negative_when_spread_widens():
+    extractor = QuantFeatureExtractor()
+    extractor._spread_compression("m1", 0.03)
+    compression = extractor._spread_compression("m1", 0.05)
+    assert compression == pytest.approx(-0.02)
+
+
+def test_spread_compression_none_when_spread_is_none():
+    extractor = QuantFeatureExtractor()
+    extractor._spread_compression("m1", 0.05)
+    assert extractor._spread_compression("m1", None) is None

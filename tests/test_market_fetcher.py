@@ -312,7 +312,8 @@ def test_get_order_book_top_returns_best_bid_and_ask(mocker):
                                                             asks=[(0.46, 30), (0.50, 80)]))
     top = fetcher.get_order_book_top("token-1")
     assert top == {"best_bid_price": 0.44, "best_bid_size": 50.0,
-                    "best_ask_price": 0.46, "best_ask_size": 30.0}
+                    "best_ask_price": 0.46, "best_ask_size": 30.0,
+                    "total_bid_depth": 150.0, "total_ask_depth": 110.0}
 
 
 def test_get_order_book_top_handles_empty_book(mocker):
@@ -320,7 +321,18 @@ def test_get_order_book_top_handles_empty_book(mocker):
     mocker.patch.object(fetcher, "_fetch_order_book", return_value=make_book_with_sizes())
     top = fetcher.get_order_book_top("token-1")
     assert top == {"best_bid_price": None, "best_bid_size": None,
-                    "best_ask_price": None, "best_ask_size": None}
+                    "best_ask_price": None, "best_ask_size": None,
+                    "total_bid_depth": 0.0, "total_ask_depth": 0.0}
+
+
+def test_get_order_book_top_total_depth_sums_all_levels(mocker):
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher, "_fetch_order_book",
+                         return_value=make_book_with_sizes(bids=[(0.40, 100), (0.44, 50), (0.30, 25)],
+                                                            asks=[(0.46, 30), (0.50, 80), (0.60, 10)]))
+    top = fetcher.get_order_book_top("token-1")
+    assert top["total_bid_depth"] == 175.0
+    assert top["total_ask_depth"] == 120.0
 
 
 def test_get_order_book_top_returns_none_on_fetch_error(mocker):

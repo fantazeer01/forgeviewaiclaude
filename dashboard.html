@@ -529,30 +529,28 @@
   }
 
   // ---------- execution log ----------
+  // One row per trade_id (trades[] is already deduped-to-latest by trade_id
+  // in loadTrades()). A trade starts as an OPEN row and, once resolved, that
+  // SAME row switches to WIN/LOSS with its color and PnL -- it never gets a
+  // second row appended for the close event.
   function renderExecLog(trades) {
     const wrap = document.getElementById('exec-log');
-    const events = [];
-    for (const t of trades) {
-      if (t.open_ts) {
-        events.push({ ts: t.open_ts, type: 'open', t });
-      }
-      if (t.status !== 'open' && t.close_ts) {
-        events.push({ ts: t.close_ts, type: t.result === 'WIN' ? 'win' : 'loss', t });
-      }
-    }
-    events.sort((a, b) => new Date(b.ts) - new Date(a.ts));
-    if (!events.length) {
+    if (!trades.length) {
       wrap.innerHTML = '<div class="empty">No activity yet</div>';
       return;
     }
-    wrap.innerHTML = events.slice(0, 25).map(e => {
-      const t = e.t;
-      if (e.type === 'open') {
-        return `<div class="log-row"><span class="log-ts">[${fmtClock(e.ts)}]</span> <span class="log-tag open">OPEN </span> <span class="log-detail"><b>${t.asset}</b> ${t.direction} @ ${t.entry_price.toFixed(3)} size=$${t.size_usd.toFixed(2)}</span></div>`;
+    const sorted = trades.slice().sort((a, b) => {
+      const aTs = a.status === 'open' ? a.open_ts : (a.close_ts || a.open_ts);
+      const bTs = b.status === 'open' ? b.open_ts : (b.close_ts || b.open_ts);
+      return new Date(bTs) - new Date(aTs);
+    });
+    wrap.innerHTML = sorted.slice(0, 25).map(t => {
+      if (t.status === 'open') {
+        return `<div class="log-row" data-trade-id="${t.trade_id}"><span class="log-ts">[${fmtClock(t.open_ts)}]</span> <span class="log-tag open">OPEN </span> <span class="log-detail"><b>${t.asset}</b> ${t.direction} @ ${t.entry_price.toFixed(3)} size=$${t.size_usd.toFixed(2)}</span></div>`;
       }
-      const cls = e.type === 'win' ? 'win' : 'loss';
-      const tag = e.type === 'win' ? 'WIN  ' : 'LOSS ';
-      return `<div class="log-row"><span class="log-ts">[${fmtClock(e.ts)}]</span> <span class="log-tag ${cls}">${tag}</span> <span class="log-detail"><b>${t.asset}</b> ${t.direction} pnl=${fmtUsd(t.pnl_usd)}</span></div>`;
+      const cls = t.result === 'WIN' ? 'win' : 'loss';
+      const tag = t.result === 'WIN' ? 'WIN  ' : 'LOSS ';
+      return `<div class="log-row" data-trade-id="${t.trade_id}"><span class="log-ts">[${fmtClock(t.close_ts)}]</span> <span class="log-tag ${cls}">${tag}</span> <span class="log-detail"><b>${t.asset}</b> ${t.direction} @ ${t.entry_price.toFixed(3)} pnl=${fmtUsd(t.pnl_usd)}</span></div>`;
     }).join('');
   }
 

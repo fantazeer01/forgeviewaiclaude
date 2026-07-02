@@ -22,10 +22,20 @@ class QuantFeatureExtractor:
     (30s) seconds, i.e. velocity_now - velocity_as_of_30s_ago (velocity_as_of_30s_ago
     is itself the same 60s-lookback velocity, evaluated at t-30 using price at t-90).
     Requires ~90s of history; returns None while warming up.
+
+    order_book_imbalance uses total visible bid/ask depth (sum of all book
+    levels), not just the top-of-book size, matching the formula validated in
+    forgeview-ai's Market Microstructure Feature Capture v1
+    ((total_bid_depth - total_ask_depth) / (total_bid_depth + total_ask_depth)).
+
+    spread_compression is the narrowing of the bid/ask spread since the last
+    extract() call for that market (previous_spread - current_spread; positive
+    means the spread is compressing/narrowing), same definition used there.
     """
 
     def __init__(self):
         self._price_history: dict[str, list[dict]] = {}
+        self._last_spread: dict[str, float] = {}
 
     def update(self, market_id: str, yes_price: float, no_price: float):
         ts = datetime.datetime.now(datetime.timezone.utc)
@@ -72,14 +82,14 @@ class QuantFeatureExtractor:
     def _imbalance_from_top(top: Optional[dict]) -> Optional[float]:
         if not top:
             return None
-        bid_size = top.get("best_bid_size")
-        ask_size = top.get("best_ask_size")
-        if bid_size is None or ask_size is None:
+        bid_depth = top.get("total_bid_depth")
+        ask_depth = top.get("total_ask_depth")
+        if bid_depth is None or ask_depth is None:
             return None
-        denom = bid_size + ask_size
+        denom = bid_depth + ask_depth
         if denom == 0:
             return None
-        return (bid_size - ask_size) / denom
+        return (bid_depth - ask_depth) / denom
 
     @staticmethod
     def _spread_from_top(top: Optional[dict]) -> Optional[float]:
@@ -91,6 +101,15 @@ class QuantFeatureExtractor:
             return None
         return ask - bid
 
+    def _spread_compression(self, market_id: str, spread: Optional[float]) -> Optional[float]:
+        if spread is None:
+            return None
+        previous = self._last_spread.get(market_id)
+        self._last_spread[market_id] = spread
+        if previous is None:
+            return None
+        return previous - spread
+
     def extract(self, market: dict, fetcher) -> dict:
         """fetcher only needs to expose get_order_book_top(token_id) -> dict|None."""
         yes_price = market["yes_price"]
@@ -99,6 +118,7 @@ class QuantFeatureExtractor:
         minutes_remaining = market.get("minutes_remaining", 5.0)
         up_token_id = market.get("up_token_id")
         top = fetcher.get_order_book_top(up_token_id) if up_token_id else None
+        spread = self._spread_from_top(top)
 
         return {
             "yes_price": yes_price,
@@ -108,5 +128,6 @@ class QuantFeatureExtractor:
             "order_book_imbalance": self._imbalance_from_top(top),
             "volume_24h": market.get("volume_24h", 0.0),
             "time_remaining_pct": minutes_remaining / 5.0,
-            "spread": self._spread_from_top(top),
+            "spread": spread,
+            "spread_compression": self._spread_compression(market_id, spread),
         }

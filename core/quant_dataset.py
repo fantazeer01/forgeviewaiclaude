@@ -21,7 +21,8 @@ class QuantDataset:
         self.log_path = log_path
 
     def log_signal(self, sample_id: str, market_id: str, asset: str, features: dict,
-                    entry_price: float, direction: str, timestamp: str):
+                    entry_price: float, direction: str, timestamp: str,
+                    model_probability: float = None):
         self._append({
             "sample_id": sample_id,
             "market_id": market_id,
@@ -29,13 +30,15 @@ class QuantDataset:
             "direction": direction,
             "entry_price": entry_price,
             "features": features,
+            "model_probability": model_probability,
             "stage": "signal",
             "outcome": None,
             "timestamp": timestamp,
         })
 
     def log_resolution(self, sample_id: str, market_id: str, asset: str, features: dict,
-                        entry_price: float, direction: str, outcome: int, timestamp: str):
+                        entry_price: float, direction: str, outcome: int, timestamp: str,
+                        model_probability: float = None):
         self._append({
             "sample_id": sample_id,
             "market_id": market_id,
@@ -43,6 +46,7 @@ class QuantDataset:
             "direction": direction,
             "entry_price": entry_price,
             "features": features,
+            "model_probability": model_probability,
             "stage": "resolution",
             "outcome": outcome,
             "timestamp": timestamp,

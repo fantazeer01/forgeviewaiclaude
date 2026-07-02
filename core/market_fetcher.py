@@ -162,13 +162,17 @@ class MarketFetcher:
     def get_order_book_top(self, token_id: str) -> Optional[dict]:
         try:
             book = self._fetch_order_book(token_id)
-            bid = self._best_level(book.get("bids"), highest=True)
-            ask = self._best_level(book.get("asks"), highest=False)
+            bids = book.get("bids") or []
+            asks = book.get("asks") or []
+            bid = self._best_level(bids, highest=True)
+            ask = self._best_level(asks, highest=False)
             return {
                 "best_bid_price": bid[0] if bid else None,
                 "best_bid_size": bid[1] if bid else None,
                 "best_ask_price": ask[0] if ask else None,
                 "best_ask_size": ask[1] if ask else None,
+                "total_bid_depth": self._total_size(bids),
+                "total_ask_depth": self._total_size(asks),
             }
         except Exception as e:
             logger.warning(f"get_order_book_top error token={token_id}: {e}")
@@ -185,3 +189,12 @@ class MarketFetcher:
             if best is None or (highest and price > best[0]) or (not highest and price < best[0]):
                 best = (price, size)
         return best
+
+    def _total_size(self, levels: Optional[list]) -> float:
+        total = 0.0
+        for level in levels or []:
+            try:
+                total += float(level.get("size", 0))
+            except (TypeError, ValueError, AttributeError):
+                continue
+        return total

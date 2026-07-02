@@ -10,7 +10,6 @@ logger = logging.getLogger("run")
 
 from config.settings import MARKET_POLL_INTERVAL_SEC
 from core.market_fetcher import MarketFetcher
-from core.repricing_detector import RepricingDetector
 from core.state_manager import StateManager
 from core.dedup_guard import DedupGuard
 from core.paper_trading_engine import PaperTradingEngine
@@ -24,10 +23,9 @@ def main():
     state = StateManager()
     dedup = DedupGuard()
     fetcher = MarketFetcher()
-    detector = RepricingDetector()
     engine = PaperTradingEngine(state, dedup)
     tracker = PnLTracker()
-    signal_gen = QuantSignalGenerator(detector, state, fetcher)
+    signal_gen = QuantSignalGenerator(state, fetcher)
     stats_rep = StatsReporter(tracker, state)
     tg = TelegramReporter()
 
