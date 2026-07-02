@@ -3,234 +3,337 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ForgeViewAI — Live Dashboard</title>
+<title>FORGEVIEWAI :: TRADING TERMINAL</title>
 <style>
-  .viz-root {
-    --surface-1:      #fcfcfb;
-    --page-plane:     #f9f9f7;
-    --text-primary:   #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted:     #898781;
-    --gridline:       #e1e0d9;
-    --border:         rgba(11,11,11,0.10);
-    --good:           #0ca30c;
-    --critical:       #d03b3b;
-    --accent:         #2a78d6;
-    --warning:        #fab219;
+  :root {
+    --bg:          #0a0a0a;
+    --panel:       #0d120d;
+    --border:      rgba(57,255,106,0.18);
+    --grid:        rgba(57,255,106,0.08);
+    --bright:      #39ff6a;
+    --dim:         #4d9960;
+    --muted:       #2d6b40;
+    --good:        #39ff6a;
+    --critical:    #ff3b3b;
+    --warning:     #ffcc00;
+    --info:        #00e5ff;
   }
-  @media (prefers-color-scheme: dark) {
-    .viz-root {
-      --surface-1:      #1a1a19;
-      --page-plane:     #0d0d0d;
-      --text-primary:   #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted:     #898781;
-      --gridline:       #2c2c2a;
-      --border:         rgba(255,255,255,0.10);
-      --good:           #0ca30c;
-      --critical:       #e66767;
-      --accent:         #3987e5;
-      --warning:        #fab219;
-    }
-  }
-
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
     padding: 0;
-    background: var(--page-plane);
-    color: var(--text-primary);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--bright);
+    font-family: ui-monospace, "Cascadia Code", "SF Mono", "Fira Code", Consolas, "Courier New", monospace;
   }
-  .viz-root {
-    max-width: 1080px;
+  body {
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .root {
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 28px 20px 60px;
+    padding: 20px 18px 70px;
   }
 
+  a { color: var(--info); }
+
+  /* ---- header ---- */
   header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 20px;
+    gap: 10px;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--border);
   }
-  h1 {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0;
+  .brand {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--bright);
+    text-shadow: 0 0 6px rgba(57,255,106,0.45);
   }
-  .meta {
-    font-size: 13px;
-    color: var(--text-muted);
+  .brand .cursor {
+    display: inline-block;
+    width: 9px;
+    height: 15px;
+    background: var(--bright);
+    margin-left: 6px;
+    vertical-align: -2px;
+    animation: blink 1s step-end infinite;
   }
-
-  .status-banner {
-    display: none;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--surface-1);
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-bottom: 20px;
-  }
-  .status-banner.stopped {
+  @keyframes blink { 50% { opacity: 0; } }
+  .header-meta {
     display: flex;
-    border-color: var(--critical);
+    gap: 22px;
+    font-size: 12px;
+    color: var(--dim);
   }
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--good);
-    flex-shrink: 0;
-  }
-  .status-banner.stopped .status-dot { background: var(--critical); }
+  .header-meta b { color: var(--bright); font-weight: 600; }
 
+  /* ---- stat tiles ---- */
   .tiles {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 28px;
+    gap: 10px;
+    margin-bottom: 18px;
   }
-  @media (max-width: 720px) {
-    .tiles { grid-template-columns: repeat(2, 1fr); }
-  }
+  @media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
   .tile {
-    background: var(--surface-1);
+    background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
+    padding: 14px 16px;
   }
   .tile-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin: 0 0 6px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    margin: 0 0 8px;
   }
+  .tile-label::before { content: "// "; }
   .tile-value {
-    font-size: 26px;
-    font-weight: 600;
+    font-size: 28px;
+    font-weight: 700;
     margin: 0;
-    line-height: 1.1;
+    line-height: 1;
+    text-shadow: 0 0 8px currentColor;
   }
-  .tile-value.good { color: var(--good); }
   .tile-value.critical { color: var(--critical); }
   .tile-sub {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin: 4px 0 0;
+    font-size: 11px;
+    color: var(--dim);
+    margin: 6px 0 0;
   }
 
-  section {
-    margin-bottom: 28px;
+  /* ---- layout grid ---- */
+  .layout {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
   }
-  h2 {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin: 0 0 10px;
-  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .col { display: flex; flex-direction: column; gap: 12px; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--surface-1);
+  .panel {
+    background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
   }
+  .panel-title {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--dim);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title::before { content: "> "; color: var(--bright); }
+  .panel-body { padding: 12px 14px; }
+
+  /* ---- pnl curve ---- */
+  .pnl-chart-wrap svg { display: block; width: 100%; height: 180px; overflow: visible; }
+  .pnl-line { fill: none; stroke: var(--bright); stroke-width: 2; }
+  .pnl-line.negative { stroke: var(--critical); }
+  .pnl-area { opacity: 0.15; }
+  .pnl-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+  .pnl-dot { fill: var(--bg); stroke: var(--bright); stroke-width: 2; }
+  .pnl-dot.negative { stroke: var(--critical); }
+  .pnl-label { font-size: 10px; fill: var(--dim); }
+  .pnl-label.value { fill: var(--bright); font-weight: 700; }
+  .pnl-label.value.critical { fill: var(--critical); }
+
+  /* ---- execution log ---- */
+  .log {
+    max-height: 320px;
+    overflow-y: auto;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .log-row { white-space: nowrap; }
+  .log-ts { color: var(--muted); }
+  .log-tag { font-weight: 700; }
+  .log-tag.open { color: var(--info); }
+  .log-tag.win { color: var(--good); }
+  .log-tag.loss { color: var(--critical); }
+  .log-detail { color: var(--dim); }
+  .log-detail b { color: var(--bright); font-weight: 600; }
+
+  /* ---- open positions ---- */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
   thead th {
     text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    color: var(--text-muted);
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--gridline);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 4px 6px 8px;
+    border-bottom: 1px solid var(--border);
   }
   tbody td {
-    padding: 10px 12px;
-    font-size: 13px;
-    border-bottom: 1px solid var(--gridline);
+    padding: 6px;
+    border-bottom: 1px solid var(--grid);
+    color: var(--bright);
     font-variant-numeric: tabular-nums;
   }
   tbody tr:last-child td { border-bottom: none; }
   .num { text-align: right; }
-  .pnl-pos { color: var(--good); }
-  .pnl-neg { color: var(--critical); }
 
-  .badge {
-    display: inline-block;
+  /* ---- signal status ---- */
+  .signal-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--grid);
+    font-size: 12px;
+  }
+  .signal-row:last-child { border-bottom: none; }
+  .signal-asset { color: var(--bright); font-weight: 700; }
+  .signal-state { font-size: 11px; }
+  .signal-state.ready { color: var(--good); }
+  .signal-state.cooldown { color: var(--warning); }
+  .signal-state.unknown { color: var(--muted); }
+
+  /* ---- market topology ---- */
+  .topo {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0 4px;
+  }
+  .topo-node { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .topo-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 0 0 rgba(57,255,106,0);
+    transition: box-shadow 0.3s;
+  }
+  .topo-dot.active {
+    background: var(--bright);
+    box-shadow: 0 0 10px 2px rgba(57,255,106,0.6);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 8px 1px rgba(57,255,106,0.5); }
+    50% { box-shadow: 0 0 14px 4px rgba(57,255,106,0.85); }
+  }
+  .topo-label { font-size: 11px; color: var(--dim); }
+  .topo-sub { font-size: 10px; color: var(--muted); }
+
+  .empty { color: var(--muted); font-size: 12px; padding: 10px 0; }
+
+  /* ---- bottom status bar ---- */
+  .statusbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: #060806;
+    border-top: 1px solid var(--border);
+    padding: 8px 18px;
     font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 999px;
+    color: var(--dim);
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+    z-index: 10;
   }
-  .badge-win { background: rgba(12,163,12,0.12); color: var(--good); }
-  .badge-loss { background: rgba(208,59,59,0.12); color: var(--critical); }
-  .badge-open { background: rgba(42,120,214,0.12); color: var(--accent); }
-
-  .empty {
-    padding: 20px;
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 13px;
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: 10px;
+  .statusbar .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--good);
+    margin-right: 6px;
+    vertical-align: 1px;
   }
+  .statusbar.stopped .dot { background: var(--critical); }
+  .statusbar b { color: var(--bright); }
+  .statusbar.stopped .status-label { color: var(--critical); }
 </style>
 </head>
 <body>
-<div class="viz-root">
+<div class="root">
   <header>
-    <h1>ForgeViewAI — Live Dashboard</h1>
-    <span class="meta" id="last-updated">Loading…</span>
+    <div class="brand">FORGEVIEWAI<span class="cursor"></span> // LIVE TRADING TERMINAL</div>
+    <div class="header-meta">
+      <span>RUNTIME <b id="hdr-runtime">--:--:--</b></span>
+      <span>LAST SYNC <b id="hdr-updated">--:--:--</b></span>
+    </div>
   </header>
-
-  <div class="status-banner" id="status-banner">
-    <span class="status-dot"></span>
-    <span id="status-text"></span>
-  </div>
 
   <div class="tiles">
     <div class="tile">
-      <p class="tile-label">Total trades</p>
-      <p class="tile-value" id="tile-total">—</p>
+      <p class="tile-label">TOTAL PNL</p>
+      <p class="tile-value" id="tile-pnl">$0.00</p>
     </div>
     <div class="tile">
-      <p class="tile-label">Win rate</p>
-      <p class="tile-value" id="tile-winrate">—</p>
-      <p class="tile-sub" id="tile-winrate-sub">&nbsp;</p>
+      <p class="tile-label">TRADES</p>
+      <p class="tile-value" id="tile-trades">0</p>
+      <p class="tile-sub" id="tile-trades-sub">&nbsp;</p>
     </div>
     <div class="tile">
-      <p class="tile-label">Total PnL</p>
-      <p class="tile-value" id="tile-pnl">—</p>
+      <p class="tile-label">WIN RATE</p>
+      <p class="tile-value" id="tile-winrate">0.0%</p>
     </div>
     <div class="tile">
-      <p class="tile-label">Open positions</p>
-      <p class="tile-value" id="tile-open">—</p>
+      <p class="tile-label">OPEN</p>
+      <p class="tile-value" id="tile-open">0</p>
     </div>
   </div>
 
-  <section>
-    <h2>Open positions</h2>
-    <div id="open-positions-wrap"></div>
-  </section>
+  <div class="layout">
+    <div class="col">
+      <div class="panel">
+        <div class="panel-title">PNL CURVE</div>
+        <div class="panel-body pnl-chart-wrap" id="pnl-chart">
+          <div class="empty">Awaiting closed trades…</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">EXECUTION LOG</div>
+        <div class="panel-body log" id="exec-log">
+          <div class="empty">No activity yet</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">OPEN POSITIONS</div>
+        <div class="panel-body" id="open-positions">
+          <div class="empty">No open positions</div>
+        </div>
+      </div>
+    </div>
 
-  <section>
-    <h2>Last 10 trades</h2>
-    <div id="recent-trades-wrap"></div>
-  </section>
+    <div class="col">
+      <div class="panel">
+        <div class="panel-title">MARKET TOPOLOGY</div>
+        <div class="panel-body">
+          <div class="topo" id="topo"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">SIGNAL STATUS</div>
+        <div class="panel-body" id="signal-status"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="statusbar" id="statusbar">
+  <span><span class="dot"></span><span class="status-label" id="sb-status">RUNNING</span></span>
+  <span>DAILY LOSS <b id="sb-daily-loss">$0.00</b> / $50.00</span>
+  <span>LOSS STREAK <b id="sb-streak">0</b> / 5</span>
+  <span>POLL <b>15s</b></span>
+  <span>REFRESH <b>15s</b></span>
 </div>
 
 <script>
   const REFRESH_MS = 15000;
+  const ASSETS = ['BTC', 'ETH', 'SOL'];
+  // mirrors config/settings.py -- keep in sync if those change
+  const SIGNAL_COOLDOWN_SEC = 300;
+  const MAX_DAILY_LOSS_USD = 50.0;
+  const MAX_LOSS_STREAK = 5;
 
   async function fetchNoCache(path) {
     const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
@@ -270,20 +373,23 @@
     return sign + '$' + Math.abs(n).toFixed(2);
   }
 
-  function fmtTime(iso) {
-    if (!iso) return '—';
+  function fmtClock(iso) {
+    if (!iso) return '--:--:--';
     const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (isNaN(d.getTime())) return '--:--:--';
+    return d.toLocaleTimeString(undefined, { hour12: false });
   }
 
-  function resultBadge(trade) {
-    if (trade.status === 'open') return '<span class="badge badge-open">OPEN</span>';
-    if (trade.result === 'WIN') return '<span class="badge badge-win">WIN</span>';
-    if (trade.result === 'LOSS') return '<span class="badge badge-loss">LOSS</span>';
-    return '<span class="badge">' + (trade.status || '—') + '</span>';
+  function fmtDuration(ms) {
+    if (ms < 0) ms = 0;
+    const s = Math.floor(ms / 1000);
+    const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return hh + ':' + mm + ':' + ss;
   }
 
+  // ---------- stats ----------
   function renderStats(trades) {
     const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
     const wins = closed.filter(t => t.pnl_usd > 0);
@@ -292,23 +398,90 @@
     const winRate = closed.length ? (wins.length / closed.length) * 100 : 0;
     const open = trades.filter(t => t.status === 'open');
 
-    document.getElementById('tile-total').textContent = closed.length;
-    document.getElementById('tile-winrate').textContent = closed.length ? winRate.toFixed(1) + '%' : '—';
-    document.getElementById('tile-winrate-sub').textContent = closed.length ? (wins.length + 'W / ' + losses.length + 'L') : 'No closed trades yet';
-
     const pnlTile = document.getElementById('tile-pnl');
     pnlTile.textContent = fmtUsd(totalPnl);
-    pnlTile.classList.remove('good', 'critical');
-    if (totalPnl > 0) pnlTile.classList.add('good');
-    if (totalPnl < 0) pnlTile.classList.add('critical');
+    pnlTile.classList.toggle('critical', totalPnl < 0);
 
+    document.getElementById('tile-trades').textContent = closed.length;
+    document.getElementById('tile-trades-sub').textContent = closed.length ? (wins.length + 'W / ' + losses.length + 'L') : 'no closed trades';
+    document.getElementById('tile-winrate').textContent = closed.length ? winRate.toFixed(1) + '%' : '--';
     document.getElementById('tile-open').textContent = open.length;
 
     return { open, closed };
   }
 
+  // ---------- pnl curve ----------
+  function renderPnlCurve(closed) {
+    const wrap = document.getElementById('pnl-chart');
+    if (!closed.length) {
+      wrap.innerHTML = '<div class="empty">Awaiting closed trades…</div>';
+      return;
+    }
+    const sorted = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
+    let running = 0;
+    const points = sorted.map(t => { running += t.pnl_usd; return running; });
+
+    const W = 600, H = 160, PAD = 6;
+    const min = Math.min(0, ...points);
+    const max = Math.max(0, ...points);
+    const span = (max - min) || 1;
+    const x = i => points.length > 1 ? (i / (points.length - 1)) * (W - PAD * 2) + PAD : W / 2;
+    const y = v => H - PAD - ((v - min) / span) * (H - PAD * 2);
+    const zeroY = y(0);
+
+    const final = points[points.length - 1];
+    const negative = final < 0;
+    const cls = negative ? ' negative' : '';
+
+    const linePath = points.map((v, i) => (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+    const areaPath = linePath + ` L${x(points.length - 1).toFixed(1)},${zeroY} L${x(0).toFixed(1)},${zeroY} Z`;
+    const dots = points.map((v, i) =>
+      `<circle class="pnl-dot${cls}" cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3"><title>#${i + 1} ${sorted[i].asset} ${fmtUsd(v)} cumulative</title></circle>`
+    ).join('');
+
+    wrap.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <line class="pnl-zero" x1="0" y1="${zeroY.toFixed(1)}" x2="${W}" y2="${zeroY.toFixed(1)}"/>
+        <path class="pnl-area${cls}" fill="${negative ? 'var(--critical)' : 'var(--bright)'}" d="${areaPath}"/>
+        <path class="pnl-line${cls}" d="${linePath}"/>
+        ${dots}
+        <text class="pnl-label" x="4" y="12">${points.length} closed trades</text>
+        <text class="pnl-label value${cls}" x="${W - 4}" y="12" text-anchor="end">${fmtUsd(final)}</text>
+      </svg>
+    `;
+  }
+
+  // ---------- execution log ----------
+  function renderExecLog(trades) {
+    const wrap = document.getElementById('exec-log');
+    const events = [];
+    for (const t of trades) {
+      if (t.open_ts) {
+        events.push({ ts: t.open_ts, type: 'open', t });
+      }
+      if (t.status !== 'open' && t.close_ts) {
+        events.push({ ts: t.close_ts, type: t.result === 'WIN' ? 'win' : 'loss', t });
+      }
+    }
+    events.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    if (!events.length) {
+      wrap.innerHTML = '<div class="empty">No activity yet</div>';
+      return;
+    }
+    wrap.innerHTML = events.slice(0, 25).map(e => {
+      const t = e.t;
+      if (e.type === 'open') {
+        return `<div class="log-row"><span class="log-ts">[${fmtClock(e.ts)}]</span> <span class="log-tag open">OPEN </span> <span class="log-detail"><b>${t.asset}</b> ${t.direction} @ ${t.entry_price.toFixed(3)} size=$${t.size_usd.toFixed(2)}</span></div>`;
+      }
+      const cls = e.type === 'win' ? 'win' : 'loss';
+      const tag = e.type === 'win' ? 'WIN  ' : 'LOSS ';
+      return `<div class="log-row"><span class="log-ts">[${fmtClock(e.ts)}]</span> <span class="log-tag ${cls}">${tag}</span> <span class="log-detail"><b>${t.asset}</b> ${t.direction} pnl=${fmtUsd(t.pnl_usd)}</span></div>`;
+    }).join('');
+  }
+
+  // ---------- open positions ----------
   function renderOpenPositions(open) {
-    const wrap = document.getElementById('open-positions-wrap');
+    const wrap = document.getElementById('open-positions');
     if (!open.length) {
       wrap.innerHTML = '<div class="empty">No open positions</div>';
       return;
@@ -318,77 +491,89 @@
       .sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))
       .map(t => `
         <tr>
-          <td>${fmtTime(t.open_ts)}</td>
-          <td>${t.asset || '—'}</td>
-          <td>${t.direction || '—'}</td>
-          <td class="num">${t.entry_price != null ? t.entry_price.toFixed(3) : '—'}</td>
-          <td class="num">$${(t.size_usd || 0).toFixed(2)}</td>
+          <td>${fmtClock(t.open_ts)}</td>
+          <td>${t.asset}</td>
+          <td>${t.direction}</td>
+          <td class="num">${t.entry_price.toFixed(3)}</td>
+          <td class="num">$${t.size_usd.toFixed(2)}</td>
         </tr>
       `).join('');
     wrap.innerHTML = `
       <table>
-        <thead>
-          <tr><th>Opened</th><th>Asset</th><th>Dir</th><th class="num">Entry</th><th class="num">Size</th></tr>
-        </thead>
+        <thead><tr><th>Opened</th><th>Asset</th><th>Dir</th><th class="num">Entry</th><th class="num">Size</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     `;
   }
 
-  function renderRecentTrades(trades) {
-    const wrap = document.getElementById('recent-trades-wrap');
-    if (!trades.length) {
-      wrap.innerHTML = '<div class="empty">No trades yet</div>';
-      return;
+  // ---------- signal status + topology ----------
+  function renderSignalsAndTopology(state, trades) {
+    const lastSignalTs = (state && state.last_signal_ts) || {};
+    const openByAsset = {};
+    for (const t of trades) {
+      if (t.status === 'open') openByAsset[t.asset] = (openByAsset[t.asset] || 0) + 1;
     }
-    const rows = trades
-      .slice()
-      .sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))
-      .slice(0, 10)
-      .map(t => {
-        const pnlClass = t.pnl_usd > 0 ? 'pnl-pos' : (t.pnl_usd < 0 ? 'pnl-neg' : '');
-        const pnlText = t.pnl_usd != null ? fmtUsd(t.pnl_usd) : '—';
-        return `
-          <tr>
-            <td>${fmtTime(t.open_ts)}</td>
-            <td>${t.asset || '—'}</td>
-            <td>${t.direction || '—'}</td>
-            <td class="num">${t.entry_price != null ? t.entry_price.toFixed(3) : '—'}</td>
-            <td>${resultBadge(t)}</td>
-            <td class="num ${pnlClass}">${pnlText}</td>
-          </tr>
-        `;
-      }).join('');
-    wrap.innerHTML = `
-      <table>
-        <thead>
-          <tr><th>Opened</th><th>Asset</th><th>Dir</th><th class="num">Entry</th><th>Result</th><th class="num">PnL</th></tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
+
+    const now = Date.now();
+    const sigWrap = document.getElementById('signal-status');
+    const topoWrap = document.getElementById('topo');
+
+    sigWrap.innerHTML = ASSETS.map(asset => {
+      const ts = lastSignalTs[asset];
+      if (!ts) {
+        return `<div class="signal-row"><span class="signal-asset">${asset}</span><span class="signal-state unknown">NO SIGNAL YET</span></div>`;
+      }
+      const elapsedSec = (now - new Date(ts).getTime()) / 1000;
+      if (elapsedSec < SIGNAL_COOLDOWN_SEC) {
+        const remain = Math.ceil(SIGNAL_COOLDOWN_SEC - elapsedSec);
+        return `<div class="signal-row"><span class="signal-asset">${asset}</span><span class="signal-state cooldown">COOLDOWN ${remain}s</span></div>`;
+      }
+      return `<div class="signal-row"><span class="signal-asset">${asset}</span><span class="signal-state ready">READY</span></div>`;
+    }).join('');
+
+    topoWrap.innerHTML = ASSETS.map(asset => {
+      const ts = lastSignalTs[asset];
+      const elapsedSec = ts ? (now - new Date(ts).getTime()) / 1000 : Infinity;
+      const active = elapsedSec < SIGNAL_COOLDOWN_SEC || (openByAsset[asset] || 0) > 0;
+      const openCount = openByAsset[asset] || 0;
+      return `
+        <div class="topo-node">
+          <div class="topo-dot ${active ? 'active' : ''}"></div>
+          <div class="topo-label">${asset}</div>
+          <div class="topo-sub">${openCount ? openCount + ' open' : 'idle'}</div>
+        </div>
+      `;
+    }).join('');
   }
 
-  function renderStatus(state) {
-    const banner = document.getElementById('status-banner');
-    const text = document.getElementById('status-text');
-    if (state && state.system_stopped) {
-      banner.classList.add('stopped');
-      text.textContent = 'System stopped: ' + (state.stop_reason || 'unknown reason');
-    } else {
-      banner.classList.remove('stopped');
-      text.textContent = 'Running';
+  // ---------- status bar + header ----------
+  function renderStatusBar(state) {
+    const bar = document.getElementById('statusbar');
+    const label = document.getElementById('sb-status');
+    const stopped = !!(state && state.system_stopped);
+    bar.classList.toggle('stopped', stopped);
+    label.textContent = stopped ? 'STOPPED: ' + (state.stop_reason || 'unknown') : 'RUNNING';
+    document.getElementById('sb-daily-loss').textContent = '$' + ((state && state.daily_loss_usd) || 0).toFixed(2);
+    document.getElementById('sb-streak').textContent = (state && state.loss_streak) || 0;
+  }
+
+  function renderHeader(state) {
+    if (state && state.session_start) {
+      const elapsed = Date.now() - new Date(state.session_start).getTime();
+      document.getElementById('hdr-runtime').textContent = fmtDuration(elapsed);
     }
+    document.getElementById('hdr-updated').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   }
 
   async function refresh() {
     const [trades, state] = await Promise.all([loadTrades(), loadState()]);
-    const { open } = renderStats(trades);
+    const { open, closed } = renderStats(trades);
+    renderPnlCurve(closed);
+    renderExecLog(trades);
     renderOpenPositions(open);
-    renderRecentTrades(trades);
-    renderStatus(state);
-    document.getElementById('last-updated').textContent =
-      'Auto-refreshing every 15s • last updated ' + new Date().toLocaleTimeString();
+    renderSignalsAndTopology(state, trades);
+    renderStatusBar(state);
+    renderHeader(state);
   }
 
   refresh();
