@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForgeViewAI — Live Dashboard</title>
+<style>
+  .viz-root {
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --good:           #0ca30c;
+    --critical:       #d03b3b;
+    --accent:         #2a78d6;
+    --warning:        #fab219;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --good:           #0ca30c;
+      --critical:       #e66767;
+      --accent:         #3987e5;
+      --warning:        #fab219;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .viz-root {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .meta {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .status-banner {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+  .status-banner.stopped {
+    display: flex;
+    border-color: var(--critical);
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--good);
+    flex-shrink: 0;
+  }
+  .status-banner.stopped .status-dot { background: var(--critical); }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 720px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+  }
+  .tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .tile-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0 0 6px;
+  }
+  .tile-value {
+    font-size: 26px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.1;
+  }
+  .tile-value.good { color: var(--good); }
+  .tile-value.critical { color: var(--critical); }
+  .tile-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 4px 0 0;
+  }
+
+  section {
+    margin-bottom: 28px;
+  }
+  h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 10px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--gridline);
+  }
+  tbody td {
+    padding: 10px 12px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--gridline);
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  .num { text-align: right; }
+  .pnl-pos { color: var(--good); }
+  .pnl-neg { color: var(--critical); }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .badge-win { background: rgba(12,163,12,0.12); color: var(--good); }
+  .badge-loss { background: rgba(208,59,59,0.12); color: var(--critical); }
+  .badge-open { background: rgba(42,120,214,0.12); color: var(--accent); }
+
+  .empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <header>
+    <h1>ForgeViewAI — Live Dashboard</h1>
+    <span class="meta" id="last-updated">Loading…</span>
+  </header>
+
+  <div class="status-banner" id="status-banner">
+    <span class="status-dot"></span>
+    <span id="status-text"></span>
+  </div>
+
+  <div class="tiles">
+    <div class="tile">
+      <p class="tile-label">Total trades</p>
+      <p class="tile-value" id="tile-total">—</p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Win rate</p>
+      <p class="tile-value" id="tile-winrate">—</p>
+      <p class="tile-sub" id="tile-winrate-sub">&nbsp;</p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Total PnL</p>
+      <p class="tile-value" id="tile-pnl">—</p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Open positions</p>
+      <p class="tile-value" id="tile-open">—</p>
+    </div>
+  </div>
+
+  <section>
+    <h2>Open positions</h2>
+    <div id="open-positions-wrap"></div>
+  </section>
+
+  <section>
+    <h2>Last 10 trades</h2>
+    <div id="recent-trades-wrap"></div>
+  </section>
+</div>
+
+<script>
+  const REFRESH_MS = 15000;
+
+  async function fetchNoCache(path) {
+    const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error(path + ' -> ' + res.status);
+    return res;
+  }
+
+  async function loadTrades() {
+    let text;
+    try {
+      text = await (await fetchNoCache('data/paper_trades.jsonl')).text();
+    } catch (e) {
+      return [];
+    }
+    const byId = new Map();
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const entry = JSON.parse(trimmed);
+        if (entry.trade_id) byId.set(entry.trade_id, entry);
+      } catch (e) { /* skip malformed line */ }
+    }
+    return Array.from(byId.values());
+  }
+
+  async function loadState() {
+    try {
+      return await (await fetchNoCache('data/state.json')).json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function fmtUsd(n) {
+    const sign = n > 0 ? '+' : (n < 0 ? '-' : '');
+    return sign + '$' + Math.abs(n).toFixed(2);
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function resultBadge(trade) {
+    if (trade.status === 'open') return '<span class="badge badge-open">OPEN</span>';
+    if (trade.result === 'WIN') return '<span class="badge badge-win">WIN</span>';
+    if (trade.result === 'LOSS') return '<span class="badge badge-loss">LOSS</span>';
+    return '<span class="badge">' + (trade.status || '—') + '</span>';
+  }
+
+  function renderStats(trades) {
+    const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
+    const wins = closed.filter(t => t.pnl_usd > 0);
+    const losses = closed.filter(t => t.pnl_usd <= 0);
+    const totalPnl = closed.reduce((sum, t) => sum + (t.pnl_usd || 0), 0);
+    const winRate = closed.length ? (wins.length / closed.length) * 100 : 0;
+    const open = trades.filter(t => t.status === 'open');
+
+    document.getElementById('tile-total').textContent = closed.length;
+    document.getElementById('tile-winrate').textContent = closed.length ? winRate.toFixed(1) + '%' : '—';
+    document.getElementById('tile-winrate-sub').textContent = closed.length ? (wins.length + 'W / ' + losses.length + 'L') : 'No closed trades yet';
+
+    const pnlTile = document.getElementById('tile-pnl');
+    pnlTile.textContent = fmtUsd(totalPnl);
+    pnlTile.classList.remove('good', 'critical');
+    if (totalPnl > 0) pnlTile.classList.add('good');
+    if (totalPnl < 0) pnlTile.classList.add('critical');
+
+    document.getElementById('tile-open').textContent = open.length;
+
+    return { open, closed };
+  }
+
+  function renderOpenPositions(open) {
+    const wrap = document.getElementById('open-positions-wrap');
+    if (!open.length) {
+      wrap.innerHTML = '<div class="empty">No open positions</div>';
+      return;
+    }
+    const rows = open
+      .slice()
+      .sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))
+      .map(t => `
+        <tr>
+          <td>${fmtTime(t.open_ts)}</td>
+          <td>${t.asset || '—'}</td>
+          <td>${t.direction || '—'}</td>
+          <td class="num">${t.entry_price != null ? t.entry_price.toFixed(3) : '—'}</td>
+          <td class="num">$${(t.size_usd || 0).toFixed(2)}</td>
+        </tr>
+      `).join('');
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr><th>Opened</th><th>Asset</th><th>Dir</th><th class="num">Entry</th><th class="num">Size</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function renderRecentTrades(trades) {
+    const wrap = document.getElementById('recent-trades-wrap');
+    if (!trades.length) {
+      wrap.innerHTML = '<div class="empty">No trades yet</div>';
+      return;
+    }
+    const rows = trades
+      .slice()
+      .sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))
+      .slice(0, 10)
+      .map(t => {
+        const pnlClass = t.pnl_usd > 0 ? 'pnl-pos' : (t.pnl_usd < 0 ? 'pnl-neg' : '');
+        const pnlText = t.pnl_usd != null ? fmtUsd(t.pnl_usd) : '—';
+        return `
+          <tr>
+            <td>${fmtTime(t.open_ts)}</td>
+            <td>${t.asset || '—'}</td>
+            <td>${t.direction || '—'}</td>
+            <td class="num">${t.entry_price != null ? t.entry_price.toFixed(3) : '—'}</td>
+            <td>${resultBadge(t)}</td>
+            <td class="num ${pnlClass}">${pnlText}</td>
+          </tr>
+        `;
+      }).join('');
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr><th>Opened</th><th>Asset</th><th>Dir</th><th class="num">Entry</th><th>Result</th><th class="num">PnL</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function renderStatus(state) {
+    const banner = document.getElementById('status-banner');
+    const text = document.getElementById('status-text');
+    if (state && state.system_stopped) {
+      banner.classList.add('stopped');
+      text.textContent = 'System stopped: ' + (state.stop_reason || 'unknown reason');
+    } else {
+      banner.classList.remove('stopped');
+      text.textContent = 'Running';
+    }
+  }
+
+  async function refresh() {
+    const [trades, state] = await Promise.all([loadTrades(), loadState()]);
+    const { open } = renderStats(trades);
+    renderOpenPositions(open);
+    renderRecentTrades(trades);
+    renderStatus(state);
+    document.getElementById('last-updated').textContent =
+      'Auto-refreshing every 15s • last updated ' + new Date().toLocaleTimeString();
+  }
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
