@@ -5,7 +5,7 @@ from core.market_fetcher import MarketFetcher
 
 
 def make_market(asset_prefix, boundary, outcomes=("Up", "Down"), token_ids=("up-token", "down-token"),
-                 minutes_from_now=3.0, closed=False, condition_id="cond-1"):
+                 minutes_from_now=3.0, closed=False, condition_id="cond-1", volume_24h=5678.9):
     end_date = (
         datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=minutes_from_now)
     ).isoformat()
@@ -18,6 +18,7 @@ def make_market(asset_prefix, boundary, outcomes=("Up", "Down"), token_ids=("up-
         "endDate": end_date,
         "closed": closed,
         "volumeNum": 1234.5,
+        "volume24hr": volume_24h,
     }
 
 
@@ -154,6 +155,9 @@ def test_parse_market_uses_clob_mid_prices_for_up_down(mocker):
     assert parsed["yes_price"] == 0.62
     assert parsed["no_price"] == 0.38
     assert 2.9 <= parsed["minutes_remaining"] <= 3.1
+    assert parsed["up_token_id"] == "up-tok"
+    assert parsed["down_token_id"] == "down-tok"
+    assert parsed["volume_24h"] == 5678.9
 
 
 def test_parse_market_returns_none_when_closed(mocker):
@@ -274,3 +278,52 @@ def test_resolve_outcome_returns_none_when_no_winner_flagged():
         ],
     }
     assert fetcher.resolve_outcome(resolution) is None
+
+
+def make_book_with_sizes(bids=(), asks=()):
+    return {
+        "bids": [{"price": str(p), "size": str(s)} for p, s in bids],
+        "asks": [{"price": str(p), "size": str(s)} for p, s in asks],
+    }
+
+
+def test_best_level_picks_highest_bid_and_lowest_ask_with_size():
+    fetcher = MarketFetcher()
+    levels = [{"price": "0.40", "size": "10"}, {"price": "0.55", "size": "20"}, {"price": "0.48", "size": "5"}]
+    assert fetcher._best_level(levels, highest=True) == (0.55, 20.0)
+    assert fetcher._best_level(levels, highest=False) == (0.40, 10.0)
+
+
+def test_best_level_returns_none_for_empty_levels():
+    fetcher = MarketFetcher()
+    assert fetcher._best_level([], highest=True) is None
+    assert fetcher._best_level(None, highest=True) is None
+
+
+def test_best_level_defaults_size_to_zero_when_missing():
+    fetcher = MarketFetcher()
+    assert fetcher._best_level([{"price": "0.5"}], highest=True) == (0.5, 0.0)
+
+
+def test_get_order_book_top_returns_best_bid_and_ask(mocker):
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher, "_fetch_order_book",
+                         return_value=make_book_with_sizes(bids=[(0.40, 100), (0.44, 50)],
+                                                            asks=[(0.46, 30), (0.50, 80)]))
+    top = fetcher.get_order_book_top("token-1")
+    assert top == {"best_bid_price": 0.44, "best_bid_size": 50.0,
+                    "best_ask_price": 0.46, "best_ask_size": 30.0}
+
+
+def test_get_order_book_top_handles_empty_book(mocker):
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher, "_fetch_order_book", return_value=make_book_with_sizes())
+    top = fetcher.get_order_book_top("token-1")
+    assert top == {"best_bid_price": None, "best_bid_size": None,
+                    "best_ask_price": None, "best_ask_size": None}
+
+
+def test_get_order_book_top_returns_none_on_fetch_error(mocker):
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher, "_fetch_order_book", side_effect=RuntimeError("boom"))
+    assert fetcher.get_order_book_top("token-1") is None

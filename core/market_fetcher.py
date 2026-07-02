@@ -122,6 +122,9 @@ class MarketFetcher:
                 "no_price": no_price,
                 "volume": float(m.get("volumeNum") or m.get("volume") or 0),
                 "minutes_remaining": minutes_remaining,
+                "up_token_id": up_token,
+                "down_token_id": down_token,
+                "volume_24h": float(m.get("volume24hr") or 0),
             }
         except Exception as e:
             logger.warning(f"_parse_market error: {e}")
@@ -155,3 +158,30 @@ class MarketFetcher:
         if not prices:
             return None
         return max(prices) if highest else min(prices)
+
+    def get_order_book_top(self, token_id: str) -> Optional[dict]:
+        try:
+            book = self._fetch_order_book(token_id)
+            bid = self._best_level(book.get("bids"), highest=True)
+            ask = self._best_level(book.get("asks"), highest=False)
+            return {
+                "best_bid_price": bid[0] if bid else None,
+                "best_bid_size": bid[1] if bid else None,
+                "best_ask_price": ask[0] if ask else None,
+                "best_ask_size": ask[1] if ask else None,
+            }
+        except Exception as e:
+            logger.warning(f"get_order_book_top error token={token_id}: {e}")
+            return None
+
+    def _best_level(self, levels: Optional[list], highest: bool) -> Optional[tuple]:
+        best = None
+        for level in levels or []:
+            try:
+                price = float(level.get("price"))
+                size = float(level.get("size", 0))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if best is None or (highest and price > best[0]) or (not highest and price < best[0]):
+                best = (price, size)
+        return best

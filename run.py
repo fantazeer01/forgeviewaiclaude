@@ -15,7 +15,7 @@ from core.state_manager import StateManager
 from core.dedup_guard import DedupGuard
 from core.paper_trading_engine import PaperTradingEngine
 from core.pnl_tracker import PnLTracker
-from signals.repricing_signal import RepricingSignalGenerator
+from core.quant_signal import QuantSignalGenerator
 from reporting.stats_reporter import StatsReporter
 from reporting.telegram_reporter import TelegramReporter
 
@@ -27,7 +27,7 @@ def main():
     detector = RepricingDetector()
     engine = PaperTradingEngine(state, dedup)
     tracker = PnLTracker()
-    signal_gen = RepricingSignalGenerator(detector, state)
+    signal_gen = QuantSignalGenerator(detector, state, fetcher)
     stats_rep = StatsReporter(tracker, state)
     tg = TelegramReporter()
 
@@ -43,6 +43,7 @@ def main():
                 _auto_reset_on_stop(state, tg)
             _maybe_reset_daily(state)
             _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep)
+            signal_gen.resolve_pending()
             markets = fetcher.get_active_5min_markets()
             for market in markets:
                 signal = signal_gen.process_market(market)

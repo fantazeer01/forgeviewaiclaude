@@ -21,3 +21,5 @@ STATE_FILE = "data/state.json"
 DEDUP_STATE_FILE = "data/dedup_state.json"
 TRADES_LOG = "data/paper_trades.jsonl"
 SIGNALS_LOG = "data/signals_log.jsonl"
+QUANT_FEATURES_LOG = "data/quant_features.jsonl"
+KELLY_FRACTION_CAP = 0.25
