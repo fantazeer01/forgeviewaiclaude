@@ -34,6 +34,7 @@ each signal but does not influence trades.
 | Time (UTC) | Reason | Action |
 |---|---|---|
 | 2026-07-02T22:53:04Z | (run start) | Overnight monitoring loop started; no intervention yet |
+| 2026-07-03T02:38:57Z | Process killed externally (not a crash — clean log up to the last line, `system_stopped: false`; likely session/environment reclaiming the background task) | Restarted immediately (new task id `bictkhtbv`, was `b5gamxp7k`). Note for the next scheduled checkpoint: verify liveness via data/state.json recency, not just the originally-scheduled task id, to avoid spawning a duplicate bot process. |
 
 ## Hourly checkpoints
 
