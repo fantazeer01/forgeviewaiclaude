@@ -4,7 +4,7 @@ import logging
 import datetime
 import time
 from typing import Optional
-from config.settings import POLYMARKET_GAMMA_BASE
+from config.settings import POLYMARKET_GAMMA_BASE, POLYMARKET_API_BASE
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +65,19 @@ class MarketFetcher:
             if m.get("closed"):
                 return None
             outcomes = json.loads(m.get("outcomes", "[]"))
-            prices = json.loads(m.get("outcomePrices", "[]"))
-            price_by_label = {
-                str(label).strip().lower(): float(price)
-                for label, price in zip(outcomes, prices)
+            token_ids = json.loads(m.get("clobTokenIds", "[]"))
+            token_by_label = {
+                str(label).strip().lower(): str(token_id)
+                for label, token_id in zip(outcomes, token_ids)
             }
-            yes_price = price_by_label.get("up", 0.5)
-            no_price = price_by_label.get("down", 0.5)
+            up_token = token_by_label.get("up")
+            down_token = token_by_label.get("down")
+            if not up_token or not down_token:
+                return None
+            yes_price = self._token_mid_price(up_token)
+            no_price = self._token_mid_price(down_token)
+            if yes_price is None or no_price is None:
+                return None
             end_date = m.get("endDate") or ""
             minutes_remaining = 5.0
             if end_date:
@@ -94,3 +100,32 @@ class MarketFetcher:
         except Exception as e:
             logger.warning(f"_parse_market error: {e}")
             return None
+
+    def _token_mid_price(self, token_id: str) -> Optional[float]:
+        try:
+            book = self._fetch_order_book(token_id)
+            bid = self._best_price(book.get("bids"), highest=True)
+            ask = self._best_price(book.get("asks"), highest=False)
+            if bid is not None and ask is not None:
+                return (bid + ask) / 2
+            return ask if ask is not None else bid
+        except Exception as e:
+            logger.warning(f"_token_mid_price error token={token_id}: {e}")
+            return None
+
+    def _fetch_order_book(self, token_id: str) -> dict:
+        url = f"{POLYMARKET_API_BASE}/book"
+        resp = self.session.get(url, params={"token_id": token_id}, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+
+    def _best_price(self, levels: Optional[list], highest: bool) -> Optional[float]:
+        prices = []
+        for level in levels or []:
+            try:
+                prices.append(float(level.get("price")))
+            except (TypeError, ValueError, AttributeError):
+                continue
+        if not prices:
+            return None
+        return max(prices) if highest else min(prices)

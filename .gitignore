@@ -5,3 +5,4 @@ __pycache__/
 data/*.json
 data/*.jsonl
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
