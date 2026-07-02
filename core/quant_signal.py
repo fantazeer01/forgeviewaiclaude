@@ -2,85 +2,58 @@ import logging
 import datetime
 from typing import Optional
 
-from config.settings import QUANT_MODEL_PATH, SIGNAL_COOLDOWN_SEC
-from core.repricing_detector import RepricingSignal
+from config.settings import QUANT_MODEL_PATH
+from core.repricing_detector import RepricingDetector, RepricingSignal
 from core.state_manager import StateManager
 from core.quant_features import QuantFeatureExtractor
 from core.quant_dataset import QuantDataset
 from core.quant_model import QuantModel
+from signals.repricing_signal import RepricingSignalGenerator
 
 logger = logging.getLogger(__name__)
 
-MODEL_CONFIDENCE_THRESHOLD = 0.55
-MIN_MINUTES_REMAINING = 1.0
-MAX_MINUTES_REMAINING = 4.5
-
 
 class QuantSignalGenerator:
-    """Model-driven signal generator: fires a YES signal when the trained
-    QuantModel's predict_proba() crosses confidence_threshold. This REPLACES
-    the previous repricing-rule (price-drop threshold) decision logic, per
-    explicit instruction.
+    """Drop-in replacement for RepricingSignalGenerator: trading decisions are
+    identical (delegated straight to the existing repricing logic), but every
+    fired signal also gets a quantitative feature snapshot logged, and the
+    real outcome is logged once that market resolves -- regardless of whether
+    a trade was actually opened for it (e.g. blocked by max open positions),
+    since even an untaken signal is a labeled training example.
 
-    CAVEAT this project's own evidence raised: a from-scratch reproduction of
-    forgeview-ai's own logistic-regression experiment on this project's copy
-    of its historical data (see data/historical/README.md) did NOT beat the
-    naive "trust the market's own YES price" baseline -- log loss 0.598 vs.
-    0.591, Brier 0.207 vs. 0.205 on a held-out split -- matching what that
-    source repo's own evidence-gated research found repeatedly
-    (NO_EDGE_FOUND_YET; decisions D-031/D-033 for the microstructure-augmented
-    version). This generator is wired live despite that finding because it
-    was explicitly requested three times; it is not a demonstrated
-    improvement over the repricing rule it replaces, which had an established
-    positive live paper-trading track record. Compare live results against
-    the pre-swap baseline in docs/polymarket/PAPER_TRADING_REPORT.md.
+    SHADOW MODE ONLY: if a trained QuantModel is available
+    (data/quant_model.pkl), its predicted win probability is logged alongside
+    each signal as model_probability. It has no effect on which signal is
+    returned or which trade gets opened -- the repricing detector is the only
+    thing deciding trades.
 
-    If no trained model is available (data/quant_model.pkl missing),
-    process_market() always returns None -- there is no rule-based fallback.
+    This is a deliberate revert. A prior version of this class briefly used
+    model.predict_proba() to drive trading decisions directly. A from-scratch
+    reproduction of forgeview-ai's own logistic-regression experiment on this
+    project's historical data (data/historical/README.md) did not beat the
+    naive "trust the market's own YES price" baseline (log loss 0.598 vs.
+    0.591, Brier 0.207 vs. 0.205 on held-out data), so that model was not a
+    demonstrated improvement over the repricing rule it had replaced. The
+    model is logged here for ongoing evaluation against live data, not
+    trusted with real decisions.
     """
 
-    def __init__(self, state: StateManager, fetcher,
+    def __init__(self, detector: RepricingDetector, state: StateManager, fetcher,
                  features: Optional[QuantFeatureExtractor] = None,
                  dataset: Optional[QuantDataset] = None,
-                 model: Optional[QuantModel] = None,
-                 confidence_threshold: float = MODEL_CONFIDENCE_THRESHOLD):
-        self.state = state
+                 model: Optional[QuantModel] = None):
+        self._repricing = RepricingSignalGenerator(detector, state)
         self.fetcher = fetcher
         self.features = features or QuantFeatureExtractor()
         self.dataset = dataset or QuantDataset()
         self.model = model if model is not None else QuantModel.load(QUANT_MODEL_PATH)
-        self.confidence_threshold = confidence_threshold
         self._pending: dict[str, dict] = {}
 
     def process_market(self, market: dict) -> Optional[RepricingSignal]:
-        market_id = market["market_id"]
-        self.features.update(market_id, market["yes_price"], market["no_price"])
-
-        if self.model is None:
-            return None
-        minutes_remaining = market.get("minutes_remaining", 5.0)
-        if minutes_remaining < MIN_MINUTES_REMAINING or minutes_remaining > MAX_MINUTES_REMAINING:
-            return None
-        if self._is_in_cooldown(market["asset"]):
-            return None
-
-        snapshot = self.features.extract(market, self.fetcher)
-        model_probability = self.model.predict_proba_one(snapshot)
-        if model_probability is None or model_probability < self.confidence_threshold:
-            return None
-
-        signal = RepricingSignal(
-            asset=market["asset"],
-            market_id=market_id,
-            direction="YES",
-            yes_price=market["yes_price"],
-            no_price=market["no_price"],
-            confidence=round(model_probability, 3),
-            reason=f"model predict_proba={model_probability:.3f}",
-            minutes_remaining=minutes_remaining,
-        )
-        self._set_cooldown(market["asset"])
-        self._log_signal(market, signal, snapshot, model_probability)
+        self.features.update(market["market_id"], market["yes_price"], market["no_price"])
+        signal = self._repricing.process_market(market)
+        if signal:
+            self._log_signal(market, signal)
         return signal
 
     def resolve_pending(self):
@@ -105,30 +78,17 @@ class QuantSignalGenerator:
                 model_probability=entry["model_probability"],
             )
 
-    def _is_in_cooldown(self, asset: str) -> bool:
-        last_ts_map = self.state.get("last_signal_ts", {}) or {}
-        last_ts_str = last_ts_map.get(asset)
-        if not last_ts_str:
-            return False
-        try:
-            last_ts = datetime.datetime.fromisoformat(last_ts_str)
-            return (datetime.datetime.now(datetime.timezone.utc) - last_ts).total_seconds() < SIGNAL_COOLDOWN_SEC
-        except Exception:
-            return False
-
-    def _set_cooldown(self, asset: str):
-        last_ts_map = self.state.get("last_signal_ts", {}) or {}
-        last_ts_map[asset] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        self.state.set("last_signal_ts", last_ts_map)
-
-    def _log_signal(self, market: dict, signal: RepricingSignal, snapshot: dict, model_probability: float):
+    def _log_signal(self, market: dict, signal: RepricingSignal):
+        snapshot = self.features.extract(market, self.fetcher)
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        entry_price = signal.yes_price if signal.direction == "YES" else signal.no_price
+        model_probability = self.model.predict_proba_one(snapshot) if self.model else None
         self.dataset.log_signal(
             sample_id=market["market_id"],
             market_id=market["market_id"],
             asset=signal.asset,
             features=snapshot,
-            entry_price=signal.yes_price,
+            entry_price=entry_price,
             direction=signal.direction,
             timestamp=timestamp,
             model_probability=model_probability,
@@ -136,7 +96,7 @@ class QuantSignalGenerator:
         self._pending[market["market_id"]] = {
             "asset": signal.asset,
             "features": snapshot,
-            "entry_price": signal.yes_price,
+            "entry_price": entry_price,
             "direction": signal.direction,
             "model_probability": model_probability,
         }
