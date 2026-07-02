@@ -32,9 +32,7 @@ def main():
     tg = TelegramReporter()
 
     if state.is_stopped():
-        reason = state.get("stop_reason", "unknown")
-        logger.warning(f"Previously stopped: {reason}. Exiting.")
-        return
+        _auto_reset_on_stop(state, tg)
 
     tg.send_text("ForgeViewAI paper trading started")
     last_report_ts = datetime.datetime.now(datetime.timezone.utc)
@@ -42,8 +40,7 @@ def main():
     while True:
         try:
             if state.is_stopped():
-                tg.send_stop(state.get("stop_reason", ""))
-                break
+                _auto_reset_on_stop(state, tg)
             _maybe_reset_daily(state)
             _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep)
             markets = fetcher.get_active_5min_markets()
@@ -67,6 +64,13 @@ def main():
         except Exception as e:
             logger.error(f"Loop error: {e}", exc_info=True)
             time.sleep(30)
+
+def _auto_reset_on_stop(state: StateManager, tg: TelegramReporter):
+    reason = state.get("stop_reason", "unknown")
+    logger.warning(f"Auto-reset: system was stopped ({reason}). Resetting daily loss/loss streak and resuming.")
+    state.reset_daily()
+    state.update({"system_stopped": False, "stop_reason": ""})
+    tg.send_text(f"Auto-reset after stop: {reason}. Resuming trading.")
 
 def _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep):
     for trade in engine.get_open_trades():
