@@ -68,6 +68,12 @@ def test_open_trade_creates_trade_and_marks_dedup(engine):
     assert len(engine.get_open_trades()) == 1
 
 
+def test_open_trade_uses_size_usd_override_when_given(engine):
+    trade = engine.open_trade(make_signal(), size_usd=25.0)
+    assert trade.size_usd == 25.0
+    assert trade.size_tokens == pytest.approx(25.0 / 0.6)
+
+
 def test_open_trade_no_op_when_duplicate(engine):
     engine.open_trade(make_signal())
     result = engine.open_trade(make_signal())

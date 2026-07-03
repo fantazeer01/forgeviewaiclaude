@@ -55,7 +55,8 @@ class PaperTradingEngine:
             return False, "Loss streak hit"
         return True, ""
 
-    def open_trade(self, signal: RepricingSignal, source: str = "repricing") -> Optional[PaperTrade]:
+    def open_trade(self, signal: RepricingSignal, source: str = "repricing",
+                   size_usd: Optional[float] = None) -> Optional[PaperTrade]:
         ok, reason = self.can_open()
         if not ok:
             logger.warning(f"Cannot open: {reason}")
@@ -66,14 +67,15 @@ class PaperTradingEngine:
         entry_price = signal.yes_price if signal.direction == "YES" else signal.no_price
         if entry_price <= 0:
             return None
+        size_usd = size_usd if size_usd is not None else PAPER_TRADE_SIZE_USD
         trade = PaperTrade(
             trade_id=str(uuid.uuid4())[:8],
             market_id=signal.market_id,
             asset=signal.asset,
             direction=signal.direction,
             entry_price=entry_price,
-            size_usd=PAPER_TRADE_SIZE_USD,
-            size_tokens=PAPER_TRADE_SIZE_USD / entry_price,
+            size_usd=size_usd,
+            size_tokens=size_usd / entry_price,
             signal_confidence=signal.confidence,
             signal_reason=signal.reason,
             signal_source=source,
