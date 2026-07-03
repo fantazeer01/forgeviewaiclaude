@@ -15,19 +15,19 @@ each signal but does not influence trades.
 **Target end:** 2026-07-03T05:00:00Z (8:00 AM Moscow time, UTC+3)
 **Cadence:** bot-health check hourly; full stats snapshot + push every 2 hours
 
-## Latest snapshot — 2026-07-03T00:56:07Z (checkpoint 2, 2-hour mark)
+## Latest snapshot — 2026-07-03T02:58:05Z (checkpoint 4, 2-hour mark)
 
 **All-time bot totals:**
-- Total trades: 92
-- Wins/Losses: 39 / 53
-- Win rate: 42.4%
-- Total PnL: +$157.0128
+- Total trades: 124
+- Wins/Losses: 52 / 72
+- Win rate: 41.9%
+- Total PnL: +$158.7749
 - Max drawdown: $110.00
 
 **By asset:**
-- ETH: 46 trades, 19 wins, PnL +$101.2702
+- ETH: 61 trades, 26 wins, PnL +$139.9791
 - SOL: 9 trades, 2 wins, PnL -$36.6199
-- BTC: 37 trades, 18 wins, PnL +$92.3625
+- BTC: 54 trades, 24 wins, PnL +$55.4157
 
 ## Auto-reset / intervention log
 
@@ -42,6 +42,8 @@ each signal but does not influence trades.
 |---|---|---|---|---|
 | 1 (light) | 2026-07-02T23:55:07Z | 73 | — (not recomputed, light check only) | — |
 | 2 (full) | 2026-07-03T00:56:07Z | 92 | 42.4% | +$157.0128 |
+| 3 (light) | 2026-07-03T01:57:06Z | 106 | — (not recomputed, light check only) | — |
+| 4 (full) | 2026-07-03T02:58:05Z | 124 | 41.9% | +$158.7749 |
 
 ---
 
