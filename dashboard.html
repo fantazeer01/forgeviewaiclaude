@@ -536,8 +536,14 @@
     pnlScrollPos = Math.min(maxOffset, Math.max(0, pnlScrollPos));
     const sorted = sortedAll.slice(pnlScrollPos, pnlScrollPos + windowSize);
     const windowOffset = pnlScrollPos; // for absolute trade numbering in tooltip
+    // Cumulative PnL must run from the very first ever trade, not reset to
+    // zero at the start of whichever window is currently visible -- otherwise
+    // the curve and tooltip show a window-relative sum instead of the real
+    // equity-curve value (e.g. tooltip should read the same total PnL the
+    // TOTAL PNL tile shows once you reach the most recent trade).
     let running = 0;
-    const points = sorted.map(t => { running += t.pnl_usd; return running; });
+    const allPoints = sortedAll.map(t => { running += t.pnl_usd; return running; });
+    const points = allPoints.slice(pnlScrollPos, pnlScrollPos + windowSize);
 
     const W = 600, H = 160, PAD = 6;
     const min = Math.min(0, ...points);
