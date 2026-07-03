@@ -134,31 +134,39 @@
   .panel-body { padding: 12px 14px; }
 
   /* ---- pnl curve ---- */
-  .pnl-timeframe {
-    display: flex;
-    gap: 6px;
-    padding: 10px 14px 0;
-  }
-  .pnl-tf-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--dim);
-    font-family: inherit;
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    padding: 4px 11px;
-    cursor: pointer;
-    transition: color 0.15s, border-color 0.15s, background 0.15s;
-  }
-  .pnl-tf-btn:hover { color: var(--bright); border-color: var(--bright); }
-  .pnl-tf-btn.active {
-    color: var(--bg);
-    background: var(--bright);
-    border-color: var(--bright);
-    font-weight: 700;
-  }
-  .pnl-chart-wrap { position: relative; }
+  .pnl-chart-wrap { position: relative; padding-bottom: 16px; }
   .pnl-chart-wrap svg { display: block; width: 100%; height: 180px; overflow: visible; }
+  .pnl-scrollbar {
+    position: absolute;
+    left: 4px; right: 4px; bottom: 0;
+    height: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+  }
+  .pnl-scrollbar.visible, .pnl-scrollbar.dragging {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .pnl-scrollbar-track {
+    position: relative;
+    top: 5px;
+    width: 100%;
+    height: 4px;
+    background: var(--grid);
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .pnl-scrollbar-thumb {
+    position: absolute;
+    top: -4px;
+    height: 12px;
+    min-width: 24px;
+    background: var(--bright);
+    box-shadow: 0 0 6px rgba(57,255,106,0.5);
+    cursor: grab;
+  }
+  .pnl-scrollbar-thumb:active, .pnl-scrollbar.dragging .pnl-scrollbar-thumb { cursor: grabbing; }
   .pnl-line { fill: none; stroke: var(--bright); stroke-width: 2; }
   .pnl-line.negative { stroke: var(--critical); }
   .pnl-area { opacity: 0.15; }
@@ -333,12 +341,6 @@
     <div class="col">
       <div class="panel">
         <div class="panel-title">PNL CURVE</div>
-        <div class="pnl-timeframe" id="pnl-timeframe">
-          <button class="pnl-tf-btn" data-window="20">20</button>
-          <button class="pnl-tf-btn active" data-window="50">50</button>
-          <button class="pnl-tf-btn" data-window="100">100</button>
-          <button class="pnl-tf-btn" data-window="all">ALL</button>
-        </div>
         <div class="panel-body pnl-chart-wrap" id="pnl-chart">
           <div class="empty">Awaiting closed trades…</div>
         </div>
@@ -383,8 +385,12 @@
 <script>
   const REFRESH_MS = 15000;
   const ASSETS = ['BTC', 'ETH', 'SOL'];
-  let pnlWindow = 50; // default timeframe: last 50 closed trades
+  const PNL_WINDOW_SIZE = 50;   // chart always shows this many trades at once
+  const PNL_WHEEL_STEP = 5;     // trades scrolled per wheel notch
   let lastClosedTrades = [];
+  let pnlScrollPos = null;      // index into the sorted-ascending trade list; null = not yet initialized
+  let pnlPinnedToLatest = true; // true => auto-follow the most recent window as new trades arrive
+  let pnlDragging = false;
   // mirrors config/settings.py -- keep in sync if those change
   const SIGNAL_COOLDOWN_SEC = 300;
   const MAX_DAILY_LOSS_USD = 50.0;
@@ -466,15 +472,56 @@
   }
 
   // ---------- pnl curve ----------
-  function initPnlTimeframeButtons() {
-    document.querySelectorAll('.pnl-tf-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const val = btn.dataset.window;
-        pnlWindow = val === 'all' ? Infinity : parseInt(val, 10);
-        document.querySelectorAll('.pnl-tf-btn').forEach(b => b.classList.toggle('active', b === btn));
-        renderPnlCurve(lastClosedTrades);
-      });
+  // Chart always shows PNL_WINDOW_SIZE (50) trades. pnlScrollPos is the index
+  // (into the full chronologically-sorted trade list) of the first trade in
+  // the visible window; scrolling left/right moves that index. When the user
+  // is at the live edge (pnlPinnedToLatest), reconcilePnlScrollPos() keeps
+  // the window pinned to the most recent trades as new ones arrive; once the
+  // user scrolls back into history, it stays put instead of yanking them
+  // forward on the next refresh.
+  function pnlWindowBounds(closed) {
+    const sortedAll = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
+    const total = sortedAll.length;
+    const windowSize = Math.min(PNL_WINDOW_SIZE, total);
+    const maxOffset = Math.max(0, total - windowSize);
+    return { sortedAll, total, windowSize, maxOffset };
+  }
+
+  function reconcilePnlScrollPos(closed) {
+    const { maxOffset } = pnlWindowBounds(closed);
+    if (pnlScrollPos === null || pnlPinnedToLatest) {
+      pnlScrollPos = maxOffset;
+      pnlPinnedToLatest = true;
+    } else {
+      pnlScrollPos = Math.min(pnlScrollPos, maxOffset);
+    }
+  }
+
+  function setPnlScrollPos(newPos, closed) {
+    const { maxOffset } = pnlWindowBounds(closed);
+    pnlScrollPos = Math.min(maxOffset, Math.max(0, Math.round(newPos)));
+    pnlPinnedToLatest = pnlScrollPos >= maxOffset;
+  }
+
+  function initPnlChartInteractions() {
+    const wrap = document.getElementById('pnl-chart');
+
+    wrap.addEventListener('mouseenter', () => {
+      const bar = document.getElementById('pnl-scrollbar');
+      if (bar) bar.classList.add('visible');
     });
+    wrap.addEventListener('mouseleave', () => {
+      const bar = document.getElementById('pnl-scrollbar');
+      if (bar && !pnlDragging) bar.classList.remove('visible');
+    });
+    wrap.addEventListener('wheel', evt => {
+      if (!lastClosedTrades.length) return;
+      evt.preventDefault();
+      const delta = Math.abs(evt.deltaX) > Math.abs(evt.deltaY) ? evt.deltaX : evt.deltaY;
+      const step = (delta > 0 ? 1 : -1) * PNL_WHEEL_STEP;
+      setPnlScrollPos(pnlScrollPos + step, lastClosedTrades);
+      renderPnlCurve(lastClosedTrades);
+    }, { passive: false });
   }
 
   function renderPnlCurve(closed) {
@@ -484,9 +531,11 @@
       wrap.innerHTML = '<div class="empty">Awaiting closed trades…</div>';
       return;
     }
-    const sortedAll = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
-    const sorted = isFinite(pnlWindow) ? sortedAll.slice(-pnlWindow) : sortedAll;
-    const windowOffset = sortedAll.length - sorted.length; // for absolute trade numbering in tooltip
+    const { sortedAll, total, windowSize, maxOffset } = pnlWindowBounds(closed);
+    if (pnlScrollPos === null) pnlScrollPos = maxOffset;
+    pnlScrollPos = Math.min(maxOffset, Math.max(0, pnlScrollPos));
+    const sorted = sortedAll.slice(pnlScrollPos, pnlScrollPos + windowSize);
+    const windowOffset = pnlScrollPos; // for absolute trade numbering in tooltip
     let running = 0;
     const points = sorted.map(t => { running += t.pnl_usd; return running; });
 
@@ -518,9 +567,21 @@
       `;
     }).join('');
 
-    const windowLabel = sorted.length < sortedAll.length
-      ? `Last ${sorted.length} of ${sortedAll.length} trades`
-      : `All ${sortedAll.length} trades`;
+    const windowLabel = windowSize < total
+      ? `Trades ${windowOffset + 1}-${windowOffset + sorted.length} of ${total}`
+      : `All ${total} trades`;
+
+    // scrollbar thumb: width proportional to window/total, position proportional to scroll offset
+    const thumbPct = Math.min(100, (windowSize / total) * 100);
+    const thumbLeftPct = maxOffset > 0 ? (pnlScrollPos / maxOffset) * (100 - thumbPct) : 0;
+    const scrollbarHtml = windowSize < total ? `
+      <div class="pnl-scrollbar" id="pnl-scrollbar">
+        <div class="pnl-scrollbar-track" id="pnl-scrollbar-track">
+          <div class="pnl-scrollbar-thumb" id="pnl-scrollbar-thumb"
+               style="left:${thumbLeftPct.toFixed(2)}%; width:${thumbPct.toFixed(2)}%;"></div>
+        </div>
+      </div>
+    ` : '';
 
     wrap.innerHTML = `
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
@@ -532,6 +593,7 @@
         <text class="pnl-label value${cls}" x="${W - 4}" y="12" text-anchor="end">${fmtUsd(final)}</text>
       </svg>
       <div class="pnl-tooltip" id="pnl-tooltip"></div>
+      ${scrollbarHtml}
     `;
 
     const tooltip = document.getElementById('pnl-tooltip');
@@ -575,6 +637,51 @@
         tooltip.style.display = 'none';
       });
     });
+
+    // scrollbar was showing (mouse already over the chart) before this re-render replaced it
+    const scrollbarEl = document.getElementById('pnl-scrollbar');
+    if (scrollbarEl && (wrap.matches(':hover') || pnlDragging)) {
+      scrollbarEl.classList.add('visible');
+    }
+
+    const trackEl = document.getElementById('pnl-scrollbar-track');
+    const thumbEl = document.getElementById('pnl-scrollbar-thumb');
+    if (trackEl && thumbEl) {
+      const startDrag = evt => {
+        pnlDragging = true;
+        scrollbarEl.classList.add('dragging');
+        const trackRect = trackEl.getBoundingClientRect();
+        const bounds = pnlWindowBounds(lastClosedTrades);
+        const dragTo = clientX => {
+          const frac = (clientX - trackRect.left) / trackRect.width;
+          setPnlScrollPos(frac * bounds.maxOffset, lastClosedTrades);
+          renderPnlCurve(lastClosedTrades);
+        };
+        const onMove = e => dragTo(e.clientX);
+        const onUp = () => {
+          pnlDragging = false;
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          const stillHovering = document.getElementById('pnl-chart').matches(':hover');
+          const bar = document.getElementById('pnl-scrollbar');
+          if (bar) {
+            bar.classList.remove('dragging');
+            if (!stillHovering) bar.classList.remove('visible');
+          }
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        evt.preventDefault();
+      };
+      thumbEl.addEventListener('mousedown', startDrag);
+      trackEl.addEventListener('mousedown', evt => {
+        if (evt.target === thumbEl) return;
+        const trackRect = trackEl.getBoundingClientRect();
+        const frac = (evt.clientX - trackRect.left) / trackRect.width;
+        setPnlScrollPos(frac * maxOffset, lastClosedTrades);
+        renderPnlCurve(lastClosedTrades);
+      });
+    }
   }
 
   // ---------- execution log ----------
@@ -692,7 +799,11 @@
   async function refresh() {
     const [trades, state] = await Promise.all([loadTrades(), loadState()]);
     const { open, closed } = renderStats(trades);
-    renderPnlCurve(closed);
+    // don't yank the chart out from under an in-progress drag
+    if (!pnlDragging) {
+      reconcilePnlScrollPos(closed);
+      renderPnlCurve(closed);
+    }
     renderExecLog(trades);
     renderOpenPositions(open);
     renderSignalsAndTopology(state, trades);
@@ -700,7 +811,7 @@
     renderHeader(state);
   }
 
-  initPnlTimeframeButtons();
+  initPnlChartInteractions();
   refresh();
   setInterval(refresh, REFRESH_MS);
 </script>
