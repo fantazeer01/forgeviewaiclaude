@@ -134,6 +134,29 @@
   .panel-body { padding: 12px 14px; }
 
   /* ---- pnl curve ---- */
+  .pnl-timeframe {
+    display: flex;
+    gap: 6px;
+    padding: 10px 14px 0;
+  }
+  .pnl-tf-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    padding: 4px 11px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .pnl-tf-btn:hover { color: var(--bright); border-color: var(--bright); }
+  .pnl-tf-btn.active {
+    color: var(--bg);
+    background: var(--bright);
+    border-color: var(--bright);
+    font-weight: 700;
+  }
   .pnl-chart-wrap { position: relative; }
   .pnl-chart-wrap svg { display: block; width: 100%; height: 180px; overflow: visible; }
   .pnl-line { fill: none; stroke: var(--bright); stroke-width: 2; }
@@ -310,6 +333,12 @@
     <div class="col">
       <div class="panel">
         <div class="panel-title">PNL CURVE</div>
+        <div class="pnl-timeframe" id="pnl-timeframe">
+          <button class="pnl-tf-btn" data-window="20">20</button>
+          <button class="pnl-tf-btn active" data-window="50">50</button>
+          <button class="pnl-tf-btn" data-window="100">100</button>
+          <button class="pnl-tf-btn" data-window="all">ALL</button>
+        </div>
         <div class="panel-body pnl-chart-wrap" id="pnl-chart">
           <div class="empty">Awaiting closed trades…</div>
         </div>
@@ -354,6 +383,8 @@
 <script>
   const REFRESH_MS = 15000;
   const ASSETS = ['BTC', 'ETH', 'SOL'];
+  let pnlWindow = 50; // default timeframe: last 50 closed trades
+  let lastClosedTrades = [];
   // mirrors config/settings.py -- keep in sync if those change
   const SIGNAL_COOLDOWN_SEC = 300;
   const MAX_DAILY_LOSS_USD = 50.0;
@@ -435,13 +466,27 @@
   }
 
   // ---------- pnl curve ----------
+  function initPnlTimeframeButtons() {
+    document.querySelectorAll('.pnl-tf-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.window;
+        pnlWindow = val === 'all' ? Infinity : parseInt(val, 10);
+        document.querySelectorAll('.pnl-tf-btn').forEach(b => b.classList.toggle('active', b === btn));
+        renderPnlCurve(lastClosedTrades);
+      });
+    });
+  }
+
   function renderPnlCurve(closed) {
+    lastClosedTrades = closed;
     const wrap = document.getElementById('pnl-chart');
     if (!closed.length) {
       wrap.innerHTML = '<div class="empty">Awaiting closed trades…</div>';
       return;
     }
-    const sorted = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
+    const sortedAll = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
+    const sorted = isFinite(pnlWindow) ? sortedAll.slice(-pnlWindow) : sortedAll;
+    const windowOffset = sortedAll.length - sorted.length; // for absolute trade numbering in tooltip
     let running = 0;
     const points = sorted.map(t => { running += t.pnl_usd; return running; });
 
@@ -473,13 +518,17 @@
       `;
     }).join('');
 
+    const windowLabel = sorted.length < sortedAll.length
+      ? `Last ${sorted.length} of ${sortedAll.length} trades`
+      : `All ${sortedAll.length} trades`;
+
     wrap.innerHTML = `
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
         <line class="pnl-zero" x1="0" y1="${zeroY.toFixed(1)}" x2="${W}" y2="${zeroY.toFixed(1)}"/>
         <path class="pnl-area${cls}" fill="${negative ? 'var(--critical)' : 'var(--bright)'}" d="${areaPath}"/>
         <path class="pnl-line${cls}" d="${linePath}"/>
         ${pointsSvg}
-        <text class="pnl-label" x="4" y="12">${points.length} closed trades</text>
+        <text class="pnl-label" x="4" y="12">${windowLabel}</text>
         <text class="pnl-label value${cls}" x="${W - 4}" y="12" text-anchor="end">${fmtUsd(final)}</text>
       </svg>
       <div class="pnl-tooltip" id="pnl-tooltip"></div>
@@ -492,7 +541,7 @@
       const resultCls = t.result === 'WIN' ? 'win' : (t.result === 'LOSS' ? 'loss' : '');
       const resultText = t.status === 'open' ? 'OPEN' : (t.result || '—');
       return `
-        <div class="tt-title">TRADE #${i + 1}</div>
+        <div class="tt-title">TRADE #${windowOffset + i + 1}</div>
         <div>ASSET&nbsp;&nbsp;<b>${t.asset}</b> ${t.direction}</div>
         <div>ENTRY&nbsp;&nbsp;<b>${t.entry_price.toFixed(3)}</b></div>
         <div>RESULT&nbsp;<span class="tt-result ${resultCls}">${resultText}</span></div>
@@ -651,6 +700,7 @@
     renderHeader(state);
   }
 
+  initPnlTimeframeButtons();
   refresh();
   setInterval(refresh, REFRESH_MS);
 </script>
