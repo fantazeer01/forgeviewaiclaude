@@ -15,30 +15,33 @@ each signal but does not influence trades.
 **Target end:** 2026-07-03T05:00:00Z (8:00 AM Moscow time, UTC+3)
 **Cadence:** bot-health check hourly; full stats snapshot + push every 2 hours
 
-## Latest snapshot — 2026-07-02T22:53:04Z (run start)
+## Latest snapshot — 2026-07-03T00:56:07Z (checkpoint 2, 2-hour mark)
 
 **All-time bot totals:**
-- Total trades: 60
-- Wins/Losses: 25 / 35
-- Win rate: 41.7%
-- Total PnL: +$129.4684
+- Total trades: 92
+- Wins/Losses: 39 / 53
+- Win rate: 42.4%
+- Total PnL: +$157.0128
 - Max drawdown: $110.00
 
 **By asset:**
-- ETH: 30 trades, 13 wins, PnL +$104.7362
+- ETH: 46 trades, 19 wins, PnL +$101.2702
 - SOL: 9 trades, 2 wins, PnL -$36.6199
-- BTC: 21 trades, 10 wins, PnL +$61.3521
+- BTC: 37 trades, 18 wins, PnL +$92.3625
 
 ## Auto-reset / intervention log
 
 | Time (UTC) | Reason | Action |
 |---|---|---|
 | 2026-07-02T22:53:04Z | (run start) | Overnight monitoring loop started; no intervention yet |
-| 2026-07-03T02:38:57Z | Process killed externally (not a crash — clean log up to the last line, `system_stopped: false`; likely session/environment reclaiming the background task) | Restarted immediately (new task id `bictkhtbv`, was `b5gamxp7k`). Note for the next scheduled checkpoint: verify liveness via data/state.json recency, not just the originally-scheduled task id, to avoid spawning a duplicate bot process. |
+| 2026-07-03T02:38:57Z | Process killed externally (not a crash — clean log up to the last line, `system_stopped: false`; likely session/environment reclaiming the background task) | Restarted immediately (new task id `bictkhtbv`, was `b5gamxp7k`). Verify liveness via data/state.json recency at each checkpoint, not just the last-known task id, to avoid spawning a duplicate bot process. |
 
 ## Hourly checkpoints
 
-_(populated as the overnight run progresses)_
+| Checkpoint | Time (UTC) | Total trades | Win rate | Total PnL |
+|---|---|---|---|---|
+| 1 (light) | 2026-07-02T23:55:07Z | 73 | — (not recomputed, light check only) | — |
+| 2 (full) | 2026-07-03T00:56:07Z | 92 | 42.4% | +$157.0128 |
 
 ---
 
