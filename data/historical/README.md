@@ -42,6 +42,42 @@ enabled").
 `core/quant_model.py` trains only on the `outcome`-labeled microstructure
 datasets for this reason.
 
+## 2026-07-04 sprint: combined historical+live model, and why it doesn't ship
+
+`scripts/train_quant_model_v2.py` combined all outcome-labeled data available
+to this project (1490 historical rows from this directory + 335 resolved
+rows from this project's own `data/quant_features.jsonl` shadow log = 1825
+total, 47.9% win rate) and 5-fold cross-validated LogisticRegression,
+RandomForest, and GradientBoosting. Naive mixed-CV results looked strong
+(GradientBoosting: 68.8% accuracy, AUC 0.751, clearing the 55% bar easily).
+
+That result does not survive scrutiny. Historical data (Jun 18-24) and live
+data (Jul 2-3) have different win rates (49.7% vs 40.1%) and come from
+different capture pipelines, so a model trained and evaluated on a random
+mix of both can score well by exploiting source-specific quirks rather than
+a real live signal. The decisive test is training **only** on historical
+data and evaluating **only** on live data the model never saw — i.e. the
+actual situation the live bot is in. Under that honest holdout, every model
+scored at or below chance (AUC 0.46-0.52) and all trailed the plain
+`yes_price` baseline evaluated on that same live holdout (accuracy 63.0%,
+AUC 0.586). This is source leakage, not an edge, and matches every prior
+finding in this project and in forgeview-ai's own research: no model tried
+so far beats trusting the market's own YES price. The GradientBoosting
+model was still refit on all 1825 rows and saved to `data/quant_model.pkl`
+for continued shadow-mode logging (harmless, no live effect) — it is not
+validated for driving real trading decisions.
+
+Point-biserial correlation with outcome, live-only (n=335, the distribution
+that actually matters for the deployed bot): `yes_price` r=+0.173,
+`time_remaining_pct` r=+0.106, everything else (`price_velocity`,
+`order_book_imbalance`, `spread`, `spread_compression`) at or near zero.
+What's still needed to find a genuine edge, if one exists: a much larger
+same-regime dataset (weeks, not days, of live-only capture, since mixing
+regimes with different base rates is actively misleading) and features not
+yet tried here (e.g. cross-asset correlation, wallet/flow-based signals —
+see forgeview-ai's `wallet_intelligence_v1` research, not yet incorporated
+into this project).
+
 ## What the source research already found (see docs/polymarket in forgeview-ai)
 
 - `BASELINE_PROBABILITY_MODEL_V1.md`: an L2-regularized logistic regression on

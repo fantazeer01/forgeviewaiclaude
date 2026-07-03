@@ -1,5 +1,84 @@
 # ForgeViewAI Paper Trading Report
 
+## Quant model sprint (2026-07-04): combined all data, still no edge — stays in shadow mode
+
+Full "ONE SPRINT" request: inventory every outcome-labeled dataset available
+(live shadow log + all of `D:\ForgeViewAI`, read-only), combine into one
+training set, 5-fold cross-validate LogisticRegression/RandomForest/
+GradientBoosting, and go live only if a model clears 55% accuracy.
+
+**Step 1 — inventory:** `data/quant_features.jsonl` has 773 rows (335 resolved
+with a known outcome). Searched all of `D:\ForgeViewAI` for `.jsonl/.csv/
+.parquet/.pkl` files with trade outcomes; beyond what was already copied into
+`data/historical/` in the prior sprint (`microstructure_dataset_batch_001/002.csv`,
+`outcome_training_dataset.csv` — 1490 outcome-labeled rows total), the only
+other outcome-labeled candidates (`validation_protocol/v1/train.csv` +
+`validation.csv` + `holdout_features.csv`) turned out to be a pre-existing
+train/val/holdout split of the *same* underlying 1064-row dataset already
+present in `outcome_training_dataset.csv` — not new data. No new sources
+found. (Full detail: `data/historical/README.md`.)
+
+**Step 2 — combined dataset:** 1825 rows total (1490 historical + 335 live),
+8 features, 874 wins / 951 losses (47.9% win rate), date range
+2026-06-18T23:20:52Z → 2026-07-03T21:01Z.
+
+**Step 3 — train + cross-validate:**
+
+| Model | CV accuracy | CV AUC |
+|---|---|---|
+| LogisticRegression | 66.7% | 0.716 |
+| RandomForest | 67.2% | 0.726 |
+| GradientBoosting (best) | 68.8% | 0.751 |
+| yes_price baseline | 67.0% | 0.719 |
+
+All three models "beat" 55% accuracy on this naive mixed 5-fold CV. **This
+result is misleading and was not trusted at face value.** Historical data
+(Jun 18-24, 49.7% win rate) and live data (Jul 2-3, 40.1% win rate) come from
+different capture pipelines and different market regimes; shuffling them
+together into CV folds lets a model exploit *which source a row came from*
+rather than learn anything transferable. Verified this wasn't a pure
+missingness/source-indicator artifact (a model using only "is
+price_velocity present" as its sole feature scores AUC 0.52 — no meaningful
+shortcut there), then ran the actual decisive test: **train only on
+historical data, evaluate only on live data the model has never seen** — the
+literal situation the deployed bot is in.
+
+| Model | Out-of-regime accuracy | Out-of-regime AUC |
+|---|---|---|
+| LogisticRegression | 53.4% | 0.516 |
+| RandomForest | 48.4% | 0.513 |
+| GradientBoosting | 43.0% | 0.460 (worse than a coin flip) |
+| yes_price baseline (same live holdout) | 63.0% | 0.586 |
+
+**Step 4/5 — decision: no genuine edge, repricing stays primary.** Every
+model's true out-of-regime performance is at or below chance and trails the
+plain yes_price baseline by a wide margin. The mixed-CV numbers were source
+leakage, not skill. This reproduces — now with 4.3x more data and a much
+more rigorous train/test split than before — the same conclusion reached
+throughout this project and in forgeview-ai's own research: nothing tried so
+far beats trusting the market's own YES price. `quant_signal.py` was **not**
+switched to live mode; the repricing detector remains the sole trading
+signal. `run.py` was not restarted (no trading-logic change to pick up).
+
+The GradientBoosting model (refit on all 1825 rows) was saved to
+`data/quant_model.pkl` for continued shadow-mode logging only — it has no
+effect on trades.
+
+**Top win-correlated features, live-only data (n=335, the distribution that
+matters for the deployed bot):** `yes_price` (r=+0.173), `time_remaining_pct`
+(r=+0.106); `price_velocity`, `order_book_imbalance`, `spread`, and
+`spread_compression` are all near-zero (|r|<0.07) — no microstructure
+feature tried so far carries real signal on live data. **What's needed for a
+real edge, if one exists:** a much larger same-regime dataset (weeks, not
+days, of live-only capture — mixing regimes with different base rates is
+actively misleading, not just unhelpful) and feature families not yet tried
+(cross-asset correlation, wallet/flow-based signals from forgeview-ai's
+`wallet_intelligence_v1` research, not yet incorporated here).
+
+Full pytest suite: 163/163 passed (no production code changed by this
+sprint — only `scripts/train_quant_model_v2.py`, `data/quant_model.pkl`,
+and documentation).
+
 ## Run COMPLETE: overnight autonomous monitoring (2026-07-02T22:53:04Z → 2026-07-03T20:40:31Z)
 
 Config during this run: BTC/ETH only, YES-direction signals only, entry price
