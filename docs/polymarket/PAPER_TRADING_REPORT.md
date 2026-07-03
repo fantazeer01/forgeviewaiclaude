@@ -35,6 +35,7 @@ each signal but does not influence trades.
 |---|---|---|
 | 2026-07-02T22:53:04Z | (run start) | Overnight monitoring loop started; no intervention yet |
 | 2026-07-03T02:38:57Z | Process killed externally (not a crash — clean log up to the last line, `system_stopped: false`; likely session/environment reclaiming the background task) | Restarted immediately (new task id `bictkhtbv`, was `b5gamxp7k`). Verify liveness via data/state.json recency at each checkpoint, not just the last-known task id, to avoid spawning a duplicate bot process. |
+| 2026-07-03T03:17:41Z | Process killed externally a second time (same pattern — clean log up to the last line, `system_stopped: false`) | Restarted immediately (new task id `b30eiw0p8`, was `bictkhtbv`). Second occurrence this run; likely environment/session periodically reclaiming long-running background tasks rather than a bug in run.py. |
 
 ## Hourly checkpoints
 
