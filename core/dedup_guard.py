@@ -40,7 +40,9 @@ class DedupGuard:
                 with open(self.state_file) as f:
                     existing = json.load(f)
             existing["open_market_ids"] = list(self._open_market_ids)
-            with open(self.state_file, "w") as f:
+            tmp_path = self.state_file + ".tmp"
+            with open(tmp_path, "w") as f:
                 json.dump(existing, f, indent=2)
+            os.replace(tmp_path, self.state_file)
         except Exception as e:
             logger.error(f"DedupGuard save error: {e}")

@@ -1,4 +1,5 @@
 import json
+import os
 
 from core.dedup_guard import DedupGuard
 
@@ -50,3 +51,22 @@ def test_load_recovers_from_corrupt_file(tmp_path):
     state_file.write_text("not valid json")
     guard = DedupGuard(state_file=str(state_file))
     assert guard.is_duplicate("anything") is False
+
+
+def test_save_does_not_leave_a_stray_tmp_file(tmp_path):
+    state_file = tmp_path / "state.json"
+    guard = DedupGuard(state_file=str(state_file))
+    guard.mark_open("m1")
+    assert not os.path.exists(str(state_file) + ".tmp")
+
+
+def test_save_uses_atomic_replace_and_leaves_original_intact_on_failure(tmp_path, mocker):
+    state_file = tmp_path / "state.json"
+    guard = DedupGuard(state_file=str(state_file))
+    guard.mark_open("m1")
+    original_content = state_file.read_text()
+
+    mocker.patch("core.dedup_guard.os.replace", side_effect=OSError("simulated failure"))
+    guard.mark_open("m2")
+
+    assert state_file.read_text() == original_content

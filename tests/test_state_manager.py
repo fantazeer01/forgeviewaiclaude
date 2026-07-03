@@ -1,3 +1,5 @@
+import os
+
 from core.state_manager import StateManager
 
 
@@ -59,3 +61,24 @@ def test_load_recovers_from_corrupt_file(tmp_path):
     state = StateManager(state_file=str(state_file))
     assert state.get("wins") == 0
     assert state.get("daily_loss_usd") == 0.0
+
+
+def test_save_does_not_leave_a_stray_tmp_file(tmp_path):
+    state_file = tmp_path / "state.json"
+    state = StateManager(state_file=str(state_file))
+    state.set("wins", 1)
+    assert not os.path.exists(str(state_file) + ".tmp")
+
+
+def test_save_uses_atomic_replace_and_leaves_original_intact_on_failure(tmp_path, mocker):
+    state_file = tmp_path / "state.json"
+    state = StateManager(state_file=str(state_file))
+    state.set("wins", 5)
+    original_content = state_file.read_text()
+
+    mocker.patch("core.state_manager.os.replace", side_effect=OSError("simulated failure"))
+    state.set("wins", 999)
+
+    # the failed atomic replace must not have corrupted or truncated the
+    # original file -- it should still hold the last successfully-saved state
+    assert state_file.read_text() == original_content

@@ -58,19 +58,61 @@ trades) shows a thinner per-trade edge than the historical baseline —
 consistent with win rate holding roughly flat while volume increased sharply
 under the 3s poll / 120s cooldown change.
 
-## Data-integrity finding (new, discovered while compiling this report)
+## Correction: the "state.json drift" finding above was a false alarm
 
-`data/state.json`'s incrementally-maintained counters (wins/losses/total_trades,
-updated by `PaperTradingEngine.close_trade()`) had drifted significantly out
-of sync with the authoritative trade log (`data/paper_trades.jsonl`, read via
-`PnLTracker`) at least once during this run — state.json showed 61W/92L
-(153 total) at 20:01 UTC while the actual deduped log already had 152W/230L
-(382 total) at the same moment. This is a real bug, not just a transient
-timing blip (the gap was too large). Root cause not yet diagnosed — worth
-investigating in a future session, likely related to the repeated bot
-restarts. All PnL/win-rate figures in this report use the file-based
-`PnLTracker` computation, not state.json's counters, since the former is
-demonstrably authoritative.
+The previous version of this report claimed `data/state.json`'s counters had
+drifted out of sync with the authoritative trade log. That claim was wrong.
+It came from comparing a state.json read taken *before* the ~15.5-hour
+suspension gap against a `PnLTracker` recomputation taken *after* it, without
+accounting for how many real trades happened in between — the two numbers
+looked inconsistent only because they were snapshots from very different
+points in time, not because anything had actually drifted. A direct,
+simultaneous re-check this session (fresh `state.json` read +
+fresh `PnLTracker.compute_stats()` call in the same script, same instant)
+showed the two sources match **exactly**: 154W / 230L / 384 total /
++$170.2112. There is no counter-drift bug.
+
+That said, one legitimate latent risk was found and fixed while
+investigating: both `StateManager._save()` and `DedupGuard._save()` wrote
+their JSON state files non-atomically (`open(path, "w")` truncates before
+the new content is fully written), so a crash or kill mid-write — and this
+run saw two external kills — could in principle corrupt the file. Both now
+write to a `.tmp` file and `os.replace()` it into place atomically. Covered
+by new regression tests in `tests/test_state_manager.py` and
+`tests/test_dedup_guard.py` (full suite: 163 passed). This is a real
+hardening fix, just not a fix for the drift that was originally reported.
+
+## Shadow quant model: does it beat the naive baseline?
+
+Analyzed `data/quant_features.jsonl` (767 rows: 434 `signal`-stage,
+333 `resolution`-stage with a known `outcome`). 329 of the 333 resolved rows
+have a logged `model_probability` from the shadow `QuantModel`.
+
+**Overall resolved win rate this run:** 134/333 = 40.2% (matches the
+384-trade all-time figure closely; consistent, not a new number).
+
+| Metric (n=329, resolved + model ran) | Shadow model | Baseline (yes_price as P(win)) |
+|---|---|---|
+| Accuracy @ 0.5 threshold | 59.9% | 62.9% |
+| Brier score (lower better) | 0.3244 | 0.2344 |
+| Log loss (lower better) | 0.9716 | 0.6616 |
+| AUC (win vs loss ranking) | 0.550 | 0.579 |
+
+**Diagnosis: the model's 59.9% "accuracy" is an illusion.** Its predicted
+`model_probability` never once crossed 0.5 across all 329 samples (min
+0.053, max 0.494, mean 0.110) — it always predicts "loss." Since 197/329
+(59.9%) of resolved trades actually were losses, always predicting "loss"
+scores 59.9% accuracy for free, with zero real discrimination. Its AUC
+(0.550, barely above the 0.500 coin-flip line) confirms this — and it's
+*below* the baseline's AUC (0.579). The raw `yes_price` alone remains a
+better-calibrated, better-discriminating signal than the trained model on
+this data. This reproduces, on fresh live data, the same conclusion
+`forgeview-ai`'s own research reached: no model tried so far beats trusting
+the market's own YES price. **Answer to "does it predict better than 40% win
+rate": no** — as a usable go/no-go signal it would fire on zero trades
+(nothing ever exceeds the 0.5 threshold), and its ranking power is weaker
+than the naive baseline it's meant to improve on. Shadow mode (logging only,
+no live influence) remains the right call.
 
 ## Auto-reset / intervention log
 
@@ -80,18 +122,22 @@ demonstrably authoritative.
 | 2026-07-03T02:38:57Z | Process killed externally (not a crash — clean log up to the last line, `system_stopped: false`; likely session/environment reclaiming the background task) | Restarted immediately (new task id `bictkhtbv`, was `b5gamxp7k`). |
 | 2026-07-03T03:17:41Z | Process killed externally a second time (same pattern) | Restarted immediately (new task id `b30eiw0p8`, was `bictkhtbv`). Survived the rest of the run, including the long suspension gap below. |
 | ~2026-07-03T05:01Z–20:40Z | Environment/session appears to have been suspended for ~15.5 hours between the last processed checkpoint and this final report | No action taken/needed — task `b30eiw0p8` survived the gap and was confirmed healthy on resume; bot kept trading throughout (321 overnight trades accumulated). |
-| 2026-07-03T20:40:31Z | (report delivery) | Discovered state.json counter drift (see Data-integrity finding above); did not attempt a live fix mid-report, flagged for follow-up. |
+| 2026-07-03T20:40:31Z | (report delivery) | Reported a suspected state.json counter drift; later disproven (see Correction section above) — was a snapshot-timing artifact, not a real bug. |
+| 2026-07-03 (follow-up) | Re-verified state.json vs PnLTracker directly — confirmed exact match, no drift. Hardened `StateManager`/`DedupGuard` writes to be atomic regardless (real but separate risk, given the two external kills this run). Analyzed shadow quant model accuracy (see section above): no edge found, model never predicts >0.5, AUC below baseline. | Corrected report, ran full pytest (163 passed), pushed to GitHub. |
 
 ## Overall assessment
 
 **Bot reliability:** good. Survived two external kills (both auto-recovered
 within minutes, no duplicate processes spawned) and a ~15.5-hour environment
 suspension without crashing or requiring manual intervention. **Data
-integrity:** one real bug found (state.json counter drift) — worth fixing,
-did not affect actual trading (the authoritative JSONL log is intact and was
-used for all figures here) but does mean the live dashboard/state file may
-have been showing stale/wrong stats for stretches of this run.
-**Performance:** win rate held roughly flat (~40-42%) across the whole run;
+integrity:** no real bug — the originally reported state.json drift was a
+false alarm from comparing snapshots across the suspension gap; a direct
+re-check found state.json and the JSONL-derived stats match exactly.
+Non-atomic writes were hardened as a precaution regardless, given the two
+external kills. **Quant model:** shadow-mode analysis of 329 resolved
+predictions found no edge — the model never predicts a win probability
+above 0.5 and its AUC (0.550) trails the naive yes_price baseline (0.579).
+Repricing remains the sole live signal. **Performance:** win rate held roughly flat (~40-42%) across the whole run;
 total PnL grew modestly (+$40.74 net), but the overnight-only slice shows a
 thinner edge (+$50.12 over 321 trades, avg +$0.16/trade) than the historical
 baseline — not a red flag on its own given normal variance, but not evidence

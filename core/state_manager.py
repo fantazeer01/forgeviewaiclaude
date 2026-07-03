@@ -69,7 +69,9 @@ class StateManager:
 
     def _save(self):
         try:
-            with open(self.state_file, "w") as f:
+            tmp_path = self.state_file + ".tmp"
+            with open(tmp_path, "w") as f:
                 json.dump(self.state, f, indent=2)
+            os.replace(tmp_path, self.state_file)
         except Exception as e:
             logger.error(f"StateManager save error: {e}")
