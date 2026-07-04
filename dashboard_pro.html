@@ -11,7 +11,7 @@
      comment in the <script> block for exactly which files back which panel.
      ========================================================================== */
   :root {
-    --bg:        #0B0F14;
+    --bg:        #0a0e14;
     --panel:     #10161D;
     --border:    rgba(255,255,255,0.09);
     --border-hi: rgba(255,255,255,0.18);
@@ -52,9 +52,9 @@
     font-size: 8.5px; letter-spacing: 0.08em; color: var(--green);
     border: 1px solid rgba(0,255,65,0.35); border-radius: 3px; padding: 1px 5px;
   }
-  .sim-tag {
-    font-size: 8.5px; letter-spacing: 0.08em; color: var(--text-muted);
-    border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; padding: 1px 5px;
+  .soon-tag {
+    font-size: 8.5px; letter-spacing: 0.08em; color: var(--yellow);
+    border: 1px solid rgba(255,201,77,0.4); border-radius: 3px; padding: 1px 5px;
   }
   .scanning {
     display: inline-block;
@@ -67,27 +67,36 @@
 
   /* ---- header bar ---- */
   #header-bar {
-    display: flex; align-items: center; gap: 22px;
+    display: flex; align-items: center; gap: 16px;
     height: 34px; padding: 0 14px;
     background: #05070A;
     border-bottom: 1px solid var(--border);
     font-size: 11px;
-    flex-wrap: wrap;
   }
-  #header-bar .brand { font-weight: 700; letter-spacing: 0.05em; color: var(--cyan); }
-  #header-bar .sep { color: var(--text-muted); }
+  #header-bar .brand { font-weight: 700; letter-spacing: 0.05em; color: var(--cyan); flex-shrink: 0; }
+  #header-bar .sep { color: var(--text-muted); flex-shrink: 0; }
   #header-bar b { color: var(--text-primary); }
+  #header-bar .hdr-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; flex-wrap: nowrap; }
   .status-run { color: var(--green); }
   .status-stop { color: var(--red); }
   .exch-ok { color: var(--green); }
   .exch-error { color: var(--red); }
 
   .quant-mode-badge {
-    display: inline-block; margin-left: 10px; padding: 2px 8px;
+    display: inline-block; padding: 2px 8px;
     border: 1px solid var(--purple); border-radius: 4px;
     color: var(--purple); font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
     box-shadow: 0 0 8px rgba(168,85,247,0.35);
+    flex-shrink: 0;
   }
+
+  /* ---- header ticker ---- */
+  #ticker-wrap { flex: 1; overflow: hidden; white-space: nowrap; height: 100%; display: flex; align-items: center; min-width: 40px; }
+  #ticker-track { display: inline-block; animation: tickerScroll 24s linear infinite; }
+  @keyframes tickerScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .ticker-item { font-size: 11px; margin: 0 20px; }
+  .ticker-item b { color: var(--text-primary); margin-right: 5px; }
+  .ticker-sep { color: var(--text-muted); margin: 0 8px; }
 
   .bias-tag {
     display: inline-block; padding: 3px 10px; border-radius: 4px;
@@ -103,13 +112,14 @@
   .terminal {
     max-width: 1900px; margin: 0 auto; padding: 12px;
     display: grid;
-    grid-template-columns: 300px 1fr 380px;
-    grid-template-rows: 360px 360px 280px 200px 130px 300px 280px;
+    grid-template-columns: 3fr 6fr 3fr;
+    grid-template-rows: auto 300px 260px 220px 280px;
     gap: 12px;
   }
   @media (max-width: 1200px) {
     .terminal { grid-template-columns: 1fr; grid-template-rows: none; }
   }
+  .col-stack { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 
   .panel {
     background: var(--panel);
@@ -138,6 +148,15 @@
   }
   .metric-row .label { color: var(--text-secondary); font-size: 10.5px; }
   .metric-row .value { font-weight: 700; }
+  .section-divider { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 12px 0 2px; border-top: 1px solid var(--grid); padding-top: 8px; }
+
+  /* ---- risk gauge ---- */
+  .risk-gauge-track { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 4px; overflow: hidden; }
+  .risk-gauge-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width 0.6s ease; }
+
+  /* ---- pace ---- */
+  .pace-hero { font-size: 20px; font-weight: 800; }
+  .pace-sub { font-size: 9.5px; color: var(--text-muted); margin-top: 2px; }
 
   /* ---- AI signal panel ---- */
   .warmup-track { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 10px; overflow: hidden; }
@@ -146,6 +165,76 @@
   .pill { font-size: 9.5px; padding: 2px 8px; border-radius: 20px; border: 1px solid currentColor; letter-spacing: 0.03em; }
   .pill.ready { color: var(--green); }
   .pill.cooldown { color: var(--yellow); }
+
+  /* ---- top callout (biggest win / sharpe) ---- */
+  .callout-row { display: flex; gap: 26px; flex-wrap: wrap; }
+  .callout-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .callout-value { font-size: 19px; font-weight: 800; margin-top: 2px; }
+  .callout-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; max-width: 220px; }
+
+  /* ---- execution cycle ---- */
+  .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 14px; }
+  .exec-step {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    position: relative; z-index: 1;
+  }
+  .exec-step .dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid var(--border-hi); background: var(--panel);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--text-muted); font-weight: 800;
+    transition: all 0.3s ease;
+  }
+  .exec-step .label { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+  .exec-step .detail { font-size: 8.5px; color: var(--text-muted); max-width: 120px; text-align: center; min-height: 11px; }
+  .exec-step.done .dot { border-color: rgba(0,255,65,0.4); color: var(--green); background: rgba(0,255,65,0.06); }
+  .exec-step.done .label { color: var(--text-secondary); }
+  .exec-step.current .dot {
+    border-color: var(--purple); color: #05070A; background: var(--purple);
+    box-shadow: 0 0 14px rgba(168,85,247,0.6);
+    animation: execPulse 1.3s ease-in-out infinite;
+  }
+  .exec-step.current .label { color: var(--purple); }
+  .exec-step.current .detail { color: var(--text-primary); }
+  @keyframes execPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+  .exec-connector { flex: 0 0 auto; width: 30px; height: 2px; background: var(--border); margin: 0 -4px 20px; position: relative; }
+  .exec-connector.done { background: rgba(0,255,65,0.4); }
+  #next-tick-countdown { font-size: 9.5px; color: var(--text-muted); }
+
+  /* ---- strategy decision tree ---- */
+  #tree-edge-line { font-size: 10px; color: var(--text-secondary); padding: 6px 12px; border-bottom: 1px solid var(--grid); }
+  #tree-edge-line b { color: var(--text-primary); }
+  .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
+  .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
+  .tree-node-label { font-size: 9.5px; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-node-sub { font-size: 8.5px; fill: var(--text-muted); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
+  .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
+
+  /* ---- correlation map ---- */
+  .corr-grid { display: grid; grid-template-columns: 44px repeat(2, 1fr); gap: 4px; margin-top: 6px; }
+  .corr-cell { padding: 8px 6px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; }
+  .corr-head { font-size: 9.5px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
+  .corr-row-label { font-size: 9.5px; color: var(--text-secondary); display: flex; align-items: center; }
+
+  /* ---- robustness grid ---- */
+  .rb-row { display: grid; grid-template-columns: 60px repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
+  .rb-cell { text-align: center; padding: 7px 4px; border-radius: 4px; font-size: 10.5px; font-weight: 700; }
+  .rb-label { color: var(--text-secondary); font-weight: 400; font-size: 9.5px; text-align: left; background: none !important; padding-left: 2px; }
+  .rb-head .rb-cell { font-size: 8.5px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+
+  /* ---- monte carlo ---- */
+  .mc-stats { display: flex; gap: 16px; padding: 8px 12px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); }
+  .mc-stat .mc-label { font-size: 8.5px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .mc-stat .mc-value { font-size: 14px; font-weight: 800; }
+
+  /* ---- live feed ---- */
+  .feed-wrap { flex: 1; overflow: hidden; position: relative; min-height: 0; }
+  .feed-track { animation: feedScroll 34s linear infinite; }
+  .feed-wrap:hover .feed-track { animation-play-state: paused; }
+  @keyframes feedScroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+  .feed-row { display: flex; gap: 8px; padding: 3px 12px; font-size: 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .feed-time { color: var(--text-muted); flex-shrink: 0; }
 
   /* ---- decision timeline ---- */
   .timeline { display: flex; flex-direction: column; gap: 2px; }
@@ -187,12 +276,6 @@
     border-left: 2px solid var(--cyan); padding-left: 8px;
   }
 
-  /* ---- correlation map ---- */
-  .corr-grid { display: grid; grid-template-columns: 60px repeat(2, 1fr); gap: 4px; margin-top: 6px; }
-  .corr-cell { padding: 10px 6px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 13px; }
-  .corr-head { font-size: 10px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
-  .corr-row-label { font-size: 10px; color: var(--text-secondary); display: flex; align-items: center; }
-
   /* ---- trade table ---- */
   table.dense { width: 100%; border-collapse: collapse; font-size: 11px; }
   table.dense thead th {
@@ -219,53 +302,6 @@
   .chart-caption {
     font-size: 9px; color: var(--text-muted); padding: 4px 12px 8px; border-top: 1px solid var(--grid);
   }
-
-  /* ---- execution cycle ---- */
-  .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 18px; }
-  .exec-step {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
-    position: relative; z-index: 1;
-  }
-  .exec-step .dot {
-    width: 30px; height: 30px; border-radius: 50%;
-    border: 2px solid var(--border-hi); background: var(--panel);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; color: var(--text-muted); font-weight: 800;
-    transition: all 0.3s ease;
-  }
-  .exec-step .label { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
-  .exec-step .detail { font-size: 9px; color: var(--text-muted); max-width: 140px; text-align: center; min-height: 11px; }
-  .exec-step.done .dot { border-color: rgba(0,255,65,0.4); color: var(--green); background: rgba(0,255,65,0.06); }
-  .exec-step.done .label { color: var(--text-secondary); }
-  .exec-step.current .dot {
-    border-color: var(--green); color: #05070A; background: var(--green);
-    box-shadow: 0 0 14px rgba(0,255,65,0.55);
-    animation: execPulse 1.3s ease-in-out infinite;
-  }
-  .exec-step.current .label { color: var(--green); }
-  .exec-step.current .detail { color: var(--text-primary); }
-  @keyframes execPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
-  .exec-connector { flex: 0 0 auto; width: 40px; height: 2px; background: var(--border); margin: 0 -6px 22px; position: relative; }
-  .exec-connector.done { background: rgba(0,255,65,0.4); }
-
-  /* ---- strategy decision tree ---- */
-  #tree-edge-line { font-size: 10px; color: var(--text-secondary); padding: 6px 12px; border-bottom: 1px solid var(--grid); }
-  #tree-edge-line b { color: var(--text-primary); }
-  .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
-  .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
-  .tree-node-label { font-size: 10px; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
-  .tree-node-sub { font-size: 9px; fill: var(--text-muted); font-family: ui-monospace, monospace; text-anchor: middle; }
-  .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
-  .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
-
-  /* ---- monte carlo ---- */
-  .mc-stats { display: flex; gap: 18px; padding: 8px 12px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); }
-  .mc-stat .mc-label { font-size: 9px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .mc-stat .mc-value { font-size: 15px; font-weight: 800; }
-
-  /* ---- pace ---- */
-  .pace-hero { font-size: 22px; font-weight: 800; }
-  .pace-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -273,27 +309,21 @@
 <div id="header-bar">
   <span class="brand">FORGEVIEWAI // QUANT TERMINAL</span>
   <span id="hdr-quant-mode-wrap"></span>
-  <span class="sep">|</span>
-  <span>TIME <b id="hdr-time" class="num">--:--:--</b></span>
-  <span class="sep">|</span>
-  <span>STATUS <b id="hdr-status">--</b></span>
-  <span class="sep">|</span>
-  <span>DAILY LOSS <b id="hdr-daily-loss" class="num">--</b></span>
-  <span class="sep">|</span>
-  <span>LOSS STREAK <b id="hdr-streak" class="num">--</b></span>
-  <span class="sep">|</span>
-  <span>LATENCY <b id="hdr-latency" class="num">--</b></span>
-  <span class="sep">|</span>
-  <span>API <b id="hdr-api-calls" class="num">--</b></span>
-  <span class="sep">|</span>
-  <span>EXCHANGE <b id="hdr-exchange">--</b></span>
-  <span class="sep">|</span>
-  <span>LAST SYNC <b id="hdr-sync" class="num">--:--:--</b></span>
+  <div id="ticker-wrap"><div id="ticker-track"></div></div>
+  <div class="hdr-right">
+    <span>TIME <b id="hdr-time" class="num">--:--:--</b></span>
+    <span class="sep">|</span>
+    <span>STATUS <b id="hdr-status">--</b></span>
+    <span class="sep">|</span>
+    <span>LATENCY <b id="hdr-latency" class="num">--</b></span>
+    <span class="sep">|</span>
+    <span>API <b id="hdr-api-calls" class="num">--</b></span>
+  </div>
 </div>
 
 <div class="terminal">
 
-  <!-- LEFT COLUMN, ROW 1: PORTFOLIO -->
+  <!-- ================= ROW 1 (HERO): PORTFOLIO | CENTER STACK | RIGHT STACK ================= -->
   <div class="panel" style="grid-column:1; grid-row:1;">
     <div class="panel-head">
       <div class="panel-title">Portfolio</div>
@@ -302,46 +332,105 @@
     <div class="panel-body">
       <div class="hero num" id="pf-total-pnl">--</div>
       <div id="pf-metrics" class="metric-list"></div>
+      <div class="section-divider">Risk (Daily Loss Cap Used)</div>
+      <div id="risk-gauge-body"></div>
+      <div class="section-divider">Pace</div>
+      <div id="pace-body"></div>
     </div>
   </div>
 
-  <!-- TOP CENTER: AI SIGNAL PANEL -->
-  <div class="panel" style="grid-column:2; grid-row:1;">
-    <div class="panel-head">
-      <div class="panel-title">AI Signal Panel</div>
-      <span class="real-tag">REAL</span>
+  <div class="col-stack" style="grid-column:2; grid-row:1;">
+    <div class="panel" style="height:230px;">
+      <div class="panel-head">
+        <div class="panel-title">AI Signal Panel</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="panel-body" id="ai-signal-body"></div>
     </div>
-    <div class="panel-body" id="ai-signal-body"></div>
+
+    <div class="panel" style="height:100px;">
+      <div class="panel-head">
+        <div class="panel-title">Biggest Win &middot; Sharpe</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="panel-body" id="top-callout-body"></div>
+    </div>
+
+    <div class="panel" style="height:140px;">
+      <div class="panel-head">
+        <div class="panel-title">Execution Cycle</div>
+        <span id="next-tick-countdown"></span>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="panel-body" id="exec-cycle-body"></div>
+    </div>
+
+    <div class="panel" style="height:280px;">
+      <div class="panel-head">
+        <div class="panel-title">Strategy Decision Tree</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div id="tree-edge-line"></div>
+      <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
+    </div>
   </div>
 
-  <!-- TOP RIGHT: BTC CANDLESTICK -->
-  <div class="panel" style="grid-column:3; grid-row:1;">
-    <div class="panel-head">
-      <div class="panel-title">BTC YES Price &middot; Last 20 Signals</div>
-      <span class="real-tag">REAL</span>
+  <div class="col-stack" style="grid-column:3; grid-row:1;">
+    <div class="panel" style="height:350px;">
+      <div class="panel-head">
+        <div class="panel-title">BTC YES Price &middot; Last 20 Signals</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
+      <div class="chart-caption">source: data/quant_features.jsonl (BTC, stage=signal). Each bar is ONE recorded price sample per signal, not an intra-period OHLC bar &mdash; open=high=low=close by construction, colored by change vs. the previous signal.</div>
     </div>
-    <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
-    <div class="chart-caption">source: data/quant_features.jsonl (BTC, stage=signal). Each bar is ONE recorded price sample per signal, not an intra-period OHLC bar &mdash; open=high=low=close by construction, colored by change vs. the previous signal.</div>
+
+    <div class="panel" style="height:340px;">
+      <div class="panel-head">
+        <div class="panel-title">Correlation Map</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="panel-body" id="corr-body"></div>
+    </div>
   </div>
 
-  <!-- ROW 2: CORRELATION MAP | AI REASONING | DECISION TIMELINE -->
+  <!-- ================= ROW 2: ROBUSTNESS | MONTE CARLO | PNL GROWTH + LIVE FEED ================= -->
   <div class="panel" style="grid-column:1; grid-row:2;">
     <div class="panel-head">
-      <div class="panel-title">Correlation Map</div>
+      <div class="panel-title">Robustness &middot; Win Rate by Day &times; Asset</div>
       <span class="real-tag">REAL</span>
     </div>
-    <div class="panel-body" id="corr-body"></div>
+    <div class="panel-body" id="robustness-body"></div>
   </div>
 
   <div class="panel" style="grid-column:2; grid-row:2;">
     <div class="panel-head">
-      <div class="panel-title">AI Reasoning</div>
+      <div class="panel-title">Monte Carlo &middot; 7000 Simulated Paths (Real Win Rate / Avg Win / Avg Loss)</div>
       <span class="real-tag">REAL</span>
     </div>
-    <div class="panel-body" id="reasoning-body"></div>
+    <div class="mc-stats" id="mc-stats"></div>
+    <div class="chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
   </div>
 
-  <div class="panel" style="grid-column:3; grid-row:2;">
+  <div class="col-stack" style="grid-column:3; grid-row:2;">
+    <div class="panel" style="height:150px;">
+      <div class="panel-head">
+        <div class="panel-title">PnL Growth</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
+    </div>
+    <div class="panel" style="height:134px;">
+      <div class="panel-head">
+        <div class="panel-title">Polymarket Bot Live Feed</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="feed-wrap"><div class="feed-track" id="feed-track"></div></div>
+    </div>
+  </div>
+
+  <!-- ================= ROW 3: DECISION TIMELINE | AI REASONING ================= -->
+  <div class="panel" style="grid-column:1; grid-row:3;">
     <div class="panel-head">
       <div class="panel-title">Decision Timeline</div>
       <span class="real-tag">REAL</span>
@@ -349,16 +438,16 @@
     <div class="panel-body" id="timeline-body"></div>
   </div>
 
-  <!-- ROW 3: EQUITY CURVE (spans 2 cols) | LIVE TRADE TABLE -->
-  <div class="panel" style="grid-column: 1 / span 2; grid-row:3;">
+  <div class="panel" style="grid-column: 2 / span 2; grid-row:3;">
     <div class="panel-head">
-      <div class="panel-title">Equity Curve &middot; Cumulative PnL, All Trades</div>
+      <div class="panel-title">AI Reasoning</div>
       <span class="real-tag">REAL</span>
     </div>
-    <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
+    <div class="panel-body" id="reasoning-body"></div>
   </div>
 
-  <div class="panel" style="grid-column:3; grid-row:3;">
+  <!-- ================= ROW 4: LIVE TRADES ================= -->
+  <div class="panel" style="grid-column: 1 / span 3; grid-row:4;">
     <div class="panel-head">
       <div class="panel-title">Live Trades</div>
       <span class="real-tag">REAL</span>
@@ -373,7 +462,8 @@
     </div>
   </div>
 
-  <div class="panel" style="grid-column: 1 / span 3; grid-row:4;">
+  <!-- ================= ROW 5: SIGNAL COMBINER BREAKDOWN ================= -->
+  <div class="panel" style="grid-column: 1 / span 3; grid-row:5;">
     <div class="panel-head">
       <div class="panel-title">Signal Combiner &middot; Per-Signal Breakdown</div>
       <span class="real-tag">REAL</span>
@@ -390,43 +480,6 @@
     </div>
   </div>
 
-  <!-- ROW 5: EXECUTION CYCLE (full width) -->
-  <div class="panel" style="grid-column: 1 / span 3; grid-row:5;">
-    <div class="panel-head">
-      <div class="panel-title">Execution Cycle</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div class="panel-body" id="exec-cycle-body"></div>
-  </div>
-
-  <!-- ROW 6: STRATEGY DECISION TREE (full width) -->
-  <div class="panel" style="grid-column: 1 / span 3; grid-row:6;">
-    <div class="panel-head">
-      <div class="panel-title">Strategy Decision Tree</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div id="tree-edge-line"></div>
-    <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
-  </div>
-
-  <!-- ROW 7: MONTE CARLO | PACE -->
-  <div class="panel" style="grid-column: 1 / span 2; grid-row:7;">
-    <div class="panel-head">
-      <div class="panel-title">Monte Carlo &middot; 1000 Simulated Paths (Real Win Rate/Avg Win/Avg Loss)</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div class="mc-stats" id="mc-stats"></div>
-    <div class="chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
-  </div>
-
-  <div class="panel" style="grid-column:3; grid-row:7;">
-    <div class="panel-head">
-      <div class="panel-title">Pace</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div class="panel-body" id="pace-body"></div>
-  </div>
-
 </div>
 
 <script>
@@ -437,9 +490,14 @@
    -----------------------------------------------------------------------------
    data/paper_trades.jsonl        real trades: asset, direction, entry, result,
                                    PnL, open/close timestamps, signal_reason,
-                                   signal_confidence  (deduped by trade_id)
+                                   signal_confidence  (deduped by trade_id).
+                                   Backs Portfolio, Biggest Win/Sharpe, Pace,
+                                   Robustness grid, PnL Growth, Live Feed,
+                                   Live Trades table, Monte Carlo inputs.
    data/state.json                daily_loss_usd, loss_streak, system_stopped,
-                                   last_signal_ts per asset, session_start
+                                   last_signal_ts per asset, session_start.
+                                   Backs header STATUS, Risk Gauge, Pace's
+                                   hours_running, Decision Timeline.
    data/online_model_status.json  NEW small export written by
                                    core/online_model.py (OnlineQuantModel.save()
                                    / _load()) every time the model updates or
@@ -472,9 +530,10 @@
                                    no-key API -- a real, independent external
                                    source, not Polymarket's own prices).
                                    Last entry's btc_price/btc_24h_change/
-                                   eth_price/eth_24h_change/market_bias feed
-                                   the AI Signal Panel. The SAME bias value
-                                   gates YES signals in
+                                   eth_price/eth_24h_change/sol_price/
+                                   sol_24h_change/market_bias feed the header
+                                   ticker and the AI Signal Panel. The SAME
+                                   bias value gates YES signals in
                                    signals/repricing_signal.py when BEARISH.
    data/exchange_status.json      NEW: written by run.py every 60s from
                                    MarketFetcher.ping() (a lightweight real
@@ -494,9 +553,7 @@
                                    a genuine rolling-60s count of real
                                    Polymarket HTTP calls, calls_total is the
                                    lifetime counter since this process
-                                   started. Feeds the header bar's API
-                                   field (replaces the old GPU placeholder,
-                                   which had nothing real to show).
+                                   started. Feeds the header bar's API field.
    data/fear_greed.json           NEW: written by run.py every 15 min from
                                    alternative.me's free Fear & Greed Index
                                    API (core/market_bias.py
@@ -520,15 +577,27 @@
                                    of the scan->detect->validate->size->fill
                                    pipeline (_export_execution_cycle), plus a
                                    separate settle event when a trade closes.
-                                   Feeds the Execution Cycle panel. This is a
-                                   live pointer to the single most-recent
-                                   stage reached across any market, not a
-                                   per-trade history -- most ticks only ever
-                                   reach "scan" (no signal that tick), which
-                                   is the honest common case.
+                                   Feeds the Execution Cycle panel, the
+                                   Strategy Decision Tree's SIZE/FILL nodes,
+                                   and the NEXT TICK countdown (which is a
+                                   real countdown against the real, documented
+                                   MARKET_POLL_INTERVAL_SEC config value, not a
+                                   fabricated timer). This is a live pointer to
+                                   the single most-recent stage reached across
+                                   any market, not a per-trade history -- most
+                                   ticks only ever reach "scan" (no signal that
+                                   tick), which is the honest common case.
+   data/signal_combiner_status.json  Per-asset order_book/momentum/volume
+                                   signal state + combined confidence, written
+                                   every tick by core/signal_combiner.py.
+                                   Feeds the Signal Combiner breakdown table
+                                   and the Strategy Decision Tree's branch
+                                   nodes/edge-confidence line (BTC shown).
    -----------------------------------------------------------------------------
-   If a source file is missing, unreachable, or a specific field inside it is
-   null, the corresponding widget renders NO DATA. Nothing is invented.
+   Things the reference layout showed that we have no real source for (e.g. a
+   leverage/liquidation-risk gauge -- this project trades simple Polymarket
+   binary contracts with no margin or liquidation mechanic at all) are marked
+   with a yellow "COMING SOON" tag rather than faked. Nothing here is invented.
    ============================================================================= */
 
 const REFRESH_MS = 5000;
@@ -536,6 +605,7 @@ const TRACKED_ASSETS = ['BTC', 'ETH']; // SOL is explicitly out of scope (config
 const SIGNAL_COOLDOWN_SEC = 120; // mirrors config/settings.py -- keep in sync if that changes
 const MAX_DAILY_LOSS_USD = 1000.0; // mirrors config/settings.py -- keep in sync if that changes
 const MAX_LOSS_STREAK = 50;
+const MARKET_POLL_INTERVAL_SEC = 3; // mirrors config/settings.py MARKET_POLL_INTERVAL_SEC
 const STALE_AFTER_MS = 15000; // how old a telemetry file's timestamp can be before we call it stale, not "active"
 
 async function fetchNoCache(path) {
@@ -635,25 +705,15 @@ async function loadMacroEvents() { return await fetchJson('data/macro_events.jso
 async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bias.jsonl'); }
 async function loadSignalCombinerStatus() { return await fetchJson('data/signal_combiner_status.json'); }
 
-/* ---------------- 1. HEADER ---------------- */
+/* ---------------- 1. HEADER + TICKER ---------------- */
 function renderHeader(state, exchangeStatus, latency, liveStatus, apiStats) {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
-  document.getElementById('hdr-sync').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   const statusEl = document.getElementById('hdr-status');
-  const dailyEl = document.getElementById('hdr-daily-loss');
-  const streakEl = document.getElementById('hdr-streak');
-  const exchEl = document.getElementById('hdr-exchange');
   const latEl = document.getElementById('hdr-latency');
   const apiEl = document.getElementById('hdr-api-calls');
   const quantModeWrap = document.getElementById('hdr-quant-mode-wrap');
   quantModeWrap.innerHTML = (liveStatus && liveStatus.quant_only_mode === true)
     ? `<span class="quant-mode-badge">QUANT MODE</span>` : '';
-  if (exchangeStatus && has(exchangeStatus.status)) {
-    exchEl.textContent = exchangeStatus.status;
-    exchEl.className = exchangeStatus.status === 'OK' ? 'exch-ok' : 'exch-error';
-  } else {
-    exchEl.innerHTML = noData();
-  }
   if (latency && has(latency.last_ms)) {
     latEl.textContent = Math.round(latency.last_ms) + 'ms';
     latEl.title = `avg ${latency.avg_ms}ms / p99 ${latency.p99_ms}ms over ${latency.sample_count} real Polymarket calls`;
@@ -666,19 +726,35 @@ function renderHeader(state, exchangeStatus, latency, liveStatus, apiStats) {
   } else {
     apiEl.innerHTML = noData();
   }
-  if (!state) {
-    statusEl.innerHTML = noData(); dailyEl.innerHTML = noData(); streakEl.innerHTML = noData();
-    return;
-  }
+  if (!state) { statusEl.innerHTML = noData(); return; }
   const stopped = !!state.system_stopped;
   statusEl.textContent = stopped ? 'STOPPED' : 'RUNNING';
   statusEl.className = stopped ? 'status-stop' : 'status-run';
-  const dailyLoss = state.daily_loss_usd || 0;
-  dailyEl.textContent = fmtUsd(-dailyLoss) + ' / ' + fmtUsd(-MAX_DAILY_LOSS_USD);
-  streakEl.textContent = (state.loss_streak || 0) + ' / ' + MAX_LOSS_STREAK;
+  // exchangeStatus is not shown in the (space-constrained) header anymore but
+  // still exists as a real signal -- surfaced instead via title tooltip.
+  if (exchangeStatus && has(exchangeStatus.status)) {
+    statusEl.title = `Exchange: ${exchangeStatus.status} (checked ${fmtClock(exchangeStatus.checked_at)})`;
+  }
+}
+function tickerItem(label, price, chg, decimals) {
+  if (!has(price)) return `<span class="ticker-item"><b>${label}</b>${noData()}</span>`;
+  const chgTxt = has(chg) ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : '';
+  return `<span class="ticker-item"><b>${label}</b>$${price.toLocaleString(undefined, { maximumFractionDigits: decimals })}${chgTxt}</span>`;
+}
+function renderTicker(marketBias) {
+  const track = document.getElementById('ticker-track');
+  if (!marketBias) { track.innerHTML = noData('NO MARKET DATA'); return; }
+  const items = [
+    tickerItem('BTC ', marketBias.btc_price, marketBias.btc_24h_change, 0),
+    tickerItem('ETH ', marketBias.eth_price, marketBias.eth_24h_change, 2),
+    tickerItem('SOL ', marketBias.sol_price, marketBias.sol_24h_change, 2),
+  ].join('<span class="ticker-sep">&bull;</span>');
+  const bias = has(marketBias.market_bias) ? `<span class="ticker-item">BIAS <b style="color:${marketBias.market_bias === 'BULLISH' ? 'var(--green)' : marketBias.market_bias === 'BEARISH' ? 'var(--red)' : 'var(--text-secondary)'};">${marketBias.market_bias}</b></span><span class="ticker-sep">&bull;</span>` : '';
+  const block = bias + items + '<span class="ticker-sep">&bull;</span>';
+  track.innerHTML = block + block; // duplicated once for a seamless scroll loop
 }
 
-/* ---------------- 2. PORTFOLIO ---------------- */
+/* ---------------- 2. PORTFOLIO + RISK GAUGE + PACE ---------------- */
 function computePortfolio(trades) {
   const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
   const wins = closed.filter(t => t.pnl_usd > 0);
@@ -689,6 +765,7 @@ function computePortfolio(trades) {
   const winRate = closed.length ? wins.length / closed.length : 0;
   const avgWin = wins.length ? grossWin / wins.length : 0;
   const avgLoss = losses.length ? grossLoss / losses.length : 0;
+  const avgRR = (wins.length && losses.length && avgLoss > 0) ? avgWin / avgLoss : null;
   const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : null);
   const expectancy = closed.length ? totalPnl / closed.length : null;
   const sortedClosed = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
@@ -709,7 +786,7 @@ function computePortfolio(trades) {
   const historyDays = earliestTradeMs != null ? (now - earliestTradeMs) / (24 * 3600 * 1000) : null;
 
   return {
-    closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, profitFactor, expectancy, maxDD,
+    closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, avgRR, profitFactor, expectancy, maxDD,
     weeklyPnl, monthlyPnl, historyDays,
   };
 }
@@ -731,6 +808,7 @@ function renderPortfolio(trades) {
     ['Wins / Losses', m.wins.length + ' / ' + m.losses.length],
     ['Avg Win', m.wins.length ? fmtUsd(m.avgWin) : null],
     ['Avg Loss', m.losses.length ? fmtUsd(-m.avgLoss) : null],
+    ['Avg R/R', m.avgRR == null ? null : m.avgRR.toFixed(2)],
     ['Max Drawdown', m.closed.length ? fmtUsd(-m.maxDD) : null],
     ['Profit Factor', m.profitFactor == null ? null : (isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : '&infin;')],
     ['Expectancy/Trade', m.expectancy == null ? null : fmtUsd(m.expectancy)],
@@ -745,6 +823,45 @@ function renderPortfolio(trades) {
   `).join('') + (m.historyDays != null && m.historyDays < 30
     ? `<div style="font-size:9.5px;color:var(--text-muted);margin-top:6px;">trade history spans only ${m.historyDays.toFixed(1)} days, so weekly/monthly figures may equal (or nearly equal) the all-time total</div>` : '');
   return m;
+}
+function renderRiskGauge(state) {
+  const wrap = document.getElementById('risk-gauge-body');
+  if (!state || !has(state.daily_loss_usd)) { wrap.innerHTML = noData(); return; }
+  const pct = Math.min(100, (state.daily_loss_usd / MAX_DAILY_LOSS_USD) * 100);
+  const color = pct >= 80 ? 'var(--red)' : (pct >= 50 ? 'var(--yellow)' : 'var(--green)');
+  const streak = state.loss_streak || 0;
+  const streakPct = Math.min(100, (streak / MAX_LOSS_STREAK) * 100);
+  const streakColor = streakPct >= 80 ? 'var(--red)' : (streakPct >= 50 ? 'var(--yellow)' : 'var(--green)');
+  wrap.innerHTML = `
+    <div class="risk-gauge-track"><div class="risk-gauge-fill" style="width:${pct.toFixed(1)}%;background:${color};box-shadow:0 0 8px ${color};"></div></div>
+    <div style="font-size:11px;font-weight:700;color:${color};">${pct.toFixed(1)}% &mdash; ${fmtUsd(-state.daily_loss_usd)} / ${fmtUsd(-MAX_DAILY_LOSS_USD)}</div>
+    <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">This project has no leverage/margin, so there's no real liquidation-risk gauge to show &mdash; this is the real equivalent: today's realized loss vs. the hard daily-loss cap that auto-stops trading.</div>
+    <div class="metric-row" style="margin-top:8px;"><span class="label">Loss Streak</span><span class="value num" style="color:${streakColor};">${streak} / ${MAX_LOSS_STREAK}</span></div>
+  `;
+}
+function renderPace(portfolio, state) {
+  const wrap = document.getElementById('pace-body');
+  if (!portfolio || !state || !state.session_start) {
+    wrap.innerHTML = noData();
+    return;
+  }
+  const sessionStartMs = new Date(state.session_start).getTime();
+  const hoursRunning = (Date.now() - sessionStartMs) / 3600000;
+  if (!(hoursRunning > 0)) {
+    wrap.innerHTML = noData('SESSION JUST STARTED');
+    return;
+  }
+  const pace = portfolio.totalPnl / hoursRunning;
+  const daily = pace * 24, weekly = pace * 24 * 7;
+  wrap.innerHTML = `
+    <div class="pace-hero num ${pace >= 0 ? 'up' : 'down'}">${fmtUsd(pace)}/hr</div>
+    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h running session (started ${fmtClock(state.session_start)})</div>
+    <div class="metric-list">
+      <div class="metric-row"><span class="label">Projected Daily</span><span class="value num ${daily >= 0 ? 'up' : 'down'}">${fmtUsd(daily)}</span></div>
+      <div class="metric-row"><span class="label">Projected Weekly</span><span class="value num ${weekly >= 0 ? 'up' : 'down'}">${fmtUsd(weekly)}</span></div>
+    </div>
+    <div class="pace-sub" style="margin-top:6px;">Linear extrapolation from all-time realized PnL over this session's runtime &mdash; will look inflated right after a bot restart when hours_running is still small.</div>
+  `;
 }
 
 /* ---------------- 3. AI SIGNAL PANEL ---------------- */
@@ -782,7 +899,7 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, 
   if (lastQuantFeature) {
     const pct = (lastQuantFeature.model_probability * 100).toFixed(1);
     html += `<div style="font-size:10px;color:var(--text-secondary);margin-top:4px;">LAST SIGNAL CONFIDENCE (shadow model, ${lastQuantFeature.asset})</div>
-      <div style="font-size:18px;font-weight:800;color:var(--cyan);">${pct}%</div>
+      <div style="font-size:16px;font-weight:800;color:var(--cyan);">${pct}%</div>
       <div style="font-size:9.5px;color:var(--text-muted);">${fmtClock(lastQuantFeature.timestamp)}</div>`;
   } else {
     html += `<div style="margin-top:6px;">LAST SIGNAL CONFIDENCE ${noData()}</div>`;
@@ -798,36 +915,24 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, 
   if (marketBias && has(marketBias.market_bias)) {
     const biasCls = marketBias.market_bias.toLowerCase();
     html += `<div class="sig-asset-row"><span>Market Bias (BTC 24h)</span><span class="bias-tag ${biasCls}">${marketBias.market_bias}</span></div>`;
-    const btcChg = marketBias.btc_24h_change;
-    const ethChg = marketBias.eth_24h_change;
-    const solChg = marketBias.sol_24h_change;
-    html += `
-      <div class="spot-row"><span>BTC SPOT</span><span class="price num">$${marketBias.btc_price.toLocaleString(undefined, {maximumFractionDigits:0})}</span><span class="num ${btcChg >= 0 ? 'up' : 'down'}">${btcChg >= 0 ? '+' : ''}${btcChg.toFixed(2)}%</span></div>
-      <div class="spot-row"><span>ETH SPOT</span><span class="price num">$${marketBias.eth_price.toLocaleString(undefined, {maximumFractionDigits:2})}</span><span class="num ${ethChg >= 0 ? 'up' : 'down'}">${ethChg >= 0 ? '+' : ''}${ethChg.toFixed(2)}%</span></div>
-      <div class="spot-row"><span>SOL SPOT</span><span class="price num">${has(marketBias.sol_price) ? '$' + marketBias.sol_price.toLocaleString(undefined, {maximumFractionDigits:2}) : noData()}</span><span class="num ${has(solChg) ? (solChg >= 0 ? 'up' : 'down') : ''}">${has(solChg) ? (solChg >= 0 ? '+' : '') + solChg.toFixed(2) + '%' : ''}</span></div>
-      <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">source: CoinGecko, last checked ${fmtClock(marketBias.timestamp)}</div>
-    `;
   } else {
     html += `<div class="sig-asset-row"><span>Market Bias</span>${noData()}</div>`;
   }
 
   if (fearGreed && has(fearGreed.value)) {
     html += `<div class="sig-asset-row"><span>Macro Sentiment</span>
-      <span style="font-weight:800;color:${fearGreedColor(fearGreed.classification)};">FEAR &amp; GREED: ${fearGreed.value} (${fearGreed.classification})</span></div>`;
+      <span style="font-weight:800;color:${fearGreedColor(fearGreed.classification)};">F&amp;G: ${fearGreed.value} (${fearGreed.classification})</span></div>`;
   } else {
     html += `<div class="sig-asset-row"><span>Macro Sentiment</span>${noData()}</div>`;
   }
 
-  html += `<div style="margin-top:8px;font-size:10px;color:var(--text-secondary);">NEXT HIGH-IMPACT USD EVENTS</div>`;
   if (macroEvents && Array.isArray(macroEvents.events) && macroEvents.events.length) {
-    html += macroEvents.events.map(e => {
-      const d = new Date(e.date);
-      const dateTxt = isNaN(d.getTime()) ? e.date : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      return `<div class="sig-asset-row" style="font-size:10px;"><span>${dateTxt}</span><span style="color:var(--text-primary);text-align:right;">${e.title}</span></div>`;
-    }).join('');
-    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">source: ForexFactory economic calendar. This environment's clock may not align with the feed's real-world "this week" window -- dates shown are exactly as reported by the feed.</div>`;
+    const e = macroEvents.events[0];
+    const d = new Date(e.date);
+    const dateTxt = isNaN(d.getTime()) ? e.date : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    html += `<div class="sig-asset-row" style="font-size:10px;"><span>Next Event</span><span style="color:var(--text-primary);text-align:right;">${dateTxt} &middot; ${e.title}</span></div>`;
   } else if (macroEvents && Array.isArray(macroEvents.events)) {
-    html += `<div class="sig-asset-row"><span>Events</span>${noData('NONE FOUND THIS WEEK')}</div>`;
+    html += `<div class="sig-asset-row"><span>Events</span>${noData('NONE FOUND')}</div>`;
   } else {
     html += `<div class="sig-asset-row"><span>Events</span>${noData()}</div>`;
   }
@@ -835,20 +940,516 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, 
   wrap.innerHTML = html;
 }
 
-/* ---------------- 4. DECISION TIMELINE ---------------- */
+/* ---------------- 4. BIGGEST WIN / SHARPE CALLOUT ---------------- */
+function computeBiggestWinAndSharpe(m) {
+  if (!m || !m.closed.length) return null;
+  const biggestWin = m.wins.length ? m.wins.reduce((a, b) => (b.pnl_usd > a.pnl_usd ? b : a)) : null;
+  const pnls = m.closed.map(t => t.pnl_usd);
+  const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
+  const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
+  const std = Math.sqrt(variance);
+  const sharpe = std > 0 ? mean / std : null; // per-trade, deliberately NOT annualized -- see caption
+  return { biggestWin, sharpe };
+}
+function renderTopCallout(portfolio) {
+  const wrap = document.getElementById('top-callout-body');
+  const c = computeBiggestWinAndSharpe(portfolio);
+  if (!c) { wrap.innerHTML = noData(); return; }
+  const bw = c.biggestWin;
+  wrap.innerHTML = `
+    <div class="callout-row">
+      <div>
+        <div class="callout-label">Biggest Win</div>
+        <div class="callout-value up">${bw ? fmtUsd(bw.pnl_usd) : noData()}</div>
+        <div class="callout-sub">${bw ? `${bw.asset} entry ${bw.entry_price.toFixed(3)} &middot; ${fmtClock(bw.close_ts)}` : 'no winning trades yet'}</div>
+      </div>
+      <div>
+        <div class="callout-label">Sharpe (per-trade)</div>
+        <div class="callout-value">${has(c.sharpe) ? c.sharpe.toFixed(2) : noData()}</div>
+        <div class="callout-sub">mean&#247;stdev of all ${portfolio.closed.length} closed trades' PnL, unannualized &mdash; history spans only ~${portfolio.historyDays ? portfolio.historyDays.toFixed(1) : '?'}d, too short to annualize meaningfully</div>
+      </div>
+    </div>`;
+}
+
+/* ---------------- 5. EXECUTION CYCLE + NEXT TICK ---------------- */
+const EXEC_STAGES = ['scan', 'detect', 'validate', 'size', 'fill', 'settle'];
+let _lastTickAtMs = null;
+function renderExecutionCycle(cycle) {
+  const wrap = document.getElementById('exec-cycle-body');
+  if (!cycle || !cycle.stage) {
+    wrap.innerHTML = noData();
+    _lastTickAtMs = null;
+    return;
+  }
+  _lastTickAtMs = new Date(cycle.updated_at).getTime();
+  const idx = EXEC_STAGES.indexOf(cycle.stage);
+  const age = fmtAge(cycle.updated_at);
+  // fill/settle events are naturally sparse (a real trade doesn't open every
+  // tick), so this panel uses a wider staleness window than the 15s
+  // STALE_AFTER_MS other freshness-based widgets use for constantly-ticking
+  // telemetry -- otherwise every real fill would look "stale" within seconds.
+  const fresh = age != null && age < STALE_AFTER_MS * 8;
+  let row = '<div class="exec-cycle-row">';
+  EXEC_STAGES.forEach((stage, i) => {
+    if (i > 0) row += `<div class="exec-connector ${fresh && i <= idx ? 'done' : ''}"></div>`;
+    const isCurrent = fresh && i === idx;
+    const isDone = fresh && i < idx;
+    const cls = isCurrent ? 'current' : (isDone ? 'done' : '');
+    row += `<div class="exec-step ${cls}">
+      <div class="dot">${i + 1}</div>
+      <div class="label">${stage}</div>
+      <div class="detail">${isCurrent ? (cycle.detail || '') : ''}</div>
+    </div>`;
+  });
+  row += '</div>';
+  wrap.innerHTML = row;
+}
+function renderNextTick() {
+  const el = document.getElementById('next-tick-countdown');
+  if (!el) return;
+  if (_lastTickAtMs == null) { el.textContent = ''; return; }
+  const elapsedSec = (Date.now() - _lastTickAtMs) / 1000;
+  const remain = Math.max(0, MARKET_POLL_INTERVAL_SEC - (elapsedSec % MARKET_POLL_INTERVAL_SEC));
+  el.textContent = `next tick ~${remain.toFixed(0)}s`;
+}
+
+/* ---------------- 6. STRATEGY DECISION TREE (animated SVG) ---------------- */
+const TREE_NODES = {
+  tick:       { x: 50,  y: 110, label: 'TICK' },
+  scan:       { x: 170, y: 110, label: 'SCAN' },
+  classify:   { x: 290, y: 110, label: 'CLASSIFY' },
+  repricing:  { x: 440, y: 15,  label: 'REPRICING' },
+  order_book: { x: 440, y: 70,  label: 'ORDER BOOK' },
+  momentum:   { x: 440, y: 150, label: 'MOMENTUM' },
+  volume:     { x: 440, y: 205, label: 'VOLUME' },
+  size:       { x: 600, y: 110, label: 'SIZE' },
+  fill:       { x: 720, y: 110, label: 'FILL' },
+  pnl:        { x: 870, y: 110, label: 'P&L' },
+};
+const TREE_EDGES = [
+  ['tick', 'scan'], ['scan', 'classify'],
+  ['classify', 'repricing'], ['classify', 'order_book'], ['classify', 'momentum'], ['classify', 'volume'],
+  ['repricing', 'size'], ['order_book', 'size'], ['momentum', 'size'], ['volume', 'size'],
+  ['size', 'fill'], ['fill', 'pnl'],
+];
+let _lastSeenTreeFillTs = undefined;
+function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus) {
+  const wrap = document.getElementById('tree-svg-wrap');
+  const edgeLine = document.getElementById('tree-edge-line');
+  const btcStatus = combinerStatus ? combinerStatus.BTC : null;
+
+  if (btcStatus) {
+    const fmtSig = s => (s && s.fired) ? `<span class="up">${(s.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted);">--</span>';
+    const combinedText = btcStatus.correlation_filter_blocked ? '<span class="down">BLOCKED</span>'
+      : btcStatus.price_out_of_band ? '<span style="color:var(--yellow);">OUT OF BAND</span>'
+      : has(btcStatus.combined_confidence) ? `<span class="${btcStatus.fired ? 'up' : ''}">${(btcStatus.combined_confidence * 100).toFixed(0)}%</span>`
+      : '<span style="color:var(--cyan);">scanning</span>';
+    edgeLine.innerHTML = `EDGE CONF (BTC) &middot; Order Book: ${fmtSig(btcStatus.order_book)} &nbsp; Momentum: ${fmtSig(btcStatus.momentum)} &nbsp; Volume: ${fmtSig(btcStatus.volume)} &nbsp; Combined: ${combinedText}`;
+  } else {
+    edgeLine.innerHTML = noData();
+  }
+
+  const liveFresh = !!(liveStatus && (() => { const a = fmtAge(liveStatus.updated_at); return a != null && a < STALE_AFTER_MS; })());
+  const cycleFresh = !!(executionCycle && (() => { const a = fmtAge(executionCycle.updated_at); return a != null && a < STALE_AFTER_MS * 8; })());
+  const cycleStage = cycleFresh ? executionCycle.stage : null;
+
+  const active = {
+    tick: liveFresh,
+    scan: liveFresh,
+    classify: !!btcStatus,
+    repricing: false, // permanently disabled under QUANT_ONLY_MODE -- shadow-logging only, never fires a real trade
+    order_book: !!(btcStatus && btcStatus.order_book && btcStatus.order_book.fired),
+    momentum: !!(btcStatus && btcStatus.momentum && btcStatus.momentum.fired),
+    volume: !!(btcStatus && btcStatus.volume && btcStatus.volume.fired),
+    size: cycleStage === 'size' || cycleStage === 'fill',
+    fill: cycleStage === 'fill',
+    pnl: !!(portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length > 0),
+  };
+
+  let svg = `<svg viewBox="0 0 940 225" preserveAspectRatio="xMidYMid meet">`;
+  TREE_EDGES.forEach(([a, b]) => {
+    const n1 = TREE_NODES[a], n2 = TREE_NODES[b];
+    const isRepricingEdge = a === 'repricing' || b === 'repricing';
+    const lit = active[a] && active[b];
+    const dash = isRepricingEdge ? ' stroke-dasharray="3,3"' : '';
+    svg += `<line class="tree-edge" x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" stroke="${lit ? 'rgba(0,255,65,0.55)' : 'var(--border-hi)'}"${dash}/>`;
+  });
+  Object.entries(TREE_NODES).forEach(([key, n]) => {
+    const isActive = active[key];
+    const isPnl = key === 'pnl';
+    const isRepricing = key === 'repricing';
+    const r = isPnl ? 30 : 18;
+    const fill = isActive ? 'rgba(0,255,65,0.15)' : '#10161D';
+    const stroke = isActive ? '#00FF41' : 'rgba(255,255,255,0.18)';
+    const dash = isRepricing ? ' stroke-dasharray="3,3"' : '';
+    svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2"${dash}/>`;
+    if (isPnl) {
+      const last = (portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length)
+        ? portfolio.sortedClosed[portfolio.sortedClosed.length - 1] : null;
+      const pnlText = last ? fmtUsd(last.pnl_usd) : 'NO DATA';
+      const pnlColor = last ? (last.pnl_usd >= 0 ? '#00FF41' : '#FF3B3B') : '#4E5A66';
+      svg += `<text x="${n.x}" y="${n.y - 3}" text-anchor="middle" fill="${pnlColor}" font-size="12" font-weight="800" font-family="ui-monospace, monospace">${pnlText}</text>`;
+      svg += `<text x="${n.x}" y="${n.y + 11}" class="tree-node-sub">last trade</text>`;
+    } else {
+      svg += `<text x="${n.x}" y="${n.y + r + 12}" class="tree-node-label">${n.label}</text>`;
+      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 23}" class="tree-node-sub" style="fill:var(--yellow);">(disabled, shadow only)</text>`;
+    }
+  });
+  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="5" fill="#00FF41" opacity="0">`
+       + `<animateMotion id="tree-flow-motion" path="M 50 110 L 870 110" dur="1.8s" begin="indefinite" fill="freeze"/>`
+       + `<animate id="tree-flow-opacity" attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.9;1" dur="1.8s" begin="indefinite" fill="freeze"/>`
+       + `</circle>`;
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+
+  // Only animate the traveling dot on a genuinely new FILL event (a real
+  // trade actually opened), never decoratively or on a timer -- mirrors the
+  // Decision Timeline's flow-dot discipline.
+  const lastFillTs = (executionCycle && executionCycle.stage === 'fill') ? executionCycle.updated_at : null;
+  if (lastFillTs && lastFillTs !== _lastSeenTreeFillTs) {
+    const isFirstPaint = _lastSeenTreeFillTs === undefined;
+    _lastSeenTreeFillTs = lastFillTs;
+    if (!isFirstPaint) {
+      const motion = document.getElementById('tree-flow-motion');
+      const opacityAnim = document.getElementById('tree-flow-opacity');
+      if (motion && opacityAnim) { motion.beginElement(); opacityAnim.beginElement(); }
+    }
+  }
+}
+
+/* ---------------- 7. CANDLESTICK / EQUITY CANVAS HELPERS ---------------- */
+function resizeCanvasToParent(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+function renderCandlestick(signals) {
+  const canvas = document.getElementById('candle-canvas');
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  if (!signals || signals.length < 2) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(signals ? 'Not enough BTC signals yet' : 'NO DATA', 12, h / 2);
+    return;
+  }
+
+  const pad = { t: 10, r: 46, b: 20, l: 4 };
+  const prices = signals.map(s => s.features.yes_price);
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const span = (max - min) || 0.01;
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+  const n = signals.length;
+  const slot = plotW / n;
+  const y = v => pad.t + (1 - (v - min) / span) * plotH;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '9px ui-monospace, monospace';
+  for (let i = 0; i <= 3; i++) {
+    const gy = pad.t + (i / 3) * plotH;
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy); ctx.stroke();
+    ctx.fillText((max - (i / 3) * span).toFixed(3), pad.l + plotW + 4, gy + 3);
+  }
+
+  signals.forEach((s, i) => {
+    const x = pad.l + i * slot + slot / 2;
+    const price = s.features.yes_price;
+    const prevPrice = i > 0 ? signals[i - 1].features.yes_price : price;
+    const up = price >= prevPrice;
+    ctx.strokeStyle = up ? '#00FF41' : '#FF3B3B';
+    ctx.lineWidth = Math.max(2, slot * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(x, y(price) - 1.2);
+    ctx.lineTo(x, y(price) + 1.2);
+    ctx.stroke();
+  });
+
+  ctx.beginPath();
+  signals.forEach((s, i) => {
+    const x = pad.l + i * slot + slot / 2;
+    i === 0 ? ctx.moveTo(x, y(s.features.yes_price)) : ctx.lineTo(x, y(s.features.yes_price));
+  });
+  ctx.strokeStyle = 'rgba(0,229,255,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+
+  const last = signals[signals.length - 1];
+  const lastUp = signals.length > 1 && last.features.yes_price >= signals[signals.length - 2].features.yes_price;
+  ctx.fillStyle = lastUp ? '#00FF41' : '#FF3B3B';
+  ctx.font = 'bold 11px ui-monospace, monospace';
+  ctx.fillText(last.features.yes_price.toFixed(3), pad.l + plotW + 4, y(last.features.yes_price) + 3);
+}
+function renderEquityCurve(m) {
+  const canvas = document.getElementById('equity-canvas');
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  if (!m || !m.curve || !m.curve.length) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(m ? 'Awaiting closed trades...' : 'NO DATA', 12, h / 2);
+    return;
+  }
+
+  const pad = 22;
+  const curve = m.curve;
+  const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
+  const span = (max - min) || 1;
+  const x = i => curve.length > 1 ? (i / (curve.length - 1)) * (w - pad * 2) + pad : w / 2;
+  const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
+  const zeroY = y(0);
+
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(w - pad, zeroY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const positive = curve[curve.length - 1] >= 0;
+  const lineColor = positive ? '#00FF41' : '#FF3B3B';
+
+  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+  grad.addColorStop(0, positive ? 'rgba(0,255,65,0.28)' : 'rgba(255,59,59,0.28)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(curve[0]));
+  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(curve.length - 1), zeroY);
+  ctx.lineTo(x(0), zeroY);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(curve[0]));
+  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.strokeStyle = lineColor; ctx.lineWidth = 2;
+  ctx.shadowColor = lineColor; ctx.shadowBlur = 8;
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  ctx.fillStyle = lineColor;
+  ctx.font = 'bold 11px ui-monospace, monospace';
+  ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length})`, w - pad - 100, pad - 4);
+}
+
+/* ---------------- 8. CORRELATION MAP ---------------- */
+function corrColor(r) {
+  if (r == null) return 'rgba(255,255,255,0.04)';
+  const abs = Math.min(1, Math.abs(r));
+  const alpha = 0.22 + abs * 0.62;
+  return r >= 0 ? `rgba(0,255,65,${alpha.toFixed(2)})` : `rgba(255,59,59,${alpha.toFixed(2)})`;
+}
+function corrTextColor(r) {
+  if (r == null) return 'var(--text-muted)';
+  const abs = Math.min(1, Math.abs(r));
+  if (abs > 0.4) return '#05070A';
+  return r >= 0 ? 'var(--green)' : 'var(--red)';
+}
+const SPOT_CORR_MIN_RETURNS = 10;
+function pearsonCorrelation(seriesA, seriesB) {
+  const n = Math.min(seriesA.length, seriesB.length);
+  if (n < 2) return null;
+  const retA = [], retB = [];
+  for (let i = 1; i < n; i++) {
+    retA.push(seriesA[i] - seriesA[i - 1]);
+    retB.push(seriesB[i] - seriesB[i - 1]);
+  }
+  if (retA.length < SPOT_CORR_MIN_RETURNS) return null;
+  const meanA = retA.reduce((s, v) => s + v, 0) / retA.length;
+  const meanB = retB.reduce((s, v) => s + v, 0) / retB.length;
+  let cov = 0, varA = 0, varB = 0;
+  for (let i = 0; i < retA.length; i++) {
+    cov += (retA[i] - meanA) * (retB[i] - meanB);
+    varA += (retA[i] - meanA) ** 2;
+    varB += (retB[i] - meanB) ** 2;
+  }
+  if (varA === 0 || varB === 0) return null;
+  return cov / Math.sqrt(varA * varB);
+}
+function computeSolBtcSpotCorrelation(biasHistory) {
+  if (!biasHistory || !biasHistory.length) return { corr: null, n: 0 };
+  const usable = biasHistory.filter(r => has(r.btc_price) && has(r.sol_price));
+  const recent = usable.slice(-60);
+  return { corr: pearsonCorrelation(recent.map(r => r.btc_price), recent.map(r => r.sol_price)), n: recent.length };
+}
+function renderCorrelation(liveStatus, biasHistory) {
+  const wrap = document.getElementById('corr-body');
+  const r = liveStatus ? liveStatus.btc_eth_correlation : null;
+  const rTxt = has(r) ? (r >= 0 ? '+' : '') + r.toFixed(3) : null;
+
+  let html = `<div style="font-size:9px;color:var(--text-muted);">POLYMARKET CONTRACT-PRICE CORRELATION</div>`;
+  html += `<div class="corr-grid">
+    <div></div><div class="corr-head">BTC</div><div class="corr-head">ETH</div>
+    <div class="corr-row-label">BTC</div>
+    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
+    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
+    <div class="corr-row-label">ETH</div>
+    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
+    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
+  </div>`;
+  if (liveStatus) {
+    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:4px;">source: live_status.json, last update ${fmtClock(liveStatus.updated_at)}</div>`;
+  }
+
+  const sol = computeSolBtcSpotCorrelation(biasHistory);
+  html += `<div style="font-size:9px;color:var(--text-muted);margin-top:12px;border-top:1px solid var(--grid);padding-top:8px;">COINGECKO SPOT-PRICE CORRELATION (different series)</div>`;
+  if (has(sol.corr)) {
+    const solTxt = (sol.corr >= 0 ? '+' : '') + sol.corr.toFixed(3);
+    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value" style="color:${corrTextColor(sol.corr) === '#05070A' ? (sol.corr >= 0 ? 'var(--green)' : 'var(--red)') : corrTextColor(sol.corr)}">${solTxt}</span></div>`;
+    html += `<div style="font-size:9px;color:var(--text-muted);">n=${sol.n} samples (~60s cadence)</div>`;
+  } else {
+    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value">${noData(sol.n ? 'BUILDING HISTORY' : 'NO DATA')}</span></div>`;
+  }
+  wrap.innerHTML = html;
+}
+
+/* ---------------- 9. ROBUSTNESS GRID (win rate by day x asset, last 7 UTC days) ---------------- */
+function computeRobustnessGrid(trades) {
+  if (!trades) return null;
+  const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null && t.close_ts);
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() - i);
+    days.push(d);
+  }
+  const assets = ['BTC', 'ETH', 'ALL'];
+  const grid = days.map(dayStart => {
+    const dayEndMs = dayStart.getTime() + 24 * 3600 * 1000;
+    const dayTrades = closed.filter(t => {
+      const ts = new Date(t.close_ts).getTime();
+      return ts >= dayStart.getTime() && ts < dayEndMs;
+    });
+    return assets.map(asset => {
+      const subset = asset === 'ALL' ? dayTrades : dayTrades.filter(t => t.asset === asset);
+      if (!subset.length) return { n: 0, winRate: null, pnl: 0 };
+      const wins = subset.filter(t => t.pnl_usd > 0).length;
+      const pnl = subset.reduce((s, t) => s + t.pnl_usd, 0);
+      return { n: subset.length, winRate: wins / subset.length, pnl };
+    });
+  });
+  return { days, assets, grid };
+}
+function robustnessCellColor(cell) {
+  if (!cell || cell.n === 0 || cell.winRate == null) return 'rgba(255,255,255,0.03)';
+  const alpha = 0.25 + Math.min(1, cell.n / 10) * 0.5;
+  return cell.winRate >= 0.5 ? `rgba(0,255,65,${alpha.toFixed(2)})` : `rgba(255,59,59,${alpha.toFixed(2)})`;
+}
+function renderRobustnessGrid(trades) {
+  const wrap = document.getElementById('robustness-body');
+  const r = computeRobustnessGrid(trades);
+  if (!r) { wrap.innerHTML = noData(); return; }
+  const header = '<div class="rb-row rb-head"><div class="rb-cell rb-label"></div>' + r.assets.map(a => `<div class="rb-cell rb-label">${a}</div>`).join('') + '</div>';
+  const rows = r.days.map((d, i) => {
+    const dLabel = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const cells = r.grid[i].map(cell => {
+      const txt = cell.n ? (cell.winRate * 100).toFixed(0) + '%' : '&mdash;';
+      return `<div class="rb-cell" style="background:${robustnessCellColor(cell)};" title="${cell.n} trades, PnL ${fmtUsd(cell.pnl)}">${txt}</div>`;
+    }).join('');
+    return `<div class="rb-row"><div class="rb-cell rb-label">${dLabel}</div>${cells}</div>`;
+  }).join('');
+  wrap.innerHTML = header + rows + `<div class="chart-caption" style="border-top:none;padding-left:0;">Win rate by day &times; asset, last 7 UTC days. Cells with no closed trades that day show &mdash; (never fabricated as 0%). Trade history currently spans only a few days, so most cells here are genuinely empty until more real time passes.</div>`;
+}
+
+/* ---------------- 10. MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ---------------- */
+const MC_PATHS = 7000;
+function computeMonteCarlo(m) {
+  if (!m || !m.wins.length || !m.losses.length) return null;
+  const n = Math.min(m.closed.length, 5000);
+  const winRate = m.winRate, avgWin = m.avgWin, avgLoss = m.avgLoss;
+  const finals = new Array(MC_PATHS);
+  for (let p = 0; p < MC_PATHS; p++) {
+    let total = 0;
+    for (let t = 0; t < n; t++) {
+      total += (Math.random() < winRate) ? avgWin : -avgLoss;
+    }
+    finals[p] = total;
+  }
+  finals.sort((a, b) => a - b);
+  const pct = frac => finals[Math.min(finals.length - 1, Math.max(0, Math.floor(frac * (finals.length - 1))))];
+  const mean = finals.reduce((s, v) => s + v, 0) / finals.length;
+  return { finals, n, p05: pct(0.05), p01: pct(0.01), mean };
+}
+function renderMonteCarlo(portfolio) {
+  const statsEl = document.getElementById('mc-stats');
+  const canvas = document.getElementById('mc-canvas');
+  const mc = computeMonteCarlo(portfolio);
+  if (!mc) {
+    statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
+    const { ctx, w, h } = resizeCanvasToParent(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
+    return;
+  }
+  statsEl.innerHTML = `
+    <div class="mc-stat"><div class="mc-label">Simulated Over</div><div class="mc-value num">${mc.n} trades &times; ${MC_PATHS} paths</div></div>
+    <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
+    <div class="mc-stat"><div class="mc-label">5th Percentile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
+    <div class="mc-stat"><div class="mc-label">P&lt;0.01 (99% VaR)</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
+  `;
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+  const pad = 26, BINS = 28;
+  const min = mc.finals[0], max = mc.finals[mc.finals.length - 1];
+  const span = (max - min) || 1;
+  const counts = new Array(BINS).fill(0);
+  mc.finals.forEach(v => {
+    let idx = Math.floor(((v - min) / span) * BINS);
+    idx = Math.max(0, Math.min(BINS - 1, idx));
+    counts[idx]++;
+  });
+  const maxCount = Math.max(...counts);
+  const plotW = w - pad * 2, plotH = h - pad * 2;
+  const barW = plotW / BINS;
+  for (let i = 0; i < BINS; i++) {
+    const binStart = min + (i / BINS) * span;
+    const barH = (counts[i] / maxCount) * plotH;
+    ctx.fillStyle = binStart >= 0 ? 'rgba(0,255,65,0.55)' : 'rgba(255,59,59,0.55)';
+    ctx.fillRect(pad + i * barW + 1, h - pad - barH, Math.max(1, barW - 2), barH);
+  }
+  const zeroX = pad + ((0 - min) / span) * plotW;
+  if (zeroX >= pad && zeroX <= w - pad) {
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath(); ctx.moveTo(zeroX, pad); ctx.lineTo(zeroX, h - pad); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '9px ui-monospace, monospace';
+  ctx.fillText(fmtUsd(min), pad, h - 8);
+  ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
+}
+
+/* ---------------- 11. LIVE FEED (scrolling) ---------------- */
+function buildLiveFeedEvents(trades) {
+  if (!trades) return null;
+  const events = [];
+  trades.forEach(t => {
+    events.push({ ts: t.open_ts, text: `${t.asset} ${t.direction} OPENED @ ${t.entry_price.toFixed(3)} ($${t.size_usd.toFixed(2)})`, cls: '' });
+    if (t.status !== 'open' && t.close_ts && t.pnl_usd != null) {
+      events.push({ ts: t.close_ts, text: `${t.asset} ${t.result} ${fmtUsd(t.pnl_usd)}`, cls: t.result === 'WIN' ? 'up' : 'down' });
+    }
+  });
+  events.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  return events.slice(0, 40);
+}
+function renderLiveFeed(trades) {
+  const track = document.getElementById('feed-track');
+  const events = buildLiveFeedEvents(trades);
+  if (!events || !events.length) { track.innerHTML = noData(); return; }
+  const rowsHtml = events.map(e => `<div class="feed-row"><span class="feed-time">${fmtClock(e.ts)}</span><span class="${e.cls}">${e.text}</span></div>`).join('');
+  track.innerHTML = rowsHtml + rowsHtml; // duplicated once for a seamless vertical scroll loop
+}
+
+/* ---------------- 12. DECISION TIMELINE ---------------- */
 function tlNode(name, cls, label) {
   return `<div class="tl-node ${cls}"><span class="tl-dot"></span><span class="name">${name}</span><span class="state">${label}</span></div><div class="tl-arrow">&#9660;</div>`;
 }
-// tracks the most recent real signal-fire timestamp seen across refreshes so
-// the flow-dot animation only ever plays when a NEW signal has genuinely
-// fired (state.last_signal_ts changed), never on a timer or decoratively
 let _lastSeenSignalTs = undefined;
 function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
   const wrap = document.getElementById('timeline-body');
   const parts = [];
 
-  // MARKET DATA / FEATURES: derived from live_status.json freshness (written
-  // every poll tick by run.py right after computing a live feature snapshot)
   if (!liveStatus) {
     parts.push(tlNode('MARKET DATA', 'nodata', 'NO DATA'));
     parts.push(tlNode('FEATURES', 'nodata', 'NO DATA'));
@@ -865,10 +1466,6 @@ function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
     }
   }
 
-  // SIGNAL COMBINER: quant-only mode's real trading input (repricing was
-  // fully disabled, see QUANT_ONLY_MODE) -- active iff data/signal_combiner_
-  // status.json exists and was updated recently (the combiner runs every
-  // poll tick regardless of whether any individual signal fires).
   if (!combinerStatus) {
     parts.push(tlNode('SIGNAL COMBINER', 'nodata', 'NO DATA'));
   } else {
@@ -877,7 +1474,6 @@ function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
     parts.push(tlNode('SIGNAL COMBINER', fresh ? 'active' : 'blocked', fresh ? 'ACTIVE' : 'INACTIVE'));
   }
 
-  // RISK CHECK: system_stopped flag
   if (!state) {
     parts.push(tlNode('RISK CHECK', 'nodata', 'NO DATA'));
   } else {
@@ -885,7 +1481,6 @@ function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
     parts.push(tlNode('RISK CHECK', stopped ? 'blocked' : 'active', stopped ? 'BLOCKED' : 'PASS'));
   }
 
-  // SIGNAL: was any asset's cooldown timer started recently (i.e. a signal fired)?
   if (!state || !state.last_signal_ts) {
     parts.push(tlNode('SIGNAL', state ? 'waiting' : 'nodata', state ? 'WAITING' : 'NO DATA'));
   } else {
@@ -895,7 +1490,6 @@ function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
     parts.push(tlNode('SIGNAL', anyRecent ? 'active' : 'waiting', anyRecent ? 'RECENT' : 'WAITING'));
   }
 
-  // TRADE: any open positions right now?
   if (!trades) {
     parts.push(tlNode('TRADE', 'nodata', 'NO DATA'));
   } else {
@@ -903,21 +1497,20 @@ function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
     parts.push(tlNode('TRADE', openCount > 0 ? 'active' : 'waiting', openCount > 0 ? openCount + ' OPEN' : 'FLAT'));
   }
 
-  wrap.innerHTML = `<div class="timeline">${parts.slice(0, -1).join('')}</div><div class="tl-flow-dot" id="tl-flow-dot"></div>`; // drop trailing arrow
+  wrap.innerHTML = `<div class="timeline">${parts.slice(0, -1).join('')}</div><div class="tl-flow-dot" id="tl-flow-dot"></div>`;
 
-  // fire the flow-dot animation only when a real signal timestamp advances
   const latestTs = (state && state.last_signal_ts)
     ? Object.values(state.last_signal_ts).sort().slice(-1)[0]
     : null;
   if (latestTs && _lastSeenSignalTs !== undefined && latestTs !== _lastSeenSignalTs) {
     const dot = document.getElementById('tl-flow-dot');
-    dot.classList.remove('run'); void dot.offsetWidth; // restart animation if still mid-run
+    dot.classList.remove('run'); void dot.offsetWidth;
     dot.classList.add('run');
   }
   _lastSeenSignalTs = latestTs;
 }
 
-/* ---------------- 5. AI REASONING ---------------- */
+/* ---------------- 13. AI REASONING ---------------- */
 function renderReasoning(trades, onlineStatus) {
   const wrap = document.getElementById('reasoning-body');
   const withReason = trades ? trades.filter(t => t.signal_reason).sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts)) : [];
@@ -948,81 +1541,7 @@ function renderReasoning(trades, onlineStatus) {
   wrap.innerHTML = html;
 }
 
-/* ---------------- 6. CORRELATION MAP ---------------- */
-// vivid, saturation scales with |r|: near-zero reads as a faint tint, strong
-// correlation (either sign) reads as a solid, high-contrast tile
-function corrColor(r) {
-  if (r == null) return 'rgba(255,255,255,0.04)';
-  const abs = Math.min(1, Math.abs(r));
-  const alpha = 0.22 + abs * 0.62;
-  return r >= 0 ? `rgba(0,255,65,${alpha.toFixed(2)})` : `rgba(255,59,59,${alpha.toFixed(2)})`;
-}
-function corrTextColor(r) {
-  if (r == null) return 'var(--text-muted)';
-  const abs = Math.min(1, Math.abs(r));
-  if (abs > 0.4) return '#05070A'; // dark text once the tile is bright enough to need contrast
-  return r >= 0 ? 'var(--green)' : 'var(--red)';
-}
-const SPOT_CORR_MIN_RETURNS = 10; // require at least this many 60s-apart samples before trusting a correlation
-function pearsonCorrelation(seriesA, seriesB) {
-  const n = Math.min(seriesA.length, seriesB.length);
-  if (n < 2) return null;
-  const retA = [], retB = [];
-  for (let i = 1; i < n; i++) {
-    retA.push(seriesA[i] - seriesA[i - 1]);
-    retB.push(seriesB[i] - seriesB[i - 1]);
-  }
-  if (retA.length < SPOT_CORR_MIN_RETURNS) return null;
-  const meanA = retA.reduce((s, v) => s + v, 0) / retA.length;
-  const meanB = retB.reduce((s, v) => s + v, 0) / retB.length;
-  let cov = 0, varA = 0, varB = 0;
-  for (let i = 0; i < retA.length; i++) {
-    cov += (retA[i] - meanA) * (retB[i] - meanB);
-    varA += (retA[i] - meanA) ** 2;
-    varB += (retB[i] - meanB) ** 2;
-  }
-  if (varA === 0 || varB === 0) return null;
-  return cov / Math.sqrt(varA * varB);
-}
-function computeSolBtcSpotCorrelation(biasHistory) {
-  if (!biasHistory || !biasHistory.length) return { corr: null, n: 0 };
-  const usable = biasHistory.filter(r => has(r.btc_price) && has(r.sol_price));
-  const recent = usable.slice(-60); // roughly the last hour at a 60s cadence
-  return { corr: pearsonCorrelation(recent.map(r => r.btc_price), recent.map(r => r.sol_price)), n: recent.length };
-}
-
-function renderCorrelation(liveStatus, biasHistory) {
-  const wrap = document.getElementById('corr-body');
-  const r = liveStatus ? liveStatus.btc_eth_correlation : null;
-  const rTxt = has(r) ? (r >= 0 ? '+' : '') + r.toFixed(3) : null;
-
-  let html = `<div style="font-size:9px;color:var(--text-muted);">POLYMARKET CONTRACT-PRICE CORRELATION</div>`;
-  html += `<div class="corr-grid">
-    <div></div><div class="corr-head">BTC</div><div class="corr-head">ETH</div>
-    <div class="corr-row-label">BTC</div>
-    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
-    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
-    <div class="corr-row-label">ETH</div>
-    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
-    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
-  </div>`;
-  if (liveStatus) {
-    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:4px;">source: live_status.json, last update ${fmtClock(liveStatus.updated_at)}</div>`;
-  }
-
-  const sol = computeSolBtcSpotCorrelation(biasHistory);
-  html += `<div style="font-size:9px;color:var(--text-muted);margin-top:12px;border-top:1px solid var(--grid);padding-top:8px;">COINGECKO SPOT-PRICE CORRELATION (different series -- not directly comparable to the grid above)</div>`;
-  if (has(sol.corr)) {
-    const solTxt = (sol.corr >= 0 ? '+' : '') + sol.corr.toFixed(3);
-    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value" style="color:${corrTextColor(sol.corr) === '#05070A' ? (sol.corr >= 0 ? 'var(--green)' : 'var(--red)') : corrTextColor(sol.corr)}">${solTxt}</span></div>`;
-    html += `<div style="font-size:9px;color:var(--text-muted);">n=${sol.n} samples (~60s cadence)</div>`;
-  } else {
-    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value">${noData(sol.n ? 'BUILDING HISTORY' : 'NO DATA')}</span></div>`;
-  }
-  wrap.innerHTML = html;
-}
-
-/* ---------------- 7. LIVE TRADE TABLE ---------------- */
+/* ---------------- 14. LIVE TRADE TABLE ---------------- */
 function renderTradeTable(trades) {
   const posBody = document.getElementById('positions-body');
   const tradesBody = document.getElementById('trades-body');
@@ -1052,7 +1571,7 @@ function renderTradeTable(trades) {
     </tr>`).join('') : `<tr><td class="empty-row">No closed trades yet</td></tr>`;
 }
 
-/* ---------------- 8. SIGNAL COMBINER PER-SIGNAL BREAKDOWN ---------------- */
+/* ---------------- 15. SIGNAL COMBINER PER-SIGNAL BREAKDOWN ---------------- */
 function scanning(label) { return `<span class="scanning">${label || 'SCANNING...'}</span>`; }
 function signalCell(sig) {
   if (!sig || !has(sig.fired)) return noData();
@@ -1106,360 +1625,6 @@ function renderSignalCombiner(status) {
   }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the 0.45-0.60 yes_price band (D-002).</td></tr>`;
 }
 
-/* ---------------- 9. EXECUTION CYCLE ---------------- */
-const EXEC_STAGES = ['scan', 'detect', 'validate', 'size', 'fill', 'settle'];
-function renderExecutionCycle(cycle) {
-  const wrap = document.getElementById('exec-cycle-body');
-  if (!cycle || !cycle.stage) {
-    wrap.innerHTML = noData();
-    return;
-  }
-  const idx = EXEC_STAGES.indexOf(cycle.stage);
-  const age = fmtAge(cycle.updated_at);
-  // fill/settle events are naturally sparse (a real trade doesn't open every
-  // tick), so this panel uses a wider staleness window than the 15s
-  // STALE_AFTER_MS other freshness-based widgets use for constantly-ticking
-  // telemetry -- otherwise every real fill would look "stale" within seconds.
-  const fresh = age != null && age < STALE_AFTER_MS * 8;
-  let row = '<div class="exec-cycle-row">';
-  EXEC_STAGES.forEach((stage, i) => {
-    if (i > 0) row += `<div class="exec-connector ${fresh && i <= idx ? 'done' : ''}"></div>`;
-    const isCurrent = fresh && i === idx;
-    const isDone = fresh && i < idx;
-    const cls = isCurrent ? 'current' : (isDone ? 'done' : '');
-    row += `<div class="exec-step ${cls}">
-      <div class="dot">${i + 1}</div>
-      <div class="label">${stage}</div>
-      <div class="detail">${isCurrent ? (cycle.detail || '') : ''}</div>
-    </div>`;
-  });
-  row += '</div>';
-  const captionText = fresh
-    ? `last stage: <b>${cycle.stage.toUpperCase()}</b>${cycle.asset ? ' &middot; ' + cycle.asset : ''} &middot; ${fmtClock(cycle.updated_at)}. Reflects the single most recent real event across any market -- most ticks only reach SCAN (no signal that tick), and SETTLE reflects whichever trade closed most recently, not necessarily the one that just filled.`
-    : `stale &mdash; last real event was ${fmtClock(cycle.updated_at)}. Bot may be idle or between ticks.`;
-  wrap.innerHTML = row + `<div class="chart-caption" style="border-top:none;">${captionText}</div>`;
-}
-
-/* ---------------- 10. STRATEGY DECISION TREE (animated SVG) ---------------- */
-const TREE_NODES = {
-  tick:       { x: 60,  y: 100, label: 'TICK' },
-  scan:       { x: 190, y: 100, label: 'SCAN' },
-  classify:   { x: 320, y: 100, label: 'CLASSIFY' },
-  order_book: { x: 460, y: 40,  label: 'ORDER BOOK' },
-  momentum:   { x: 460, y: 100, label: 'MOMENTUM' },
-  volume:     { x: 460, y: 160, label: 'VOLUME' },
-  size:       { x: 620, y: 100, label: 'SIZE' },
-  fill:       { x: 750, y: 100, label: 'FILL' },
-  pnl:        { x: 900, y: 100, label: 'P&L' },
-};
-const TREE_EDGES = [
-  ['tick', 'scan'], ['scan', 'classify'],
-  ['classify', 'order_book'], ['classify', 'momentum'], ['classify', 'volume'],
-  ['order_book', 'size'], ['momentum', 'size'], ['volume', 'size'],
-  ['size', 'fill'], ['fill', 'pnl'],
-];
-let _lastSeenTreeFillTs = undefined;
-function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus) {
-  const wrap = document.getElementById('tree-svg-wrap');
-  const edgeLine = document.getElementById('tree-edge-line');
-  const btcStatus = combinerStatus ? combinerStatus.BTC : null;
-
-  if (btcStatus) {
-    const fmtSig = s => (s && s.fired) ? `<span class="up">${(s.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted);">--</span>';
-    const combinedText = btcStatus.correlation_filter_blocked ? '<span class="down">BLOCKED</span>'
-      : btcStatus.price_out_of_band ? '<span style="color:var(--yellow);">OUT OF BAND</span>'
-      : has(btcStatus.combined_confidence) ? `<span class="${btcStatus.fired ? 'up' : ''}">${(btcStatus.combined_confidence * 100).toFixed(0)}%</span>`
-      : '<span style="color:var(--cyan);">scanning</span>';
-    edgeLine.innerHTML = `BTC edge confidence &middot; Order Book: ${fmtSig(btcStatus.order_book)} &nbsp; Momentum: ${fmtSig(btcStatus.momentum)} &nbsp; Volume: ${fmtSig(btcStatus.volume)} &nbsp; Combined: ${combinedText}`;
-  } else {
-    edgeLine.innerHTML = noData();
-  }
-
-  const liveFresh = !!(liveStatus && (() => { const a = fmtAge(liveStatus.updated_at); return a != null && a < STALE_AFTER_MS; })());
-  const cycleFresh = !!(executionCycle && (() => { const a = fmtAge(executionCycle.updated_at); return a != null && a < STALE_AFTER_MS * 8; })());
-  const cycleStage = cycleFresh ? executionCycle.stage : null;
-
-  const active = {
-    tick: liveFresh,
-    scan: liveFresh,
-    classify: !!btcStatus,
-    order_book: !!(btcStatus && btcStatus.order_book && btcStatus.order_book.fired),
-    momentum: !!(btcStatus && btcStatus.momentum && btcStatus.momentum.fired),
-    volume: !!(btcStatus && btcStatus.volume && btcStatus.volume.fired),
-    size: cycleStage === 'size' || cycleStage === 'fill',
-    fill: cycleStage === 'fill',
-    pnl: !!(portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length > 0),
-  };
-
-  let svg = `<svg viewBox="0 0 960 200" preserveAspectRatio="xMidYMid meet">`;
-  TREE_EDGES.forEach(([a, b]) => {
-    const n1 = TREE_NODES[a], n2 = TREE_NODES[b];
-    const lit = active[a] && active[b];
-    svg += `<line class="tree-edge" x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" stroke="${lit ? 'rgba(0,255,65,0.55)' : 'var(--border-hi)'}"/>`;
-  });
-  Object.entries(TREE_NODES).forEach(([key, n]) => {
-    const isActive = active[key];
-    const isPnl = key === 'pnl';
-    const r = isPnl ? 34 : 20;
-    const fill = isActive ? 'rgba(0,255,65,0.15)' : '#10161D';
-    const stroke = isActive ? '#00FF41' : 'rgba(255,255,255,0.18)';
-    svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`;
-    if (isPnl) {
-      const last = (portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length)
-        ? portfolio.sortedClosed[portfolio.sortedClosed.length - 1] : null;
-      const pnlText = last ? fmtUsd(last.pnl_usd) : 'NO DATA';
-      const pnlColor = last ? (last.pnl_usd >= 0 ? '#00FF41' : '#FF3B3B') : '#4E5A66';
-      svg += `<text x="${n.x}" y="${n.y - 4}" text-anchor="middle" fill="${pnlColor}" font-size="13" font-weight="800" font-family="ui-monospace, monospace">${pnlText}</text>`;
-      svg += `<text x="${n.x}" y="${n.y + 12}" class="tree-node-sub">last trade</text>`;
-    } else {
-      svg += `<text x="${n.x}" y="${n.y + r + 14}" class="tree-node-label">${n.label}</text>`;
-    }
-  });
-  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="5" fill="#00FF41" opacity="0">`
-       + `<animateMotion id="tree-flow-motion" path="M 60 100 L 900 100" dur="1.8s" begin="indefinite" fill="freeze"/>`
-       + `<animate id="tree-flow-opacity" attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.9;1" dur="1.8s" begin="indefinite" fill="freeze"/>`
-       + `</circle>`;
-  svg += `</svg>`;
-  wrap.innerHTML = svg;
-
-  // Only animate the traveling dot on a genuinely new FILL event (a real
-  // trade actually opened), never decoratively or on a timer -- mirrors the
-  // Decision Timeline's flow-dot discipline.
-  const lastFillTs = (executionCycle && executionCycle.stage === 'fill') ? executionCycle.updated_at : null;
-  if (lastFillTs && lastFillTs !== _lastSeenTreeFillTs) {
-    const isFirstPaint = _lastSeenTreeFillTs === undefined;
-    _lastSeenTreeFillTs = lastFillTs;
-    if (!isFirstPaint) {
-      const motion = document.getElementById('tree-flow-motion');
-      const opacityAnim = document.getElementById('tree-flow-opacity');
-      if (motion && opacityAnim) { motion.beginElement(); opacityAnim.beginElement(); }
-    }
-  }
-}
-
-/* ---------------- 11. MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss, 1000 simulated paths) ---------------- */
-function computeMonteCarlo(m) {
-  if (!m || !m.wins.length || !m.losses.length) return null;
-  const n = Math.min(m.closed.length, 5000);
-  const winRate = m.winRate, avgWin = m.avgWin, avgLoss = m.avgLoss;
-  const PATHS = 1000;
-  const finals = new Array(PATHS);
-  for (let p = 0; p < PATHS; p++) {
-    let total = 0;
-    for (let t = 0; t < n; t++) {
-      total += (Math.random() < winRate) ? avgWin : -avgLoss;
-    }
-    finals[p] = total;
-  }
-  finals.sort((a, b) => a - b);
-  const pct = frac => finals[Math.min(finals.length - 1, Math.max(0, Math.floor(frac * (finals.length - 1))))];
-  const mean = finals.reduce((s, v) => s + v, 0) / finals.length;
-  return { finals, n, p05: pct(0.05), p01: pct(0.01), mean };
-}
-function renderMonteCarlo(portfolio) {
-  const statsEl = document.getElementById('mc-stats');
-  const canvas = document.getElementById('mc-canvas');
-  const mc = computeMonteCarlo(portfolio);
-  if (!mc) {
-    statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
-    const { ctx, w, h } = resizeCanvasToParent(canvas);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '11px ui-monospace, monospace';
-    ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
-    return;
-  }
-  statsEl.innerHTML = `
-    <div class="mc-stat"><div class="mc-label">Simulated Over</div><div class="mc-value num">${mc.n} trades &times; 1000 paths</div></div>
-    <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
-    <div class="mc-stat"><div class="mc-label">5th Percentile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
-    <div class="mc-stat"><div class="mc-label">P&lt;0.01 (99% VaR)</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
-  `;
-  const { ctx, w, h } = resizeCanvasToParent(canvas);
-  ctx.clearRect(0, 0, w, h);
-  const pad = 26, BINS = 24;
-  const min = mc.finals[0], max = mc.finals[mc.finals.length - 1];
-  const span = (max - min) || 1;
-  const counts = new Array(BINS).fill(0);
-  mc.finals.forEach(v => {
-    let idx = Math.floor(((v - min) / span) * BINS);
-    idx = Math.max(0, Math.min(BINS - 1, idx));
-    counts[idx]++;
-  });
-  const maxCount = Math.max(...counts);
-  const plotW = w - pad * 2, plotH = h - pad * 2;
-  const barW = plotW / BINS;
-  for (let i = 0; i < BINS; i++) {
-    const binStart = min + (i / BINS) * span;
-    const barH = (counts[i] / maxCount) * plotH;
-    ctx.fillStyle = binStart >= 0 ? 'rgba(0,255,65,0.55)' : 'rgba(255,59,59,0.55)';
-    ctx.fillRect(pad + i * barW + 1, h - pad - barH, Math.max(1, barW - 2), barH);
-  }
-  const zeroX = pad + ((0 - min) / span) * plotW;
-  if (zeroX >= pad && zeroX <= w - pad) {
-    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.beginPath(); ctx.moveTo(zeroX, pad); ctx.lineTo(zeroX, h - pad); ctx.stroke();
-    ctx.setLineDash([]);
-  }
-  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '9px ui-monospace, monospace';
-  ctx.fillText(fmtUsd(min), pad, h - 8);
-  ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
-}
-
-/* ---------------- 12. PACE ---------------- */
-function renderPace(portfolio, state) {
-  const wrap = document.getElementById('pace-body');
-  if (!portfolio || !state || !state.session_start) {
-    wrap.innerHTML = noData();
-    return;
-  }
-  const sessionStartMs = new Date(state.session_start).getTime();
-  const hoursRunning = (Date.now() - sessionStartMs) / 3600000;
-  if (!(hoursRunning > 0)) {
-    wrap.innerHTML = noData('SESSION JUST STARTED');
-    return;
-  }
-  const pace = portfolio.totalPnl / hoursRunning;
-  const daily = pace * 24, weekly = pace * 24 * 7;
-  wrap.innerHTML = `
-    <div class="pace-hero num ${pace >= 0 ? 'up' : 'down'}">${fmtUsd(pace)}/hr</div>
-    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h running session (started ${fmtClock(state.session_start)})</div>
-    <div class="metric-list">
-      <div class="metric-row"><span class="label">Projected Daily</span><span class="value num ${daily >= 0 ? 'up' : 'down'}">${fmtUsd(daily)}</span></div>
-      <div class="metric-row"><span class="label">Projected Weekly</span><span class="value num ${weekly >= 0 ? 'up' : 'down'}">${fmtUsd(weekly)}</span></div>
-      <div class="metric-row"><span class="label">Total PnL (all-time)</span><span class="value num">${fmtUsd(portfolio.totalPnl)}</span></div>
-    </div>
-    <div class="pace-sub" style="margin-top:8px;">Linear extrapolation from all-time realized PnL over this session's runtime &mdash; not a forecast guarantee, and will look inflated right after a bot restart when hours_running is still small.</div>
-  `;
-}
-
-/* ---------------- 13. BTC CANDLESTICK (real, single-sample-per-signal) ---------------- */
-function resizeCanvasToParent(canvas) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return { ctx, w, h };
-}
-function renderCandlestick(signals) {
-  const canvas = document.getElementById('candle-canvas');
-  const { ctx, w, h } = resizeCanvasToParent(canvas);
-  ctx.clearRect(0, 0, w, h);
-
-  if (!signals || signals.length < 2) {
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '11px ui-monospace, monospace';
-    ctx.fillText(signals ? 'Not enough BTC signals yet' : 'NO DATA', 12, h / 2);
-    return;
-  }
-
-  const pad = { t: 10, r: 46, b: 20, l: 4 };
-  const prices = signals.map(s => s.features.yes_price);
-  const min = Math.min(...prices), max = Math.max(...prices);
-  const span = (max - min) || 0.01;
-  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
-  const n = signals.length;
-  const slot = plotW / n;
-  const y = v => pad.t + (1 - (v - min) / span) * plotH;
-
-  // gridlines + price axis
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.font = '9px ui-monospace, monospace';
-  for (let i = 0; i <= 3; i++) {
-    const gy = pad.t + (i / 3) * plotH;
-    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy); ctx.stroke();
-    ctx.fillText((max - (i / 3) * span).toFixed(3), pad.l + plotW + 4, gy + 3);
-  }
-
-  // each "candle" = one real recorded yes_price sample; no fabricated OHLC
-  // spread, so open=high=low=close and it renders as a flat tick, colored by
-  // change vs the previous signal
-  signals.forEach((s, i) => {
-    const x = pad.l + i * slot + slot / 2;
-    const price = s.features.yes_price;
-    const prevPrice = i > 0 ? signals[i - 1].features.yes_price : price;
-    const up = price >= prevPrice;
-    ctx.strokeStyle = up ? '#00FF41' : '#FF3B3B';
-    ctx.lineWidth = Math.max(2, slot * 0.5);
-    ctx.beginPath();
-    ctx.moveTo(x, y(price) - 1.2);
-    ctx.lineTo(x, y(price) + 1.2);
-    ctx.stroke();
-  });
-
-  // connecting line so the sequence still reads as a "chart," not scattered ticks
-  ctx.beginPath();
-  signals.forEach((s, i) => {
-    const x = pad.l + i * slot + slot / 2;
-    i === 0 ? ctx.moveTo(x, y(s.features.yes_price)) : ctx.lineTo(x, y(s.features.yes_price));
-  });
-  ctx.strokeStyle = 'rgba(0,229,255,0.5)'; ctx.lineWidth = 1; ctx.stroke();
-
-  // last price tag
-  const last = signals[signals.length - 1];
-  const lastUp = signals.length > 1 && last.features.yes_price >= signals[signals.length - 2].features.yes_price;
-  ctx.fillStyle = lastUp ? '#00FF41' : '#FF3B3B';
-  ctx.font = 'bold 11px ui-monospace, monospace';
-  ctx.fillText(last.features.yes_price.toFixed(3), pad.l + plotW + 4, y(last.features.yes_price) + 3);
-}
-
-/* ---------------- 14. EQUITY CURVE (real, all trades) ---------------- */
-function renderEquityCurve(m) {
-  const canvas = document.getElementById('equity-canvas');
-  const { ctx, w, h } = resizeCanvasToParent(canvas);
-  ctx.clearRect(0, 0, w, h);
-
-  if (!m || !m.curve || !m.curve.length) {
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '11px ui-monospace, monospace';
-    ctx.fillText(m ? 'Awaiting closed trades...' : 'NO DATA', 12, h / 2);
-    return;
-  }
-
-  const pad = 26;
-  const curve = m.curve;
-  const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
-  const span = (max - min) || 1;
-  const x = i => curve.length > 1 ? (i / (curve.length - 1)) * (w - pad * 2) + pad : w / 2;
-  const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
-  const zeroY = y(0);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  for (let i = 0; i <= 4; i++) {
-    const gy = pad + (i / 4) * (h - pad * 2);
-    ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(w - pad, gy); ctx.stroke();
-  }
-  ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-  ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(w - pad, zeroY); ctx.stroke();
-  ctx.setLineDash([]);
-
-  const positive = curve[curve.length - 1] >= 0;
-  const lineColor = positive ? '#00FF41' : '#FF3B3B';
-
-  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
-  grad.addColorStop(0, positive ? 'rgba(0,255,65,0.28)' : 'rgba(255,59,59,0.28)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.beginPath();
-  ctx.moveTo(x(0), y(curve[0]));
-  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
-  ctx.lineTo(x(curve.length - 1), zeroY);
-  ctx.lineTo(x(0), zeroY);
-  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(x(0), y(curve[0]));
-  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
-  ctx.strokeStyle = lineColor; ctx.lineWidth = 2;
-  ctx.shadowColor = lineColor; ctx.shadowBlur = 8;
-  ctx.stroke(); ctx.shadowBlur = 0;
-
-  ctx.fillStyle = lineColor;
-  ctx.font = 'bold 12px ui-monospace, monospace';
-  ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length} trades)`, w - pad - 130, pad - 6);
-}
-
 /* =============================================================================
    REFRESH LOOP
    ============================================================================= */
@@ -1472,19 +1637,25 @@ async function refresh() {
     loadSignalCombinerStatus(), loadApiStats(), loadExecutionCycle(),
   ]);
   renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
+  renderTicker(marketBias);
   const portfolio = renderPortfolio(trades);
+  renderRiskGauge(state);
+  renderPace(portfolio, state);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
+  renderTopCallout(portfolio);
+  renderExecutionCycle(executionCycle);
+  renderNextTick();
+  renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus);
+  renderCandlestick(btcSignals);
+  renderCorrelation(liveStatus, biasHistory);
+  renderRobustnessGrid(trades);
+  renderMonteCarlo(portfolio);
+  renderEquityCurve(portfolio);
+  renderLiveFeed(trades);
   renderDecisionTimeline(liveStatus, state, trades, combinerStatus);
   renderReasoning(trades, onlineStatus);
-  renderCorrelation(liveStatus, biasHistory);
   renderTradeTable(trades);
-  renderCandlestick(btcSignals);
-  renderEquityCurve(portfolio);
   renderSignalCombiner(combinerStatus);
-  renderExecutionCycle(executionCycle);
-  renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus);
-  renderMonteCarlo(portfolio);
-  renderPace(portfolio, state);
 }
 
 new ResizeObserver(() => refresh()).observe(document.getElementById('candle-wrap'));
@@ -1493,7 +1664,10 @@ new ResizeObserver(() => refresh()).observe(document.getElementById('mc-chart-wr
 
 refresh();
 setInterval(refresh, REFRESH_MS);
-setInterval(() => { document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false }); }, 1000);
+setInterval(() => {
+  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
+  renderNextTick();
+}, 1000);
 </script>
 </body>
 </html>
