@@ -67,8 +67,36 @@ def test_switches_to_model_after_warmup_threshold(model):
     assert prob is not None
 
 
-def test_predict_proba_one_is_none_before_any_update(model):
-    assert model.predict_proba_one(make_features()) is None
+def test_fresh_model_is_seeded_with_yes_price_prior_not_unfitted(model):
+    # a genuinely fresh model (no persisted state) is seeded with an
+    # informed yes_price prior immediately -- it is NOT unfitted/None
+    p = model.predict_proba_one(make_features())
+    assert p is not None
+    assert 0.0 <= p <= 1.0
+
+
+def test_yes_price_prior_is_monotonic_increasing(model):
+    # per D-002: higher yes_price should predict a higher win probability
+    p_low = model.predict_proba_one(make_features(yes_price=0.30))
+    p_mid = model.predict_proba_one(make_features(yes_price=0.45))
+    p_high = model.predict_proba_one(make_features(yes_price=0.60))
+    assert p_low < p_mid < p_high
+
+
+def test_seeded_prior_does_not_affect_warmup_progress(model):
+    # seeding the prior must never touch real training/warmup state
+    assert model.n_updates == 0
+    assert model.is_warmed_up() is False
+
+
+def test_seeded_prior_does_not_override_decide_during_warmup(model):
+    # even though predict_proba_one() now returns a real number immediately,
+    # decide() must still mirror the repricing signal during warmup, exactly
+    # as before the prior was added
+    signal = make_repricing_signal(confidence=0.7)
+    should_trade, direction, prob, reason = model.decide(make_features(), signal)
+    assert prob == 0.7
+    assert "warmup" in reason
 
 
 def test_predict_proba_one_returns_probability_after_update(model):
@@ -76,6 +104,19 @@ def test_predict_proba_one_returns_probability_after_update(model):
     p = model.predict_proba_one(make_features())
     assert p is not None
     assert 0.0 <= p <= 1.0
+
+
+def test_real_progress_is_not_overwritten_by_prior_on_reload(tmp_path):
+    # a model that already has real training progress must not be
+    # re-seeded with the prior when reloaded -- real learned state wins
+    state_path = str(tmp_path / "online_model.pkl")
+    trained = OnlineQuantModel(state_path=state_path, warmup_trades=5)
+    trained.update(make_features(yes_price=0.5), 1)
+    coef_after_training = trained.clf.coef_.copy()
+
+    reloaded = OnlineQuantModel(state_path=state_path, warmup_trades=5)
+    assert reloaded.n_updates == 1
+    assert (reloaded.clf.coef_ == coef_after_training).all()
 
 
 def test_record_and_resolve_round_trip(model):

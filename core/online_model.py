@@ -11,7 +11,8 @@ from sklearn.linear_model import SGDClassifier
 from config.settings import (
     KELLY_FRACTION_CAP, ONLINE_MODEL_STATE_FILE, ONLINE_MODEL_WARMUP_TRADES,
     ONLINE_MODEL_CONFIDENCE_THRESHOLD, ONLINE_MODEL_MAX_TRADE_USD,
-    ONLINE_MODEL_STATUS_FILE,
+    ONLINE_MODEL_STATUS_FILE, ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT,
+    ONLINE_MODEL_PRIOR_INTERCEPT,
 )
 from core.kelly_criterion import net_odds_from_price, kelly_fraction
 from core.live_features import FEATURE_NAMES
@@ -65,6 +66,50 @@ class OnlineQuantModel:
         self._count_vec = np.zeros(n)
         self._pending: dict[str, dict] = {}
         self._load()
+        if not self._fitted:
+            self._seed_yes_price_prior()
+
+    def _seed_yes_price_prior(self):
+        """Manually initializes the linear model's weights with an informed
+        prior BEFORE any real partial_fit() call, instead of starting from
+        an uninformative all-zero coefficient vector. This runs only on a
+        genuinely fresh model (self._fitted was False after _load(), i.e.
+        no persisted real training progress exists) -- it never overwrites
+        real learned state.
+
+        This is NOT synthetic training data: no fake example is fed through
+        update(), and n_updates/warmup progress are completely untouched
+        (still 0, still gated on real resolved trades). It's a documented
+        initial condition grounded in a real, statistically significant
+        finding (docs/polymarket/DECISIONS.md D-002). Every real resolved
+        trade from here on still calls partial_fit() and performs a normal
+        SGD gradient step starting from this prior, exactly as it would
+        from an all-zero start -- only the starting point changes, not the
+        learning mechanism.
+
+        Caveat: the calibration below (P~0.40 at yes_price=0.45, P~0.55 at
+        yes_price=0.60) holds only at the instant this runs, when the
+        online standardizer is still at its (mean=0, std=1) default and so
+        transforms yes_price ~unchanged. As real data accumulates, both the
+        standardizer and the coefficient will evolve away from this exact
+        snapshot -- what's durable is the direction (higher yes_price biases
+        toward YES), not the precise probabilities quoted here.
+        """
+        n = len(self.feature_names)
+        self.clf.coef_ = np.zeros((1, n))
+        if "yes_price" in self.feature_names:
+            idx = self.feature_names.index("yes_price")
+            self.clf.coef_[0][idx] = ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT
+        self.clf.intercept_ = np.array([ONLINE_MODEL_PRIOR_INTERCEPT])
+        self.clf.classes_ = np.array([0, 1])
+        self.clf.t_ = 1.0
+        self._fitted = True
+        logger.info(
+            f"OnlineQuantModel: seeded yes_price prior (weight="
+            f"{ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT}, intercept="
+            f"{ONLINE_MODEL_PRIOR_INTERCEPT}) per docs/polymarket/DECISIONS.md "
+            f"D-002 -- not learned from real data yet"
+        )
 
     @property
     def n_updates(self) -> int:
