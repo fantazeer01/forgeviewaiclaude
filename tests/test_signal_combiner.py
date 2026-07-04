@@ -123,3 +123,50 @@ def test_status_shows_blocked_when_correlation_filter_fires(combiner):
         data = json.load(f)
     assert data["ETH"]["correlation_filter_blocked"] is True
     assert data["ETH"]["fired"] is False
+
+
+def test_signal_stats_increments_fired_today_and_last_fired_at(combiner):
+    import json
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}  # order_book fires
+    combiner.combine(make_market(), FakeFetcher(top), btc_eth_correlation=None)
+    with open(combiner.status_path) as f:
+        data = json.load(f)
+    assert data["signal_stats"]["order_book"]["fired_today"] == 1
+    assert data["signal_stats"]["order_book"]["last_fired_at"] is not None
+    assert data["signal_stats"]["momentum"]["fired_today"] == 0
+    assert data["signal_stats"]["momentum"]["last_fired_at"] is None
+    assert data["signal_stats"]["volume"]["fired_today"] == 0
+
+
+def test_signal_stats_accumulates_across_multiple_combine_calls(combiner):
+    import json
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+    combiner.combine(make_market(), FakeFetcher(top), btc_eth_correlation=None)
+    combiner.combine(make_market(), FakeFetcher(top), btc_eth_correlation=None)
+    with open(combiner.status_path) as f:
+        data = json.load(f)
+    assert data["signal_stats"]["order_book"]["fired_today"] == 2
+
+
+def test_signal_stats_persists_across_new_combiner_instance_same_day(tmp_path):
+    import json
+    from core.signals.volume_signal import VolumeSignalGenerator
+
+    status_path = str(tmp_path / "signal_combiner_status.json")
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+
+    c1 = SignalCombiner(
+        volume_gen=VolumeSignalGenerator(history_path=str(tmp_path / "volume_history.jsonl")),
+        status_path=status_path,
+    )
+    c1.combine(make_market(), FakeFetcher(top), btc_eth_correlation=None)
+
+    c2 = SignalCombiner(
+        volume_gen=VolumeSignalGenerator(history_path=str(tmp_path / "volume_history_2.jsonl")),
+        status_path=status_path,
+    )
+    assert c2._signal_stats["order_book"]["fired_today"] == 1
+
+    with open(status_path) as f:
+        data = json.load(f)
+    assert data["signal_stats"]["order_book"]["fired_today"] == 1

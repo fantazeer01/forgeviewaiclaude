@@ -56,6 +56,14 @@
     font-size: 8.5px; letter-spacing: 0.08em; color: var(--text-muted);
     border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; padding: 1px 5px;
   }
+  .scanning {
+    display: inline-block;
+    color: var(--cyan);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    animation: scanPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes scanPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
   /* ---- header bar ---- */
   #header-bar {
@@ -323,10 +331,11 @@
       <div class="panel-title">Signal Combiner &middot; Per-Signal Breakdown</div>
       <span class="real-tag">REAL</span>
     </div>
+    <div id="signal-stats-strip"></div>
     <div class="panel-body nopad" style="overflow:auto;">
       <table class="dense" id="signal-combiner-table">
         <thead><tr>
-          <th>Asset</th><th>Repricing (0.35)</th><th>Order Book (0.25)</th><th>Momentum (0.25)</th>
+          <th>Asset</th><th>Order Book (0.25)</th><th>Momentum (0.25)</th>
           <th>Volume (0.15)</th><th>Correlation Filter</th><th>Combined</th>
         </tr></thead>
         <tbody id="signal-combiner-body"></tbody>
@@ -927,20 +936,37 @@ function renderTradeTable(trades) {
 }
 
 /* ---------------- 8. SIGNAL COMBINER PER-SIGNAL BREAKDOWN ---------------- */
+function scanning(label) { return `<span class="scanning">${label || 'SCANNING...'}</span>`; }
 function signalCell(sig) {
   if (!sig || !has(sig.fired)) return noData();
   if (!sig.fired) return `<span style="color:var(--text-muted);">no fire</span>`;
   return `<span class="up">${(sig.confidence * 100).toFixed(0)}%</span> <span style="color:var(--text-muted);font-size:9px;">${sig.reason || ''}</span>`;
 }
-function renderSignalCombiner(status) {
-  const body = document.getElementById('signal-combiner-body');
-  if (!status) {
-    body.innerHTML = `<tr><td colspan="7" class="empty-row">${noData()}</td></tr>`;
+function renderSignalStats(stats) {
+  const strip = document.getElementById('signal-stats-strip');
+  if (!stats) {
+    strip.innerHTML = '';
     return;
   }
-  const assets = Object.keys(status).filter(k => k !== 'updated_at');
+  const labels = { order_book: 'Order Book', momentum: 'Momentum', volume: 'Volume' };
+  const html = Object.keys(labels).map(name => {
+    const s = stats[name] || { fired_today: 0, last_fired_at: null };
+    return `<span style="margin-right:22px;"><b style="color:var(--text-primary);">${labels[name]}</b> `
+      + `<span class="num">${s.fired_today || 0}</span>&times; today &middot; last fired `
+      + `${s.last_fired_at ? fmtClock(s.last_fired_at) : '<span style="color:var(--text-muted);">never today</span>'}</span>`;
+  }).join('');
+  strip.innerHTML = `<div style="font-size:10px;color:var(--text-secondary);padding:5px 12px;border-bottom:1px solid var(--grid);">${html}</div>`;
+}
+function renderSignalCombiner(status) {
+  const body = document.getElementById('signal-combiner-body');
+  renderSignalStats(status ? status.signal_stats : null);
+  if (!status) {
+    body.innerHTML = `<tr><td colspan="6" class="empty-row">${noData()}</td></tr>`;
+    return;
+  }
+  const assets = Object.keys(status).filter(k => !['updated_at', 'signal_stats', 'signal_stats_date'].includes(k));
   if (!assets.length) {
-    body.innerHTML = `<tr><td colspan="7" class="empty-row">${noData('NO MARKETS POLLED YET')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" class="empty-row">${noData('NO MARKETS POLLED YET')}</td></tr>`;
     return;
   }
   body.innerHTML = assets.map(asset => {
@@ -948,17 +974,16 @@ function renderSignalCombiner(status) {
     const blocked = s.correlation_filter_blocked;
     const combinedCell = blocked
       ? `<span class="down">BLOCKED</span>`
-      : (has(s.combined_confidence) ? `<span class="${s.fired ? 'up' : ''}">${(s.combined_confidence * 100).toFixed(0)}%${s.fired ? ' FIRE' : ''}</span>` : noData('NO ACTIVE SIGNALS'));
+      : (has(s.combined_confidence) ? `<span class="${s.fired ? 'up' : ''}">${(s.combined_confidence * 100).toFixed(0)}%${s.fired ? ' FIRE' : ''}</span>` : scanning());
     return `<tr class="${s.fired ? 'win' : ''}">
       <td class="plain">${asset}</td>
-      <td class="plain">${signalCell(s.repricing)}</td>
       <td class="plain">${signalCell(s.order_book)}</td>
       <td class="plain">${signalCell(s.momentum)}</td>
       <td class="plain">${signalCell(s.volume)}</td>
       <td class="plain">${blocked ? '<span class="down">BLOCKED</span>' : '<span class="up">clear</span>'}</td>
       <td class="plain">${combinedCell}</td>
     </tr>`;
-  }).join('') + `<tr><td colspan="7" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header).</td></tr>`;
+  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header).</td></tr>`;
 }
 
 /* ---------------- 8. BTC CANDLESTICK (real, single-sample-per-signal) ---------------- */

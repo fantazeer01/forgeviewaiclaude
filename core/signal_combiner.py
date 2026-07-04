@@ -39,6 +39,8 @@ class SignalCombiner:
     immediately regardless of how strong the other signals are.
     """
 
+    SIGNAL_NAMES = ("order_book", "momentum", "volume")
+
     def __init__(self, order_book_gen: Optional[OrderBookSignalGenerator] = None,
                  momentum_gen: Optional[MomentumSignalGenerator] = None,
                  volume_gen: Optional[VolumeSignalGenerator] = None,
@@ -50,6 +52,49 @@ class SignalCombiner:
         self.correlation_filter = correlation_filter or CorrelationFilter()
         self.status_path = status_path
         self._status: dict[str, dict] = {}
+        self._stats_date = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        self._signal_stats: dict[str, dict] = {
+            name: {"fired_today": 0, "last_fired_at": None} for name in self.SIGNAL_NAMES
+        }
+        self._load_signal_stats()
+
+    def _load_signal_stats(self):
+        """Restores today's fired-count/last-fired-at from the previously
+        exported status file, so a bot restart doesn't reset the "fired
+        today" counters back to zero mid-day. If the persisted stats are
+        from a prior UTC day, they're stale and _reset_stats_if_new_day()
+        (called from the normal update path) will zero them out instead."""
+        if not os.path.exists(self.status_path):
+            return
+        try:
+            with open(self.status_path) as f:
+                data = json.load(f)
+            stats = data.get("signal_stats")
+            stats_date = data.get("signal_stats_date")
+            if stats and stats_date == self._stats_date:
+                for name in self.SIGNAL_NAMES:
+                    if name in stats:
+                        self._signal_stats[name] = {
+                            "fired_today": stats[name].get("fired_today", 0),
+                            "last_fired_at": stats[name].get("last_fired_at"),
+                        }
+        except Exception as e:
+            logger.error(f"SignalCombiner signal_stats load error: {e}")
+
+    def _reset_stats_if_new_day(self):
+        today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        if today != self._stats_date:
+            self._stats_date = today
+            self._signal_stats = {
+                name: {"fired_today": 0, "last_fired_at": None} for name in self.SIGNAL_NAMES
+            }
+
+    def _record_fire(self, name: str, fired: bool):
+        if fired:
+            self._signal_stats[name]["fired_today"] += 1
+            self._signal_stats[name]["last_fired_at"] = (
+                datetime.datetime.now(datetime.timezone.utc).isoformat()
+            )
 
     @staticmethod
     def _signal_summary(signal: Optional[RepricingSignal]) -> dict:
@@ -61,6 +106,7 @@ class SignalCombiner:
                 btc_eth_correlation: Optional[float]) -> Optional[RepricingSignal]:
         asset = market["asset"]
         market_id = market["market_id"]
+        self._reset_stats_if_new_day()
 
         # feed rolling histories every tick, regardless of whether anything fires
         self.momentum_gen.update(market_id, market["yes_price"])
@@ -85,6 +131,9 @@ class SignalCombiner:
         order_book_signal = self.order_book_gen.generate(market, fetcher)
         momentum_signal = self.momentum_gen.generate(market)
         volume_signal = self.volume_gen.generate(market)
+        self._record_fire("order_book", order_book_signal is not None)
+        self._record_fire("momentum", momentum_signal is not None)
+        self._record_fire("volume", volume_signal is not None)
 
         active = {}
         if order_book_signal is not None:
@@ -123,12 +172,16 @@ class SignalCombiner:
 
     def _export_status(self):
         """Small JSON snapshot per asset the dashboard can read to show each
-        of the 4 signals' status separately -- this is display-only
-        telemetry, not consumed by any trading logic."""
+        of the 3 signals' status separately, plus a top-level "signal_stats"
+        summary (today's fired count and last-fired-at timestamp per signal
+        type, across all assets) -- this is display-only telemetry, not
+        consumed by any trading logic."""
         try:
             os.makedirs(os.path.dirname(self.status_path), exist_ok=True)
             data = dict(self._status)
             data["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            data["signal_stats"] = self._signal_stats
+            data["signal_stats_date"] = self._stats_date
             tmp_path = self.status_path + ".tmp"
             with open(tmp_path, "w") as f:
                 json.dump(data, f)
