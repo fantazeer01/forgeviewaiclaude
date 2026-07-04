@@ -23,13 +23,23 @@ TRADES_LOG = "data/paper_trades.jsonl"
 SIGNALS_LOG = "data/signals_log.jsonl"
 QUANT_FEATURES_LOG = "data/quant_features.jsonl"
 QUANT_MODEL_PATH = "data/quant_model.pkl"
+# KELLY_FRACTION_CAP stays defined here: core/kelly_criterion.py (a separate,
+# still-valid standalone utility module with its own tests) uses it
+# independently of the online model's own sizing. It's no longer used by
+# core/online_model.py's kelly_size(), which now uses the flat BET_SIZES
+# table below instead of the Kelly formula.
 KELLY_FRACTION_CAP = 0.25
 ONLINE_MODEL_STATE_FILE = "data/online_model_state.pkl"
 ONLINE_MODEL_WARMUP_TRADES = 200
 ONLINE_MODEL_CONFIDENCE_THRESHOLD = 0.55
-ONLINE_MODEL_BANKROLL_USD = 1000.0
-ONLINE_MODEL_MIN_TRADE_USD = 1.0
-ONLINE_MODEL_MAX_TRADE_USD = 10.0
+# Simple step-function bet sizing, replacing the old Kelly-criterion formula
+# (which used to need ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
+# and ONLINE_MODEL_MAX_TRADE_USD -- all removed, since a flat lookup table
+# needs none of them: the table's own values ARE the floor/ceiling now).
+# Keyed by signal_combiner confidence (NOT the online model's own calibrated
+# probability) -- core/online_model.py.kelly_size() finds the largest
+# threshold the confidence clears and returns that flat dollar amount.
+BET_SIZES = {0.60: 5, 0.70: 10, 0.80: 15, 0.90: 25}
 # Once live (post-warmup), a trade now requires BOTH the model's own
 # prediction (calibrated p > ONLINE_MODEL_OWN_THRESHOLD) AND the signal
 # combiner's independent agreement (a non-None combiner signal, which by
@@ -46,8 +56,10 @@ ONLINE_MODEL_COMBINER_THRESHOLD = 0.60
 # asymptotic, so it approaches but never quite reaches those bounds, no
 # matter how extreme the raw prediction is. p_raw=0.5 still maps to exactly
 # 0.5 (uncalibrated confidence is unaffected); only the extremes are pulled
-# in. This affects every consumer of predict_proba_one() (decide() and
-# kelly_size()'s win_probability input alike), not just display.
+# in. This affects every consumer of predict_proba_one() -- decide()'s
+# threshold check -- not just display. (kelly_size() no longer consumes this
+# value at all: it's keyed off signal_combiner confidence instead, since the
+# BET_SIZES sprint.)
 ONLINE_MODEL_CALIBRATION_LOWER = 0.20
 ONLINE_MODEL_CALIBRATION_UPPER = 0.80
 ONLINE_MODEL_CALIBRATION_STEEPNESS = 2.0

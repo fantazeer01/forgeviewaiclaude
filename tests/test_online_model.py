@@ -131,32 +131,37 @@ def test_resolve_returns_false_for_unknown_market(model):
     assert model.resolve("unknown", 1) is False
 
 
-def test_kelly_size_zero_when_no_edge(model):
-    # win probability equal to break-even implied by entry price -> ~0 edge
-    size = model.kelly_size(win_probability=0.4, entry_price=0.6, bankroll=1000.0)
+def test_kelly_size_below_lowest_bucket_returns_zero(model):
+    size = model.kelly_size(0.59)
     assert size == pytest.approx(0.0, abs=1e-6)
 
 
-def test_kelly_size_capped_at_max_trade_usd(model):
-    # near-certain win at a cheap price -> full Kelly (even after the 0.25
-    # fractional cap) wants $250 of a $1000 bankroll, but the hard dollar cap
-    # must clamp this to ONLINE_MODEL_MAX_TRADE_USD ($10) regardless
-    size = model.kelly_size(win_probability=0.99, entry_price=0.1, bankroll=1000.0)
-    assert size == pytest.approx(10.0, abs=0.01)
+def test_kelly_size_first_bucket(model):
+    size = model.kelly_size(0.60)
+    assert size == pytest.approx(5.0)
+    size = model.kelly_size(0.65)
+    assert size == pytest.approx(5.0)
 
 
-def test_kelly_size_positive_with_real_edge(model):
-    size = model.kelly_size(win_probability=0.7, entry_price=0.4, bankroll=1000.0)
-    assert size > 0.0
-    assert size <= 10.0
+def test_kelly_size_second_bucket(model):
+    size = model.kelly_size(0.70)
+    assert size == pytest.approx(10.0)
+    size = model.kelly_size(0.75)
+    assert size == pytest.approx(10.0)
 
 
-def test_kelly_size_never_exceeds_max_trade_usd_even_with_saturated_probability(model):
-    # a barely-trained SGDClassifier can saturate to p=1.0; the dollar cap
-    # must hold even at that extreme, across a range of entry prices
-    for entry_price in (0.05, 0.2, 0.5, 0.8):
-        size = model.kelly_size(win_probability=1.0, entry_price=entry_price, bankroll=1000.0)
-        assert size <= 10.0
+def test_kelly_size_third_bucket(model):
+    size = model.kelly_size(0.80)
+    assert size == pytest.approx(15.0)
+    size = model.kelly_size(0.85)
+    assert size == pytest.approx(15.0)
+
+
+def test_kelly_size_top_bucket(model):
+    size = model.kelly_size(0.90)
+    assert size == pytest.approx(25.0)
+    size = model.kelly_size(1.0)
+    assert size == pytest.approx(25.0)
 
 
 def test_warmup_trades_not_restored_from_persisted_state(tmp_path):

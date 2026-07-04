@@ -10,18 +10,17 @@ import numpy as np
 from sklearn.linear_model import SGDClassifier
 
 from config.settings import (
-    KELLY_FRACTION_CAP, ONLINE_MODEL_STATE_FILE, ONLINE_MODEL_WARMUP_TRADES,
-    ONLINE_MODEL_CONFIDENCE_THRESHOLD, ONLINE_MODEL_MAX_TRADE_USD,
+    ONLINE_MODEL_STATE_FILE, ONLINE_MODEL_WARMUP_TRADES,
+    ONLINE_MODEL_CONFIDENCE_THRESHOLD,
     ONLINE_MODEL_STATUS_FILE, ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT,
     ONLINE_MODEL_PRIOR_INTERCEPT, ONLINE_MODEL_OWN_THRESHOLD,
     ONLINE_MODEL_COMBINER_THRESHOLD, ONLINE_MODEL_CALIBRATION_UPPER,
-    ONLINE_MODEL_CALIBRATION_STEEPNESS,
+    ONLINE_MODEL_CALIBRATION_STEEPNESS, BET_SIZES,
 )
 # ONLINE_MODEL_CALIBRATION_LOWER (0.20) is not imported separately: the
 # tanh-based transform below is symmetric around 0.5 by construction
 # (tanh is an odd function), so the lower asymptote always equals
 # 1 - ONLINE_MODEL_CALIBRATION_UPPER without needing to be passed in.
-from core.kelly_criterion import net_odds_from_price, kelly_fraction
 from core.live_features import FEATURE_NAMES
 
 logger = logging.getLogger(__name__)
@@ -54,18 +53,15 @@ class OnlineQuantModel:
     the signal combiner's independent output (passed in as `repricing_signal`
     -- see run.py, which now feeds SignalCombiner.combine()'s result here
     instead of the raw repricing detector) must be non-None, i.e. already
-    cleared its own ONLINE_MODEL_COMBINER_THRESHOLD (0.60). Sized via Kelly
-    criterion, hard-capped at ONLINE_MODEL_MAX_TRADE_USD ($10) regardless of
-    predicted confidence.
+    cleared its own ONLINE_MODEL_COMBINER_THRESHOLD (0.60). Sized via a flat
+    BET_SIZES lookup table keyed off the signal combiner's confidence (see
+    kelly_size()), not a Kelly-criterion formula.
 
     predict_proba_one() runs the raw SGDClassifier output through a
     tanh-based calibration (_calibrate_proba) before returning it: this
     project observed the raw sigmoid saturating to ~0.0/1.0 well before 200
-    updates (coefficients growing past +/-50 by update 234), so neither
-    decide()'s threshold check nor kelly_size()'s edge calculation should
-    trust the raw value at face value. The dollar cap alone bounds the
-    financial consequence of a bad prediction; calibration is a second,
-    independent mitigation aimed at the prediction quality itself.
+    updates (coefficients growing past +/-50 by update 234), so decide()'s
+    threshold check should not trust the raw value at face value.
     """
 
     def __init__(self, feature_names: list[str] = FEATURE_NAMES,
@@ -239,18 +235,19 @@ class OnlineQuantModel:
             f"online model p={p:.3f} AND combiner confidence={repricing_signal.confidence:.3f} agree"
         )
 
-    def kelly_size(self, win_probability: float, entry_price: float, bankroll: float) -> float:
-        """f = (p*b - (1-p)) / b, capped at KELLY_FRACTION_CAP (0.25) -- the
-        literal formula requested, not the more conservative quarter-Kelly
-        (f * 0.25) variant core/kelly_criterion.py also offers. The resulting
-        dollar size is then hard-capped at ONLINE_MODEL_MAX_TRADE_USD ($10)
-        regardless of win_probability or the fractional-Kelly result -- a
-        saturated (near-0 or near-1) probability from an undertrained model
-        would otherwise still demand a maximal-fraction position."""
-        net_odds = net_odds_from_price(entry_price)
-        f = min(kelly_fraction(win_probability, net_odds), KELLY_FRACTION_CAP)
-        size = f * bankroll
-        return round(min(size, ONLINE_MODEL_MAX_TRADE_USD), 4)
+    def kelly_size(self, combiner_confidence: float) -> float:
+        """Simple step-function bet sizing keyed directly off the signal
+        combiner's confidence value (NOT the online model's own calibrated
+        probability) -- replaces the previous Kelly-criterion formula
+        entirely per explicit request. See config.settings.BET_SIZES for
+        the table: the largest threshold the confidence clears determines
+        the flat dollar size. Below the lowest bucket (0.60) returns $0 --
+        should never happen in practice since the signal combiner itself
+        never returns a signal below that same 0.60 threshold."""
+        for threshold in sorted(BET_SIZES, reverse=True):
+            if combiner_confidence >= threshold:
+                return float(BET_SIZES[threshold])
+        return 0.0
 
     def record_features(self, market_id: str, features: dict):
         """Stash the feature snapshot a decision was made from, keyed by

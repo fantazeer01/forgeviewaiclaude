@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("run")
 
 from config.settings import (
-    MARKET_POLL_INTERVAL_SEC, ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
+    MARKET_POLL_INTERVAL_SEC,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
     QUANT_ONLY_MODE,
@@ -112,10 +112,7 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             confidence=round(win_probability, 3), reason=reason,
             minutes_remaining=market.get("minutes_remaining", 5.0),
         )
-        entry_price = market["yes_price"] if direction == "YES" else market["no_price"]
-        size_usd = online_model.kelly_size(win_probability, entry_price, ONLINE_MODEL_BANKROLL_USD)
-        if size_usd < ONLINE_MODEL_MIN_TRADE_USD:
-            return None
+        size_usd = online_model.kelly_size(combined_signal.confidence)
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)
     else:
         # warm-up bootstrap fallback: the model has no training data of its own
