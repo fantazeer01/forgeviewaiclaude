@@ -43,6 +43,18 @@ class MarketFetcher:
         now_int = int(now)
         return now_int - (now_int % self.WINDOW_SEC)
 
+    def ping(self) -> bool:
+        """Lightweight reachability check for the dashboard's exchange-status
+        widget only -- not used by any trading-critical path (which already
+        has its own per-call error handling and never depends on this)."""
+        try:
+            resp = self.session.get(f"{POLYMARKET_GAMMA_BASE}/markets", params={"limit": 1}, timeout=5)
+            resp.raise_for_status()
+            return True
+        except Exception as e:
+            logger.warning(f"MarketFetcher ping error: {e}")
+            return False
+
     def get_market_resolution(self, condition_id: str) -> Optional[dict]:
         try:
             url = f"{POLYMARKET_API_BASE}/markets/{condition_id}"

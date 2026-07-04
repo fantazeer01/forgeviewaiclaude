@@ -339,3 +339,17 @@ def test_get_order_book_top_returns_none_on_fetch_error(mocker):
     fetcher = MarketFetcher()
     mocker.patch.object(fetcher, "_fetch_order_book", side_effect=RuntimeError("boom"))
     assert fetcher.get_order_book_top("token-1") is None
+
+
+def test_ping_returns_true_on_success(mocker):
+    fetcher = MarketFetcher()
+    resp = mocker.Mock()
+    resp.raise_for_status = mocker.Mock()
+    mocker.patch.object(fetcher.session, "get", return_value=resp)
+    assert fetcher.ping() is True
+
+
+def test_ping_returns_false_on_error(mocker):
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher.session, "get", side_effect=RuntimeError("network down"))
+    assert fetcher.ping() is False

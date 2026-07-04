@@ -1,6 +1,6 @@
 import logging
 import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 from config.settings import QUANT_MODEL_PATH
 from core.repricing_detector import RepricingDetector, RepricingSignal
@@ -41,8 +41,9 @@ class QuantSignalGenerator:
     def __init__(self, detector: RepricingDetector, state: StateManager, fetcher,
                  features: Optional[QuantFeatureExtractor] = None,
                  dataset: Optional[QuantDataset] = None,
-                 model: Optional[QuantModel] = None):
-        self._repricing = RepricingSignalGenerator(detector, state)
+                 model: Optional[QuantModel] = None,
+                 market_bias_provider: Optional[Callable[[], Optional[str]]] = None):
+        self._repricing = RepricingSignalGenerator(detector, state, market_bias_provider=market_bias_provider)
         self.fetcher = fetcher
         self.features = features or QuantFeatureExtractor()
         self.dataset = dataset or QuantDataset()

@@ -10,9 +10,10 @@ logger = logging.getLogger("run")
 
 from config.settings import (
     MARKET_POLL_INTERVAL_SEC, ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
-    LIVE_STATUS_FILE,
+    LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
 )
 from core.market_fetcher import MarketFetcher
+from core.market_bias import MarketBiasFetcher
 from core.repricing_detector import RepricingDetector, RepricingSignal
 from core.state_manager import StateManager
 from core.dedup_guard import DedupGuard
@@ -24,15 +25,21 @@ from core.online_model import OnlineQuantModel
 from reporting.stats_reporter import StatsReporter
 from reporting.telegram_reporter import TelegramReporter
 
+# module-level so the market_bias_provider lambda passed into QuantSignalGenerator
+# always reads the latest fetched value, not a snapshot taken at startup
+_external_status = {"bias": None, "last_check_ts": None}
+
 def main():
     logger.info("=== ForgeViewAI starting ===")
     state = StateManager()
     dedup = DedupGuard()
     fetcher = MarketFetcher()
+    bias_fetcher = MarketBiasFetcher()
     detector = RepricingDetector()
     engine = PaperTradingEngine(state, dedup)
     tracker = PnLTracker()
-    signal_gen = QuantSignalGenerator(detector, state, fetcher)
+    signal_gen = QuantSignalGenerator(detector, state, fetcher,
+                                      market_bias_provider=lambda: _external_status["bias"])
     live_features = LiveFeatureCollector()
     online_model = OnlineQuantModel()
     stats_rep = StatsReporter(tracker, state)
@@ -51,6 +58,7 @@ def main():
             if state.is_stopped():
                 _auto_reset_on_stop(state, tg)
             _maybe_reset_daily(state)
+            _maybe_refresh_external_status(bias_fetcher, fetcher)
             _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep, online_model)
             signal_gen.resolve_pending()
             markets = fetcher.get_active_5min_markets()
@@ -132,6 +140,49 @@ def _log_signal(signal):
     os.makedirs(os.path.dirname(SIGNALS_LOG), exist_ok=True)
     with open(SIGNALS_LOG, "a") as f:
         f.write(json.dumps(signal.to_dict()) + "\n")
+
+def _maybe_refresh_external_status(bias_fetcher: MarketBiasFetcher, fetcher: MarketFetcher):
+    """Runs at most once every MARKET_BIAS_REFRESH_SEC (60s), independent of
+    the 3s market-poll cadence: a CoinGecko spot-price fetch and a Polymarket
+    reachability ping, both real external checks. Updates the module-level
+    _external_status dict the repricing signal filter reads from, appends a
+    row to data/market_bias.jsonl, and mirrors exchange reachability to
+    data/exchange_status.json for the dashboard."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    last = _external_status["last_check_ts"]
+    if last and (now - last).total_seconds() < MARKET_BIAS_REFRESH_SEC:
+        return
+    _external_status["last_check_ts"] = now
+
+    bias_result = bias_fetcher.fetch()
+    if bias_result:
+        _external_status["bias"] = bias_result["market_bias"]
+        _log_market_bias(bias_result, now)
+    else:
+        logger.warning("Market bias fetch failed this cycle; leaving prior bias/filter state unchanged")
+
+    exchange_ok = fetcher.ping()
+    _export_exchange_status(exchange_ok, now)
+
+def _log_market_bias(result: dict, now: datetime.datetime):
+    import json
+    os.makedirs(os.path.dirname(MARKET_BIAS_LOG), exist_ok=True)
+    entry = dict(result)
+    entry["timestamp"] = now.isoformat()
+    with open(MARKET_BIAS_LOG, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+def _export_exchange_status(ok: bool, now: datetime.datetime):
+    import json
+    os.makedirs(os.path.dirname(EXCHANGE_STATUS_FILE), exist_ok=True)
+    tmp_path = EXCHANGE_STATUS_FILE + ".tmp"
+    data = {"status": "OK" if ok else "ERROR", "checked_at": now.isoformat()}
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp_path, EXCHANGE_STATUS_FILE)
+    except Exception as e:
+        logger.error(f"exchange status export error: {e}")
 
 def _export_live_status(snapshot):
     """Mirrors the live BTC/ETH correlation (and a fresh timestamp the

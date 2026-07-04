@@ -71,6 +71,18 @@
   #header-bar b { color: var(--text-primary); }
   .status-run { color: var(--green); }
   .status-stop { color: var(--red); }
+  .exch-ok { color: var(--green); }
+  .exch-error { color: var(--red); }
+
+  .bias-tag {
+    display: inline-block; padding: 3px 10px; border-radius: 4px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+  }
+  .bias-tag.bullish { color: #05070A; background: var(--green); }
+  .bias-tag.bearish { color: #05070A; background: var(--red); }
+  .bias-tag.neutral { color: var(--text-primary); background: rgba(255,255,255,0.12); }
+  .spot-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: 11px; }
+  .spot-row .price { font-weight: 700; }
 
   /* ---- layout ---- */
   .terminal {
@@ -209,7 +221,7 @@
   <span class="sep">|</span>
   <span>GPU <span class="no-data">NO DATA</span></span>
   <span class="sep">|</span>
-  <span>EXCHANGE <span class="no-data">NO DATA</span></span>
+  <span>EXCHANGE <b id="hdr-exchange">--</b></span>
   <span class="sep">|</span>
   <span>LAST SYNC <b id="hdr-sync" class="num">--:--:--</b></span>
 </div>
@@ -333,6 +345,19 @@
                                    confidence at signal time), and (b) the BTC
                                    candlestick panel: the last 20 asset=BTC,
                                    stage=signal entries' features.yes_price.
+   data/market_bias.jsonl         NEW: written by run.py every 60s via
+                                   core/market_bias.py (CoinGecko's free,
+                                   no-key API -- a real, independent external
+                                   source, not Polymarket's own prices).
+                                   Last entry's btc_price/btc_24h_change/
+                                   eth_price/eth_24h_change/market_bias feed
+                                   the AI Signal Panel. The SAME bias value
+                                   gates YES signals in
+                                   signals/repricing_signal.py when BEARISH.
+   data/exchange_status.json      NEW: written by run.py every 60s from
+                                   MarketFetcher.ping() (a lightweight real
+                                   GET against Polymarket's Gamma API) --
+                                   feeds the header bar's EXCHANGE field.
    -----------------------------------------------------------------------------
    If a source file is missing, unreachable, or a specific field inside it is
    null, the corresponding widget renders NO DATA. Nothing is invented.
@@ -428,14 +453,27 @@ async function loadLastBtcSignals(n) {
     && r.features && r.features.yes_price != null);
   return btcSignals.slice(-n);
 }
+async function loadLastMarketBias() {
+  const rows = await fetchJsonl('data/market_bias.jsonl');
+  if (!rows || !rows.length) return null;
+  return rows[rows.length - 1];
+}
+async function loadExchangeStatus() { return await fetchJson('data/exchange_status.json'); }
 
 /* ---------------- 1. HEADER ---------------- */
-function renderHeader(state) {
+function renderHeader(state, exchangeStatus) {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   document.getElementById('hdr-sync').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   const statusEl = document.getElementById('hdr-status');
   const dailyEl = document.getElementById('hdr-daily-loss');
   const streakEl = document.getElementById('hdr-streak');
+  const exchEl = document.getElementById('hdr-exchange');
+  if (exchangeStatus && has(exchangeStatus.status)) {
+    exchEl.textContent = exchangeStatus.status;
+    exchEl.className = exchangeStatus.status === 'OK' ? 'exch-ok' : 'exch-error';
+  } else {
+    exchEl.innerHTML = noData();
+  }
   if (!state) {
     statusEl.innerHTML = noData(); dailyEl.innerHTML = noData(); streakEl.innerHTML = noData();
     return;
@@ -512,7 +550,7 @@ function assetCooldown(state, asset) {
   if (ageSec < SIGNAL_COOLDOWN_SEC) return { known: true, ready: false, remain: Math.ceil(SIGNAL_COOLDOWN_SEC - ageSec) };
   return { known: true, ready: true, remain: 0 };
 }
-function renderAISignalPanel(onlineStatus, lastQuantFeature, state) {
+function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias) {
   const wrap = document.getElementById('ai-signal-body');
   let html = '';
 
@@ -543,7 +581,19 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state) {
     html += `<div class="sig-asset-row"><span>${asset}</span>${label}</div>`;
   });
 
-  html += `<div class="sig-asset-row"><span>Market Bias</span>${noData()}</div>`;
+  if (marketBias && has(marketBias.market_bias)) {
+    const biasCls = marketBias.market_bias.toLowerCase();
+    html += `<div class="sig-asset-row"><span>Market Bias (BTC 24h)</span><span class="bias-tag ${biasCls}">${marketBias.market_bias}</span></div>`;
+    const btcChg = marketBias.btc_24h_change;
+    const ethChg = marketBias.eth_24h_change;
+    html += `
+      <div class="spot-row"><span>BTC SPOT</span><span class="price num">$${marketBias.btc_price.toLocaleString(undefined, {maximumFractionDigits:0})}</span><span class="num ${btcChg >= 0 ? 'up' : 'down'}">${btcChg >= 0 ? '+' : ''}${btcChg.toFixed(2)}%</span></div>
+      <div class="spot-row"><span>ETH SPOT</span><span class="price num">$${marketBias.eth_price.toLocaleString(undefined, {maximumFractionDigits:2})}</span><span class="num ${ethChg >= 0 ? 'up' : 'down'}">${ethChg >= 0 ? '+' : ''}${ethChg.toFixed(2)}%</span></div>
+      <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">source: CoinGecko, last checked ${fmtClock(marketBias.timestamp)}</div>
+    `;
+  } else {
+    html += `<div class="sig-asset-row"><span>Market Bias</span>${noData()}</div>`;
+  }
   html += `<div class="sig-asset-row"><span>Macro Sentiment</span>${noData()}</div>`;
   wrap.innerHTML = html;
 }
@@ -856,13 +906,13 @@ function renderEquityCurve(m) {
    REFRESH LOOP
    ============================================================================= */
 async function refresh() {
-  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals] = await Promise.all([
+  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
-    loadLastBtcSignals(20),
+    loadLastBtcSignals(20), loadLastMarketBias(), loadExchangeStatus(),
   ]);
-  renderHeader(state);
+  renderHeader(state, exchangeStatus);
   const portfolio = renderPortfolio(trades);
-  renderAISignalPanel(onlineStatus, lastQuantFeature, state);
+  renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias);
   renderDecisionTimeline(liveStatus, state, trades);
   renderReasoning(trades, onlineStatus);
   renderCorrelation(liveStatus);

@@ -77,3 +77,51 @@ def test_process_market_updates_detector_history_even_in_cooldown(tmp_path):
     generator = RepricingSignalGenerator(detector, state)
     generator.process_market(make_market("m4", asset="BTC"))
     assert "m4" in detector._price_history
+
+
+def _make_signal_ready_generator(tmp_path, market_bias_provider):
+    state = StateManager(state_file=str(tmp_path / "state.json"))
+    detector = RepricingDetector()
+    generator = RepricingSignalGenerator(detector, state, market_bias_provider=market_bias_provider)
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
+    detector._price_history["mbias"] = [{"ts": old_ts, "yes": 0.9, "no": 0.1}]
+    return generator, state
+
+
+def test_bearish_bias_blocks_yes_signal(tmp_path):
+    generator, _ = _make_signal_ready_generator(tmp_path, market_bias_provider=lambda: "BEARISH")
+    signal = generator.process_market(make_market("mbias", yes_price=0.5, no_price=0.5))
+    assert signal is None
+
+
+def test_bearish_bias_still_sets_cooldown_even_though_blocked(tmp_path):
+    generator, state = _make_signal_ready_generator(tmp_path, market_bias_provider=lambda: "BEARISH")
+    generator.process_market(make_market("mbias", yes_price=0.5, no_price=0.5))
+    assert "BTC" in state.get("last_signal_ts")
+
+
+def test_bullish_bias_allows_yes_signal(tmp_path):
+    generator, _ = _make_signal_ready_generator(tmp_path, market_bias_provider=lambda: "BULLISH")
+    signal = generator.process_market(make_market("mbias", yes_price=0.5, no_price=0.5))
+    assert signal is not None
+    assert signal.direction == "YES"
+
+
+def test_neutral_bias_allows_yes_signal(tmp_path):
+    generator, _ = _make_signal_ready_generator(tmp_path, market_bias_provider=lambda: "NEUTRAL")
+    signal = generator.process_market(make_market("mbias", yes_price=0.5, no_price=0.5))
+    assert signal is not None
+
+
+def test_no_bias_provider_allows_signal_unchanged(tmp_path):
+    generator, _ = _make_signal_ready_generator(tmp_path, market_bias_provider=None)
+    signal = generator.process_market(make_market("mbias", yes_price=0.5, no_price=0.5))
+    assert signal is not None
+
+
+def test_bias_provider_returning_none_does_not_block(tmp_path):
+    # provider exists but has no real data yet (e.g. first CoinGecko fetch
+    # hasn't completed) -- must never be treated as BEARISH
+    generator, _ = _make_signal_ready_generator(tmp_path, market_bias_provider=lambda: None)
+    signal = generator.process_market(make_market("mbias", yes_price=0.5, no_price=0.5))
+    assert signal is not None
