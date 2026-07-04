@@ -30,6 +30,27 @@ ONLINE_MODEL_CONFIDENCE_THRESHOLD = 0.55
 ONLINE_MODEL_BANKROLL_USD = 1000.0
 ONLINE_MODEL_MIN_TRADE_USD = 1.0
 ONLINE_MODEL_MAX_TRADE_USD = 10.0
+# Once live (post-warmup), a trade now requires BOTH the model's own
+# prediction (calibrated p > ONLINE_MODEL_OWN_THRESHOLD) AND the signal
+# combiner's independent agreement (a non-None combiner signal, which by
+# construction only exists when its confidence already exceeds
+# SIGNAL_COMBINER_THRESHOLD) -- see core/online_model.py.decide().
+ONLINE_MODEL_OWN_THRESHOLD = 0.5
+ONLINE_MODEL_COMBINER_THRESHOLD = 0.60
+# Probability calibration: the raw SGDClassifier sigmoid output saturates to
+# ~0.0/1.0 on this project's limited real training data (observed
+# coefficients growing past +/-50 by 234 real updates). Rather than trust
+# that raw output, predict_proba_one() runs it through a tanh-based
+# transform that compresses the full (0,1) range into approximately
+# (ONLINE_MODEL_CALIBRATION_LOWER, ONLINE_MODEL_CALIBRATION_UPPER) --
+# asymptotic, so it approaches but never quite reaches those bounds, no
+# matter how extreme the raw prediction is. p_raw=0.5 still maps to exactly
+# 0.5 (uncalibrated confidence is unaffected); only the extremes are pulled
+# in. This affects every consumer of predict_proba_one() (decide() and
+# kelly_size()'s win_probability input alike), not just display.
+ONLINE_MODEL_CALIBRATION_LOWER = 0.20
+ONLINE_MODEL_CALIBRATION_UPPER = 0.80
+ONLINE_MODEL_CALIBRATION_STEEPNESS = 2.0
 ONLINE_MODEL_STATUS_FILE = "data/online_model_status.json"
 LIVE_STATUS_FILE = "data/live_status.json"
 # Manual warm-start prior for the online model's yes_price coefficient, per

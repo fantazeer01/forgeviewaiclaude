@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import math
 import os
 import pickle
 from typing import Optional
@@ -12,8 +13,14 @@ from config.settings import (
     KELLY_FRACTION_CAP, ONLINE_MODEL_STATE_FILE, ONLINE_MODEL_WARMUP_TRADES,
     ONLINE_MODEL_CONFIDENCE_THRESHOLD, ONLINE_MODEL_MAX_TRADE_USD,
     ONLINE_MODEL_STATUS_FILE, ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT,
-    ONLINE_MODEL_PRIOR_INTERCEPT,
+    ONLINE_MODEL_PRIOR_INTERCEPT, ONLINE_MODEL_OWN_THRESHOLD,
+    ONLINE_MODEL_COMBINER_THRESHOLD, ONLINE_MODEL_CALIBRATION_UPPER,
+    ONLINE_MODEL_CALIBRATION_STEEPNESS,
 )
+# ONLINE_MODEL_CALIBRATION_LOWER (0.20) is not imported separately: the
+# tanh-based transform below is symmetric around 0.5 by construction
+# (tanh is an odd function), so the lower asymptote always equals
+# 1 - ONLINE_MODEL_CALIBRATION_UPPER without needing to be passed in.
 from core.kelly_criterion import net_odds_from_price, kelly_fraction
 from core.live_features import FEATURE_NAMES
 
@@ -40,14 +47,25 @@ class OnlineQuantModel:
     For the first ONLINE_MODEL_WARMUP_TRADES (200) resolved trades, decide()
     always defers to the repricing signal passed in -- trading behavior is
     unchanged during warm-up, but every one of those resolutions is still fed
-    into the model as a training example. After warm-up, decide() ignores the
-    repricing signal's fire/no-fire decision and instead fires whenever the
-    model's own predicted win probability crosses the confidence threshold,
-    sized via Kelly criterion and hard-capped at ONLINE_MODEL_MAX_TRADE_USD
-    ($10) regardless of predicted confidence -- a raised warm-up floor alone
-    doesn't guarantee a well-calibrated model (a from-scratch SGDClassifier
-    can still saturate to p=1.0 on limited data and demand a huge Kelly size;
-    the hard dollar cap is what actually bounds the damage from that).
+    into the model as a training example.
+
+    After warm-up, a trade requires BOTH signals to agree: the model's own
+    (calibrated) prediction must exceed ONLINE_MODEL_OWN_THRESHOLD (0.5) AND
+    the signal combiner's independent output (passed in as `repricing_signal`
+    -- see run.py, which now feeds SignalCombiner.combine()'s result here
+    instead of the raw repricing detector) must be non-None, i.e. already
+    cleared its own ONLINE_MODEL_COMBINER_THRESHOLD (0.60). Sized via Kelly
+    criterion, hard-capped at ONLINE_MODEL_MAX_TRADE_USD ($10) regardless of
+    predicted confidence.
+
+    predict_proba_one() runs the raw SGDClassifier output through a
+    tanh-based calibration (_calibrate_proba) before returning it: this
+    project observed the raw sigmoid saturating to ~0.0/1.0 well before 200
+    updates (coefficients growing past +/-50 by update 234), so neither
+    decide()'s threshold check nor kelly_size()'s edge calculation should
+    trust the raw value at face value. The dollar cap alone bounds the
+    financial consequence of a bad prediction; calibration is a second,
+    independent mitigation aimed at the prediction quality itself.
     """
 
     def __init__(self, feature_names: list[str] = FEATURE_NAMES,
@@ -165,7 +183,24 @@ class OnlineQuantModel:
             return None
         x = self._vectorize(features)
         x_std = self._standardize(x).reshape(1, -1)
-        return float(self.clf.predict_proba(x_std)[0][1])
+        p_raw = float(self.clf.predict_proba(x_std)[0][1])
+        return self._calibrate_proba(p_raw)
+
+    @staticmethod
+    def _calibrate_proba(p_raw: float) -> float:
+        """Compresses the raw sigmoid output through a tanh-based transform
+        into an asymptotic ~(0.20, 0.80) band instead of trusting it at face
+        value. tanh(x) = 2*sigmoid(2x) - 1, so this is itself built from a
+        (steeper) sigmoid -- "sigmoid scaling" in the literal sense, not a
+        hard clip: p_raw=0.5 stays exactly 0.5, and even a fully saturated
+        p_raw=1.0 only approaches (never reaches) the upper bound, so the
+        transform is smooth and monotonic (ordering between predictions is
+        preserved) everywhere.
+        """
+        centered = 2.0 * (p_raw - 0.5)  # (0,1) -> (-1,1)
+        squashed = math.tanh(ONLINE_MODEL_CALIBRATION_STEEPNESS * centered)
+        span = ONLINE_MODEL_CALIBRATION_UPPER - 0.5
+        return 0.5 + span * squashed
 
     def decide(self, features: dict, repricing_signal,
                confidence_threshold: float = ONLINE_MODEL_CONFIDENCE_THRESHOLD):
@@ -173,8 +208,17 @@ class OnlineQuantModel:
 
         Before warm-up: mirrors the repricing signal exactly (fires iff a
         repricing signal fired, using its own direction/confidence).
-        After warm-up: fires iff the model's predicted YES win probability
-        clears confidence_threshold, independent of the repricing signal.
+
+        After warm-up: requires BOTH the model's own (calibrated) prediction
+        AND the signal combiner's independent agreement before firing --
+        `repricing_signal` here is expected to actually be the signal
+        combiner's output once live (see run.py), which is non-None only
+        when its own weighted confidence already exceeds
+        ONLINE_MODEL_COMBINER_THRESHOLD. Either signal alone is no longer
+        sufficient; this replaces the old single-model-confidence gate
+        entirely. confidence_threshold is accepted for backward
+        compatibility but no longer used in the live branch -- the model's
+        own bar is the fixed ONLINE_MODEL_OWN_THRESHOLD (0.5) per spec.
         """
         if not self.is_warmed_up():
             if repricing_signal is None:
@@ -184,9 +228,16 @@ class OnlineQuantModel:
         p = self.predict_proba_one(features)
         if p is None:
             return False, None, None, "model not fitted"
-        if p >= confidence_threshold:
-            return True, "YES", p, f"online model p={p:.3f}"
-        return False, None, p, f"online model p={p:.3f} below threshold"
+        if p <= ONLINE_MODEL_OWN_THRESHOLD:
+            return False, None, p, f"online model p={p:.3f} <= {ONLINE_MODEL_OWN_THRESHOLD}"
+        if repricing_signal is None or repricing_signal.confidence <= ONLINE_MODEL_COMBINER_THRESHOLD:
+            return False, None, p, (
+                f"online model p={p:.3f} > {ONLINE_MODEL_OWN_THRESHOLD} but signal combiner "
+                f"did not agree (confidence <= {ONLINE_MODEL_COMBINER_THRESHOLD})"
+            )
+        return True, "YES", p, (
+            f"online model p={p:.3f} AND combiner confidence={repricing_signal.confidence:.3f} agree"
+        )
 
     def kelly_size(self, win_probability: float, entry_price: float, bankroll: float) -> float:
         """f = (p*b - (1-p)) / b, capped at KELLY_FRACTION_CAP (0.25) -- the

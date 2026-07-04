@@ -181,3 +181,84 @@ def test_standardizer_handles_missing_features_without_crashing(model):
     model.update(features, 1)
     p = model.predict_proba_one(make_features())
     assert p is not None
+
+
+# ---------------- calibration ----------------
+
+def test_calibration_preserves_midpoint():
+    assert OnlineQuantModel._calibrate_proba(0.5) == pytest.approx(0.5)
+
+
+def test_calibration_compresses_saturated_probability_into_target_band():
+    assert OnlineQuantModel._calibrate_proba(1.0) == pytest.approx(0.789, abs=0.01)
+    assert OnlineQuantModel._calibrate_proba(0.0) == pytest.approx(0.211, abs=0.01)
+    # never actually reaches the 0.20/0.80 bounds, only approaches them
+    assert 0.20 < OnlineQuantModel._calibrate_proba(1.0) < 0.80
+    assert 0.20 < OnlineQuantModel._calibrate_proba(0.0) < 0.80
+
+
+def test_calibration_is_monotonic():
+    values = [OnlineQuantModel._calibrate_proba(p) for p in [0.0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0]]
+    assert values == sorted(values)
+
+
+def test_calibration_never_produces_exactly_0_or_1():
+    for p_raw in [0.0, 1.0, 0.0000001, 0.9999999]:
+        calibrated = OnlineQuantModel._calibrate_proba(p_raw)
+        assert calibrated != 0.0
+        assert calibrated != 1.0
+
+
+# ---------------- post-warmup dual-gate: model AND combiner must agree ----------------
+
+def test_live_mode_fires_when_model_and_combiner_both_agree(model, mocker):
+    model._n_updates = model.warmup_trades  # force warmed-up without needing real trades
+    mocker.patch.object(model, "predict_proba_one", return_value=0.7)
+    combiner_signal = make_repricing_signal(confidence=0.75)
+    should_trade, direction, prob, reason = model.decide(make_features(), combiner_signal)
+    assert should_trade is True
+    assert direction == "YES"
+    assert prob == 0.7
+    assert "agree" in reason
+
+
+def test_live_mode_skips_when_combiner_signal_is_none(model, mocker):
+    model._n_updates = model.warmup_trades
+    mocker.patch.object(model, "predict_proba_one", return_value=0.7)
+    should_trade, direction, prob, reason = model.decide(make_features(), None)
+    assert should_trade is False
+    assert "combiner" in reason
+
+
+def test_live_mode_skips_when_combiner_confidence_too_low(model, mocker):
+    model._n_updates = model.warmup_trades
+    mocker.patch.object(model, "predict_proba_one", return_value=0.7)
+    weak_combiner_signal = make_repricing_signal(confidence=0.55)  # <= 0.60 threshold
+    should_trade, direction, prob, reason = model.decide(make_features(), weak_combiner_signal)
+    assert should_trade is False
+    assert "combiner" in reason
+
+
+def test_live_mode_skips_when_model_disagrees_even_if_combiner_fires(model, mocker):
+    model._n_updates = model.warmup_trades
+    mocker.patch.object(model, "predict_proba_one", return_value=0.4)  # <= 0.5
+    strong_combiner_signal = make_repricing_signal(confidence=0.9)
+    should_trade, direction, prob, reason = model.decide(make_features(), strong_combiner_signal)
+    assert should_trade is False
+    assert prob == 0.4
+
+
+def test_live_mode_boundary_model_exactly_at_threshold_does_not_fire(model, mocker):
+    model._n_updates = model.warmup_trades
+    mocker.patch.object(model, "predict_proba_one", return_value=0.5)  # exactly at threshold, not >
+    combiner_signal = make_repricing_signal(confidence=0.9)
+    should_trade, _, _, _ = model.decide(make_features(), combiner_signal)
+    assert should_trade is False
+
+
+def test_live_mode_boundary_combiner_exactly_at_threshold_does_not_fire(model, mocker):
+    model._n_updates = model.warmup_trades
+    mocker.patch.object(model, "predict_proba_one", return_value=0.7)
+    combiner_signal = make_repricing_signal(confidence=0.60)  # exactly at threshold, not >
+    should_trade, _, _, _ = model.decide(make_features(), combiner_signal)
+    assert should_trade is False
