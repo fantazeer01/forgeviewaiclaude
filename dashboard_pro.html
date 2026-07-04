@@ -3,436 +3,338 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FORGEVIEWAI :: QUANTUM TERMINAL</title>
+<title>FORGEVIEWAI :: QUANT TERMINAL</title>
 <style>
-  /* =========================================================================
-     PALETTE
-     Dark matte institutional surface (#0B0F14) with a fixed-order neon
-     categorical set (blue / green / purple / red) plus a separate, reserved
-     status set (good/warning/serious/critical) so a status color never
-     doubles as a series color. Every color pairing below is also carried by
-     a non-color cue (▲/▼ glyph, +/- sign, or text label) so identity never
-     rests on hue alone. Chosen for hue + lightness separation against this
-     near-black surface; the skill's automated CVD/contrast validator
-     (scripts/validate_palette.js) requires Node, unavailable in this
-     environment, so separation was reasoned by hand instead of measured --
-     flagged here rather than silently skipped.
-     ========================================================================= */
+  /* ==========================================================================
+     RULE OF THIS FILE: every widget shows REAL data or an explicit "NO DATA"
+     tag. Nothing here is randomly generated or fabricated. See the header
+     comment in the <script> block for exactly which files back which panel.
+     ========================================================================== */
   :root {
-    --bg:            #0B0F14;
-    --bg-grad:       radial-gradient(1200px 800px at 20% -10%, rgba(63,169,255,0.06), transparent 60%),
-                      radial-gradient(1000px 700px at 100% 0%, rgba(178,133,255,0.05), transparent 55%);
-    --panel:         rgba(16, 22, 30, 0.55);
-    --panel-solid:   #0E141C;
-    --panel-hi:      rgba(255,255,255,0.035);
-    --border:        rgba(255,255,255,0.08);
-    --border-hi:     rgba(255,255,255,0.14);
-    --grid:          rgba(255,255,255,0.05);
+    --bg:        #0B0F14;
+    --panel:     #10161D;
+    --border:    rgba(255,255,255,0.09);
+    --border-hi: rgba(255,255,255,0.18);
+    --grid:      rgba(255,255,255,0.05);
 
-    --text-primary:  #EAF1F8;
-    --text-secondary:#93A2B3;
-    --text-muted:    #57626F;
+    --text-primary:   #E7EDF3;
+    --text-secondary: #8C99A6;
+    --text-muted:     #4E5A66;
 
-    --blue:          #3FA9FF;
-    --blue-dim:      #1F5C8C;
-    --green:         #35F2A0;
-    --green-dim:     #14855A;
-    --purple:        #B285FF;
-    --purple-dim:    #6B4FA8;
-    --red:           #FF4D6D;
-    --red-dim:       #8C2C41;
-    --yellow:        #FFC94D;
-
-    --good:          #2FE07C;
-    --warning:       #FFC94D;
-    --serious:       #FF9457;
-    --critical:      #FF4D6D;
+    --green:  #00FF41;
+    --red:    #FF3B3B;
+    --cyan:   #00E5FF;
+    --purple: #A855F7;
+    --yellow: #FFC94D;
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0;
     background: var(--bg);
     color: var(--text-primary);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    font-size: 12px;
   }
-  body { background-image: var(--bg-grad); }
-  ::selection { background: rgba(63,169,255,0.35); }
-
   .num { font-variant-numeric: tabular-nums; }
   .up   { color: var(--green); }
   .down { color: var(--red); }
-  .mono { font-family: ui-monospace, "SF Mono", Consolas, monospace; }
 
-  /* ---- glass panel ---- */
+  .no-data {
+    display: inline-block;
+    color: var(--text-muted);
+    border: 1px dashed rgba(255,255,255,0.16);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+  .real-tag {
+    font-size: 8.5px; letter-spacing: 0.08em; color: var(--green);
+    border: 1px solid rgba(0,255,65,0.35); border-radius: 3px; padding: 1px 5px;
+  }
+  .sim-tag {
+    font-size: 8.5px; letter-spacing: 0.08em; color: var(--text-muted);
+    border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; padding: 1px 5px;
+  }
+
+  /* ---- header bar ---- */
+  #header-bar {
+    display: flex; align-items: center; gap: 22px;
+    height: 34px; padding: 0 14px;
+    background: #05070A;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+  #header-bar .brand { font-weight: 700; letter-spacing: 0.05em; color: var(--cyan); }
+  #header-bar .sep { color: var(--text-muted); }
+  #header-bar b { color: var(--text-primary); }
+  .status-run { color: var(--green); }
+  .status-stop { color: var(--red); }
+
+  /* ---- layout ---- */
+  .terminal {
+    max-width: 1900px; margin: 0 auto; padding: 12px;
+    display: grid;
+    grid-template-columns: 300px 1fr 380px;
+    grid-template-rows: 400px 420px;
+    gap: 12px;
+  }
+  @media (max-width: 1200px) {
+    .terminal { grid-template-columns: 1fr; grid-template-rows: none; }
+  }
+
   .panel {
-    background:
-      linear-gradient(180deg, var(--panel-hi), transparent 40%),
-      var(--panel);
+    background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
+    border-radius: 8px;
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
   }
   .panel-head {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
   }
   .panel-title {
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    color: var(--text-secondary);
-    font-weight: 600;
-    text-transform: uppercase;
+    font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-secondary); font-weight: 700;
   }
-  .panel-title .dot {
-    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--green); margin-right: 7px; vertical-align: 1px;
-    box-shadow: 0 0 6px var(--green);
-    animation: livedot 2s ease-in-out infinite;
-  }
-  @keyframes livedot { 50% { opacity: 0.35; } }
-  .panel-sub { font-size: 10px; color: var(--text-muted); }
-  .panel-body { padding: 12px 14px; flex: 1; min-height: 0; overflow: auto; }
+  .panel-body { padding: 10px 12px; flex: 1; min-height: 0; overflow: auto; }
   .panel-body.nopad { padding: 0; }
-  .badge {
-    font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px;
-    padding: 2px 6px;
+
+  /* ---- portfolio ---- */
+  .hero { font-size: 26px; font-weight: 800; }
+  .metric-list { margin-top: 10px; display: flex; flex-direction: column; }
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 4px 0; border-top: 1px solid var(--grid);
+  }
+  .metric-row .label { color: var(--text-secondary); font-size: 10.5px; }
+  .metric-row .value { font-weight: 700; }
+
+  /* ---- AI signal panel ---- */
+  .warmup-track { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 10px; overflow: hidden; }
+  .warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); transition: width 0.6s ease; }
+  .sig-asset-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-top: 1px solid var(--grid); font-size: 11px; }
+  .pill { font-size: 9.5px; padding: 2px 8px; border-radius: 20px; border: 1px solid currentColor; letter-spacing: 0.03em; }
+  .pill.ready { color: var(--green); }
+  .pill.cooldown { color: var(--yellow); }
+
+  /* ---- decision timeline ---- */
+  .timeline { display: flex; flex-direction: column; gap: 2px; }
+  .tl-node {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px; border-radius: 5px; border: 1px solid var(--border);
+    font-size: 10.5px; position: relative;
+  }
+  .tl-node .name { flex: 1; letter-spacing: 0.03em; color: var(--text-secondary); }
+  .tl-node .state { font-weight: 700; font-size: 10px; letter-spacing: 0.04em; }
+  .tl-node.active { border-color: rgba(0,255,65,0.4); box-shadow: 0 0 10px rgba(0,255,65,0.12) inset; }
+  .tl-node.active .state { color: var(--green); }
+  .tl-node.waiting .state { color: var(--yellow); }
+  .tl-node.blocked { border-color: rgba(255,59,59,0.4); }
+  .tl-node.blocked .state { color: var(--red); }
+  .tl-node.nodata .state { color: var(--text-muted); }
+  .tl-arrow { text-align: center; color: var(--text-muted); font-size: 10px; line-height: 1; }
+  .tl-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---- AI reasoning ---- */
+  .reason-line { margin-bottom: 8px; }
+  .reason-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .reason-value { font-size: 13px; font-weight: 700; margin-top: 2px; }
+  .reason-quote {
+    font-size: 12px; color: var(--cyan); margin-top: 2px;
+    border-left: 2px solid var(--cyan); padding-left: 8px;
   }
 
-  /* ---- ticker ---- */
-  #ticker-bar {
-    position: sticky; top: 0; z-index: 30;
-    height: 30px;
-    background: #05070A;
-    border-bottom: 1px solid var(--border);
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-  }
-  #ticker-track {
-    display: flex;
-    white-space: nowrap;
-    animation: ticker-scroll 90s linear infinite;
-    will-change: transform;
-  }
-  #ticker-bar:hover #ticker-track { animation-play-state: paused; }
-  @keyframes ticker-scroll {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
-  }
-  .tick-item {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 0 18px;
-    font-size: 11px;
-    border-right: 1px solid var(--grid);
-  }
-  .tick-item .sym { color: var(--text-primary); font-weight: 700; letter-spacing: 0.02em; }
-  .tick-item .chg { font-weight: 600; }
-  .tick-item .arrow { font-size: 9px; }
-  .tick-item .vol { color: var(--text-muted); }
-  .tick-item .conf { color: var(--purple); }
+  /* ---- correlation map ---- */
+  .corr-grid { display: grid; grid-template-columns: 60px repeat(2, 1fr); gap: 4px; margin-top: 6px; }
+  .corr-cell { padding: 10px 6px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 13px; }
+  .corr-head { font-size: 10px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
+  .corr-row-label { font-size: 10px; color: var(--text-secondary); display: flex; align-items: center; }
 
-  /* ---- layout grid ---- */
-  .terminal {
-    max-width: 1900px;
-    margin: 0 auto;
-    padding: 12px;
-    display: grid;
-    grid-template-rows: 360px 330px 300px;
-    gap: 12px;
-  }
-  .row1 { display: grid; grid-template-columns: 300px 1fr 300px; gap: 12px; }
-  .row2 { display: grid; grid-template-columns: 1fr 320px; gap: 12px; }
-  .row3 { display: grid; grid-template-columns: 320px 1fr 340px; gap: 12px; }
-  @media (max-width: 1500px) {
-    .row1 { grid-template-columns: 260px 1fr 260px; }
-    .row3 { grid-template-columns: 280px 1fr 300px; }
-  }
-  @media (max-width: 1100px) {
-    .terminal { grid-template-rows: none; }
-    .row1, .row2, .row3 { grid-template-columns: 1fr; }
-  }
-
-  /* ---- portfolio panel ---- */
-  .hero-value { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; line-height: 1; text-shadow: 0 0 20px rgba(63,169,255,0.25); }
-  .hero-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
-  .metric-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
-    margin-top: 14px;
-  }
-  .metric { border-top: 1px solid var(--grid); padding-top: 6px; }
-  .metric-label { font-size: 9.5px; letter-spacing: 0.05em; color: var(--text-muted); text-transform: uppercase; }
-  .metric-value { font-size: 14px; font-weight: 700; margin-top: 2px; }
-
-  /* ---- chart ---- */
-  #chart-wrap { position: relative; flex: 1; }
-  #chart-canvas { display: block; width: 100%; height: 100%; }
-  .chart-price-tag {
-    position: absolute; right: 6px;
-    font-size: 11px; font-weight: 700;
-    padding: 2px 6px; border-radius: 4px;
-    transform: translateY(-50%);
-    box-shadow: 0 0 10px currentColor;
-  }
-  .chart-legend { position: absolute; top: 8px; left: 10px; display: flex; gap: 12px; font-size: 10px; color: var(--text-secondary); }
-  .chart-legend span.sw { display: inline-block; width: 8px; height: 2px; margin-right: 4px; vertical-align: 2px; }
-
-  /* ---- order book ---- */
-  .ob-header { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.04em; padding: 0 0 4px; }
-  .ob-row { position: relative; display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 11.5px; padding: 2px 0; z-index: 1; }
-  .ob-row .bar { position: absolute; top: 0; bottom: 0; right: 0; z-index: -1; opacity: 0.16; }
-  .ob-row.ask .bar { background: var(--red); }
-  .ob-row.bid .bar { background: var(--green); }
-  .ob-row.ask { color: var(--red); }
-  .ob-row.bid { color: var(--green); }
-  .ob-mid { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; margin: 4px 0; border-top: 1px dashed var(--grid); border-bottom: 1px dashed var(--grid); font-size: 11px; color: var(--text-secondary); }
-
-  /* ---- topology (network graph) ---- */
-  #topo-canvas { display: block; width: 100%; height: 100%; }
-  .topo-legend { display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 9.5px; color: var(--text-secondary); padding: 6px 14px 10px; border-top: 1px solid var(--border); }
-  .topo-legend .sw { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
-
-  /* ---- gauges ---- */
-  .gauge-list { display: flex; flex-direction: column; gap: 10px; }
-  .gauge-row { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: 8px; }
-  .gauge-label { font-size: 10px; color: var(--text-secondary); letter-spacing: 0.02em; }
-  .gauge-track { position: relative; height: 6px; border-radius: 4px; background: rgba(255,255,255,0.06); overflow: hidden; }
-  .gauge-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; transition: width 0.6s ease; }
-  .gauge-val { font-size: 11px; font-weight: 700; text-align: right; }
-  .regime-tag {
-    display: inline-block; margin-top: 2px; padding: 4px 10px; border-radius: 6px;
-    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
-    border: 1px solid var(--border-hi);
-  }
-
-  /* ---- equity curve ---- */
-  #equity-wrap { position: relative; flex: 1; }
-  #equity-canvas { display: block; width: 100%; height: 100%; }
-
-  /* ---- exec log table ---- */
+  /* ---- trade table ---- */
   table.dense { width: 100%; border-collapse: collapse; font-size: 11px; }
   table.dense thead th {
-    position: sticky; top: 0; background: var(--panel-solid);
+    position: sticky; top: 0; background: var(--panel);
     text-align: left; font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase;
     color: var(--text-muted); padding: 6px 8px; border-bottom: 1px solid var(--border);
   }
-  table.dense tbody td { padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-  table.dense tbody tr.win { color: var(--green); }
-  table.dense tbody tr.win td.plain { color: var(--text-primary); }
-  table.dense tbody tr.loss { color: var(--red); }
-  table.dense tbody tr.loss td.plain { color: var(--text-primary); }
-  table.dense tbody tr.active td.status { color: var(--purple); }
-  table.dense tbody tr.new { animation: rowin 0.6s ease; }
-  @keyframes rowin { from { background: rgba(63,169,255,0.18); } to { background: transparent; } }
-  .status-pill { font-size: 9.5px; padding: 2px 7px; border-radius: 20px; border: 1px solid currentColor; letter-spacing: 0.03em; }
+  table.dense tbody td { padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  table.dense tbody tr.win td.pnl { color: var(--green); }
+  table.dense tbody tr.loss td.pnl { color: var(--red); }
+  table.dense tbody tr.open td.pnl { color: var(--yellow); }
+  .empty-row { color: var(--text-muted); text-align: center; padding: 16px 0; }
 
-  .empty { color: var(--text-muted); font-size: 11px; padding: 20px 0; text-align: center; }
-
-  /* ---- footer status ---- */
-  .statusbar {
-    max-width: 1900px; margin: 0 auto; padding: 8px 14px 4px;
-    display: flex; gap: 22px; flex-wrap: wrap; font-size: 10.5px; color: var(--text-muted);
+  .sub-panel-title {
+    font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+    padding: 8px 12px 2px;
   }
-  .statusbar b { color: var(--text-primary); }
-  .statusbar .dot2 { display:inline-block; width:6px; height:6px; border-radius:50%; background: var(--green); margin-right:5px; box-shadow: 0 0 6px var(--green); }
 </style>
 </head>
 <body>
 
-<div id="ticker-bar"><div id="ticker-track"></div></div>
+<div id="header-bar">
+  <span class="brand">FORGEVIEWAI // QUANT TERMINAL</span>
+  <span class="sep">|</span>
+  <span>TIME <b id="hdr-time" class="num">--:--:--</b></span>
+  <span class="sep">|</span>
+  <span>STATUS <b id="hdr-status">--</b></span>
+  <span class="sep">|</span>
+  <span>DAILY LOSS <b id="hdr-daily-loss" class="num">--</b></span>
+  <span class="sep">|</span>
+  <span>LOSS STREAK <b id="hdr-streak" class="num">--</b></span>
+  <span class="sep">|</span>
+  <span>LATENCY <span class="no-data">NO DATA</span></span>
+  <span class="sep">|</span>
+  <span>GPU <span class="no-data">NO DATA</span></span>
+  <span class="sep">|</span>
+  <span>EXCHANGE <span class="no-data">NO DATA</span></span>
+  <span class="sep">|</span>
+  <span>LAST SYNC <b id="hdr-sync" class="num">--:--:--</b></span>
+</div>
 
 <div class="terminal">
 
-  <!-- ROW 1: Portfolio | Main Chart | Order Book -->
-  <div class="row1">
-
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>Portfolio</div>
-        <div class="badge">LIVE</div>
-      </div>
-      <div class="panel-body">
-        <div class="hero-value num" id="pf-value">$0.00</div>
-        <div class="hero-sub">$1,000,000 notional AUM + realized paper P&amp;L (real trade data)</div>
-        <div class="metric-grid" id="pf-metrics"></div>
-      </div>
+  <!-- LEFT COLUMN, ROW 1: PORTFOLIO -->
+  <div class="panel" style="grid-column:1; grid-row:1;">
+    <div class="panel-head">
+      <div class="panel-title">Portfolio</div>
+      <span class="real-tag">REAL</span>
     </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>BTC-UPDOWN-5M &middot; Simulated Tape</div>
-        <div class="panel-sub">illustrative candles &mdash; not derived from bot data</div>
-      </div>
-      <div class="panel-body nopad" id="chart-wrap">
-        <div class="chart-legend">
-          <span><span class="sw" style="background:var(--yellow)"></span>VWAP</span>
-          <span><span class="sw" style="background:var(--blue)"></span>EMA 21</span>
-          <span><span class="sw" style="background:var(--purple)"></span>AI signal</span>
-        </div>
-        <canvas id="chart-canvas"></canvas>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>Order Book</div>
-        <div class="panel-sub">simulated depth</div>
-      </div>
-      <div class="panel-body" id="orderbook-body">
-        <div class="ob-header"><span>Price</span><span style="text-align:right">Size</span><span style="text-align:right">Total</span></div>
-        <div id="ob-asks"></div>
-        <div class="ob-mid" id="ob-mid"></div>
-        <div id="ob-bids"></div>
-      </div>
+    <div class="panel-body">
+      <div class="hero num" id="pf-total-pnl">--</div>
+      <div id="pf-metrics" class="metric-list"></div>
     </div>
   </div>
 
-  <!-- ROW 2: Market Topology | AI Market State -->
-  <div class="row2">
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>Market Topology &middot; AI Intelligence Graph</div>
-        <div class="panel-sub">simulated network</div>
-      </div>
-      <div class="panel-body nopad" style="flex:1;">
-        <canvas id="topo-canvas"></canvas>
-      </div>
-      <div class="topo-legend">
-        <span><span class="sw" style="background:var(--green)"></span>Bullish</span>
-        <span><span class="sw" style="background:var(--red)"></span>Bearish</span>
-        <span><span class="sw" style="background:var(--text-muted)"></span>Neutral</span>
-        <span><span class="sw" style="background:var(--yellow)"></span>Catalyst</span>
-        <span><span class="sw" style="background:var(--blue)"></span>Support</span>
-        <span><span class="sw" style="background:var(--red-dim)"></span>Resistance</span>
-        <span><span class="sw" style="background:var(--purple)"></span>Merge</span>
-        <span><span class="sw" style="background:#ffffff"></span>Flip</span>
-      </div>
+  <!-- TOP CENTER: AI SIGNAL PANEL -->
+  <div class="panel" style="grid-column:2; grid-row:1;">
+    <div class="panel-head">
+      <div class="panel-title">AI Signal Panel</div>
+      <span class="real-tag">REAL</span>
     </div>
+    <div class="panel-body" id="ai-signal-body"></div>
+  </div>
 
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>AI Market State</div>
-        <div class="panel-sub">simulated regime engine</div>
-      </div>
-      <div class="panel-body">
-        <div id="regime-tag-wrap"></div>
-        <div class="gauge-list" id="gauge-list" style="margin-top:12px;"></div>
-      </div>
+  <!-- TOP RIGHT: DECISION TIMELINE -->
+  <div class="panel" style="grid-column:3; grid-row:1;">
+    <div class="panel-head">
+      <div class="panel-title">Decision Timeline</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="panel-body" id="timeline-body"></div>
+  </div>
+
+  <!-- BOTTOM LEFT: CORRELATION MAP -->
+  <div class="panel" style="grid-column:1; grid-row:2;">
+    <div class="panel-head">
+      <div class="panel-title">Correlation Map</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="panel-body" id="corr-body"></div>
+  </div>
+
+  <!-- CENTER: AI REASONING PANEL -->
+  <div class="panel" style="grid-column:2; grid-row:2;">
+    <div class="panel-head">
+      <div class="panel-title">AI Reasoning</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="panel-body" id="reasoning-body"></div>
+  </div>
+
+  <!-- BOTTOM RIGHT: LIVE TRADE TABLE -->
+  <div class="panel" style="grid-column:3; grid-row:2;">
+    <div class="panel-head">
+      <div class="panel-title">Live Trades</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="sub-panel-title">Open Positions</div>
+    <div class="panel-body nopad" style="flex: 0 0 auto; max-height: 120px; overflow:auto;">
+      <table class="dense"><tbody id="positions-body"></tbody></table>
+    </div>
+    <div class="sub-panel-title">Last 20 Trades</div>
+    <div class="panel-body nopad" style="overflow:auto;">
+      <table class="dense"><tbody id="trades-body"></tbody></table>
     </div>
   </div>
 
-  <!-- ROW 3: Equity Curve | Execution Log | Recent Positions -->
-  <div class="row3">
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>Equity Curve</div>
-        <div class="badge">REAL</div>
-      </div>
-      <div class="panel-body nopad" id="equity-wrap">
-        <canvas id="equity-canvas"></canvas>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>Execution Log</div>
-        <div class="badge">REAL</div>
-      </div>
-      <div class="panel-body nopad" style="overflow:auto;">
-        <table class="dense">
-          <thead><tr>
-            <th>Time</th><th>Market</th><th>Action</th><th>Signal</th><th>Prob</th>
-            <th class="num">Entry</th><th class="num">Exit</th><th class="num">PnL</th><th>Status</th>
-          </tr></thead>
-          <tbody id="exec-log-body"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title"><span class="dot"></span>Recent Positions</div>
-        <div class="badge">REAL</div>
-      </div>
-      <div class="panel-body nopad" style="overflow:auto;">
-        <table class="dense">
-          <thead><tr>
-            <th>Market</th><th>Pos</th><th>Prob</th><th class="num">Size</th><th class="num">Exposure</th><th class="num">PnL</th><th>Status</th>
-          </tr></thead>
-          <tbody id="positions-body"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<div class="statusbar" id="statusbar">
-  <span><span class="dot2"></span><b id="sb-status">RUNNING</b></span>
-  <span>TOTAL TRADES <b id="sb-trades">0</b></span>
-  <span>WIN RATE <b id="sb-winrate">0.0%</b></span>
-  <span>SESSION <b id="sb-session">--:--:--</b></span>
-  <span>LAST SYNC <b id="sb-sync">--:--:--</b></span>
 </div>
 
 <script>
 'use strict';
 
 /* =============================================================================
-   REAL-DATA LAYER
-   Reuses the exact same source files as dashboard.html: data/paper_trades.jsonl
-   (deduped by trade_id, latest entry wins) and data/state.json. Everything in
-   the Portfolio panel, Equity Curve, Execution Log, and Recent Positions is
-   computed from these -- no fabricated numbers. Everything else on this page
-   (ticker, candlestick tape, order book, network topology, AI gauges) has no
-   backing data source in this project yet and is clearly marked "simulated"
-   in its panel header.
+   DATA SOURCES -- what is real, and where it comes from
+   -----------------------------------------------------------------------------
+   data/paper_trades.jsonl        real trades: asset, direction, entry, result,
+                                   PnL, open/close timestamps, signal_reason,
+                                   signal_confidence  (deduped by trade_id)
+   data/state.json                daily_loss_usd, loss_streak, system_stopped,
+                                   last_signal_ts per asset, session_start
+   data/online_model_status.json  NEW small export written by
+                                   core/online_model.py (OnlineQuantModel.save()
+                                   / _load()) every time the model updates or
+                                   loads. The trained model itself lives in
+                                   data/online_model_state.pkl, a Python pickle
+                                   a browser cannot parse -- this file mirrors
+                                   just n_updates / warmup_trades / fitted /
+                                   is_warmed_up as JSON so the dashboard can
+                                   read real warmup progress without a backend.
+   data/live_status.json          NEW small export written by run.py every
+                                   poll tick (right after computing
+                                   LiveFeatureCollector.extract()) with the
+                                   current btc_eth_correlation value. That
+                                   field does NOT exist in
+                                   data/quant_features.jsonl (that file is the
+                                   OLDER shadow QuantFeatureExtractor's output,
+                                   a different feature set) -- this is the
+                                   correct real source for it.
+   data/quant_features.jsonl      used only for "last signal confidence": the
+                                   most recent entry's model_probability
+                                   (the older shadow quant model's logged
+                                   confidence at signal time).
+   -----------------------------------------------------------------------------
+   If a source file is missing, unreachable, or a specific field inside it is
+   null, the corresponding widget renders NO DATA. Nothing is invented.
    ============================================================================= */
 
-const REFRESH_MS = 4000;
-const NOTIONAL_AUM = 1_000_000; // display-only baseline so the hero figure reads at institutional scale; all P&L below it is real
+const REFRESH_MS = 5000;
+const TRACKED_ASSETS = ['BTC', 'ETH']; // SOL is explicitly out of scope (config REPRICING_FROZEN.assets)
+const SIGNAL_COOLDOWN_SEC = 120; // mirrors config/settings.py -- keep in sync if that changes
+const MAX_DAILY_LOSS_USD = 10000.0;
+const MAX_LOSS_STREAK = 50;
+const STALE_AFTER_MS = 15000; // how old a telemetry file's timestamp can be before we call it stale, not "active"
 
 async function fetchNoCache(path) {
   const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
   if (!res.ok) throw new Error(path + ' -> ' + res.status);
   return res;
 }
-
-async function loadTrades() {
-  let text;
-  try { text = await (await fetchNoCache('data/paper_trades.jsonl')).text(); }
-  catch (e) { return []; }
-  const byId = new Map();
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const entry = JSON.parse(trimmed);
-      if (entry.trade_id) byId.set(entry.trade_id, entry);
-    } catch (e) { /* skip malformed line */ }
-  }
-  return Array.from(byId.values());
+async function fetchJsonl(path) {
+  try {
+    const text = await (await fetchNoCache(path)).text();
+    const out = [];
+    for (const line of text.split('\n')) {
+      const t = line.trim();
+      if (!t) continue;
+      try { out.push(JSON.parse(t)); } catch (e) { /* skip malformed line */ }
+    }
+    return out;
+  } catch (e) { return null; }
 }
-
-async function loadState() {
-  try { return await (await fetchNoCache('data/state.json')).json(); }
+async function fetchJson(path) {
+  try { return await (await fetchNoCache(path)).json(); }
   catch (e) { return null; }
 }
 
-function fmtUsd(n, opts) {
-  opts = opts || {};
+function noData(label) { return `<span class="no-data">${label || 'NO DATA'}</span>`; }
+function has(v) { return v !== null && v !== undefined && !(typeof v === 'number' && isNaN(v)); }
+function fmtUsd(n, decimals) {
+  decimals = decimals == null ? 2 : decimals;
   const sign = n > 0 ? '+' : (n < 0 ? '-' : '');
-  const abs = Math.abs(n);
-  const decimals = opts.decimals != null ? opts.decimals : 2;
-  return sign + '$' + abs.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return sign + '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 function fmtClock(iso) {
   if (!iso) return '--:--:--';
@@ -440,39 +342,70 @@ function fmtClock(iso) {
   if (isNaN(d.getTime())) return '--:--:--';
   return d.toLocaleTimeString(undefined, { hour12: false });
 }
-function fmtDuration(ms) {
-  if (ms < 0) ms = 0;
-  const s = Math.floor(ms / 1000);
-  const hh = String(Math.floor(s / 3600)).padStart(2, '0');
-  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
-  const ss = String(s % 60).padStart(2, '0');
-  return hh + ':' + mm + ':' + ss;
+function fmtAge(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return Date.now() - d.getTime();
 }
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-// smooth count-up: animates a DOM node's numeric text from its last rendered
-// value to a new target instead of snapping, per "portfolio numbers count
-// smoothly" in the brief
 const _countState = new WeakMap();
 function animateNumber(el, target, formatter, duration) {
-  duration = duration || 700;
+  duration = duration || 600;
   const prev = _countState.has(el) ? _countState.get(el) : target;
   _countState.set(el, target);
   const start = performance.now();
   function step(now) {
-    const t = clamp((now - start) / duration, 0, 1);
+    const t = Math.min(1, (now - start) / duration);
     const eased = 1 - Math.pow(1 - t, 3);
-    const val = prev + (target - prev) * eased;
-    el.textContent = formatter(val);
+    el.textContent = formatter(prev + (target - prev) * eased);
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
 }
 
-/* ---------------- portfolio metrics (real) ---------------- */
-function computePortfolioMetrics(trades) {
+/* ---------------- loaders ---------------- */
+async function loadTrades() {
+  const rows = await fetchJsonl('data/paper_trades.jsonl');
+  if (!rows) return null;
+  const byId = new Map();
+  for (const entry of rows) if (entry.trade_id) byId.set(entry.trade_id, entry);
+  return Array.from(byId.values());
+}
+async function loadState() { return await fetchJson('data/state.json'); }
+async function loadOnlineModelStatus() { return await fetchJson('data/online_model_status.json'); }
+async function loadLiveStatus() { return await fetchJson('data/live_status.json'); }
+async function loadLastQuantFeature() {
+  const rows = await fetchJsonl('data/quant_features.jsonl');
+  if (!rows || !rows.length) return null;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].model_probability != null) return rows[i];
+  }
+  return null;
+}
+
+/* ---------------- 1. HEADER ---------------- */
+function renderHeader(state) {
+  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
+  document.getElementById('hdr-sync').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
+  const statusEl = document.getElementById('hdr-status');
+  const dailyEl = document.getElementById('hdr-daily-loss');
+  const streakEl = document.getElementById('hdr-streak');
+  if (!state) {
+    statusEl.innerHTML = noData(); dailyEl.innerHTML = noData(); streakEl.innerHTML = noData();
+    return;
+  }
+  const stopped = !!state.system_stopped;
+  statusEl.textContent = stopped ? 'STOPPED' : 'RUNNING';
+  statusEl.className = stopped ? 'status-stop' : 'status-run';
+  const dailyLoss = state.daily_loss_usd || 0;
+  dailyEl.textContent = fmtUsd(-dailyLoss) + ' / ' + fmtUsd(-MAX_DAILY_LOSS_USD);
+  streakEl.textContent = (state.loss_streak || 0) + ' / ' + MAX_LOSS_STREAK;
+}
+
+/* ---------------- 2. PORTFOLIO ---------------- */
+function computePortfolio(trades) {
   const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
-  const open = trades.filter(t => t.status === 'open');
   const wins = closed.filter(t => t.pnl_usd > 0);
   const losses = closed.filter(t => t.pnl_usd <= 0);
   const totalPnl = closed.reduce((s, t) => s + t.pnl_usd, 0);
@@ -481,593 +414,264 @@ function computePortfolioMetrics(trades) {
   const winRate = closed.length ? wins.length / closed.length : 0;
   const avgWin = wins.length ? grossWin / wins.length : 0;
   const avgLoss = losses.length ? grossLoss / losses.length : 0;
-  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : 0);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const dailyPnl = closed
-    .filter(t => (t.close_ts || '').slice(0, 10) === today)
-    .reduce((s, t) => s + t.pnl_usd, 0);
-
-  // equity curve + max drawdown (peak-to-trough of cumulative realized PnL)
-  const sorted = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
+  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : null);
+  const expectancy = closed.length ? totalPnl / closed.length : null;
   let running = 0, peak = 0, maxDD = 0;
-  const curve = sorted.map(t => {
-    running += t.pnl_usd;
-    peak = Math.max(peak, running);
-    maxDD = Math.max(maxDD, peak - running);
-    return running;
+  closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts)).forEach(t => {
+    running += t.pnl_usd; peak = Math.max(peak, running); maxDD = Math.max(maxDD, peak - running);
   });
-
-  // per-trade return series (pnl / stake) used as a lightweight proxy for
-  // Sharpe/Sortino -- these are trade-indexed ratios, not time-annualized,
-  // since the underlying data has no fixed sampling interval
-  const rets = closed.map(t => t.pnl_usd / (t.size_usd || 10));
-  const meanRet = rets.length ? rets.reduce((a, b) => a + b, 0) / rets.length : 0;
-  const variance = rets.length ? rets.reduce((a, b) => a + (b - meanRet) ** 2, 0) / rets.length : 0;
-  const stdDev = Math.sqrt(variance);
-  const downside = rets.filter(r => r < 0);
-  const downsideVar = downside.length ? downside.reduce((a, b) => a + b * b, 0) / downside.length : 0;
-  const downsideDev = Math.sqrt(downsideVar);
-  const sharpe = stdDev > 0 ? meanRet / stdDev : 0;
-  const sortino = downsideDev > 0 ? meanRet / downsideDev : 0;
-
-  // Kelly fraction estimate from realized win rate / avg win / avg loss (per-unit-stake terms)
-  const b = avgLoss > 0 ? avgWin / avgLoss : 0;
-  const kelly = b > 0 ? clamp(winRate - (1 - winRate) / b, 0, 1) : 0;
-
-  const unrealizedPnl = 0; // paper engine marks to market only at close; open positions shown at cost, not re-priced live here
-
-  return {
-    totalPnl, dailyPnl, realizedPnl: totalPnl, unrealizedPnl,
-    winRate, profitFactor, avgWin, avgLoss, maxDD, sharpe, sortino, kelly,
-    tradesExecuted: closed.length, open, curve, sorted,
-  };
+  return { closed, wins, losses, totalPnl, winRate, avgWin, avgLoss, profitFactor, expectancy, maxDD };
 }
-
 function renderPortfolio(trades) {
-  const m = computePortfolioMetrics(trades);
-  const pfEl = document.getElementById('pf-value');
-  animateNumber(pfEl, NOTIONAL_AUM + m.totalPnl, v => '$' + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const heroEl = document.getElementById('pf-total-pnl');
+  if (!trades) {
+    heroEl.innerHTML = noData();
+    document.getElementById('pf-metrics').innerHTML = '';
+    return null;
+  }
+  const m = computePortfolio(trades);
+  animateNumber(heroEl, m.totalPnl, v => fmtUsd(v));
+  heroEl.classList.toggle('up', m.totalPnl >= 0);
+  heroEl.classList.toggle('down', m.totalPnl < 0);
 
   const rows = [
-    ['Daily PnL', fmtUsd(m.dailyPnl), m.dailyPnl >= 0 ? 'up' : 'down'],
-    ['Total PnL', fmtUsd(m.totalPnl), m.totalPnl >= 0 ? 'up' : 'down'],
-    ['Realized PnL', fmtUsd(m.realizedPnl), m.realizedPnl >= 0 ? 'up' : 'down'],
-    ['Unrealized PnL', fmtUsd(m.unrealizedPnl), ''],
-    ['Win Rate', (m.winRate * 100).toFixed(1) + '%', ''],
-    ['Profit Factor', isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : '&infin;', ''],
-    ['Avg Win', fmtUsd(m.avgWin), 'up'],
-    ['Avg Loss', fmtUsd(-m.avgLoss), 'down'],
-    ['Max Drawdown', fmtUsd(-m.maxDD), 'down'],
-    ['Sharpe Ratio', m.sharpe.toFixed(2), ''],
-    ['Sortino Ratio', m.sortino.toFixed(2), ''],
-    ['Kelly Fraction', (m.kelly * 100).toFixed(1) + '%', ''],
-    ['Trades Executed', String(m.tradesExecuted), ''],
-    ['Open Positions', String(m.open.length), ''],
+    ['Win Rate', m.closed.length ? (m.winRate * 100).toFixed(1) + '%' : null],
+    ['Total Trades', String(m.closed.length)],
+    ['Wins / Losses', m.wins.length + ' / ' + m.losses.length],
+    ['Avg Win', m.wins.length ? fmtUsd(m.avgWin) : null],
+    ['Avg Loss', m.losses.length ? fmtUsd(-m.avgLoss) : null],
+    ['Max Drawdown', m.closed.length ? fmtUsd(-m.maxDD) : null],
+    ['Profit Factor', m.profitFactor == null ? null : (isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : '&infin;')],
+    ['Expectancy/Trade', m.expectancy == null ? null : fmtUsd(m.expectancy)],
+    ['Weekly PnL', null],
+    ['Monthly PnL', null],
   ];
-  document.getElementById('pf-metrics').innerHTML = rows.map(([label, val, cls]) => `
-    <div class="metric">
-      <div class="metric-label">${label}</div>
-      <div class="metric-value num ${cls}">${val}</div>
+  document.getElementById('pf-metrics').innerHTML = rows.map(([label, val]) => `
+    <div class="metric-row">
+      <span class="label">${label}</span>
+      <span class="value num">${val != null ? val : noData()}</span>
     </div>
-  `).join('');
-
-  document.getElementById('sb-trades').textContent = m.tradesExecuted;
-  document.getElementById('sb-winrate').textContent = (m.winRate * 100).toFixed(1) + '%';
-
+  `).join('') + (rows.slice(-2).every(r => r[1] == null)
+    ? '<div style="font-size:9.5px;color:var(--text-muted);margin-top:6px;">weekly/monthly PnL: not enough history yet</div>' : '');
   return m;
 }
 
-/* ---------------- equity curve (real) ---------------- */
-function renderEquityCurve(m) {
-  const canvas = document.getElementById('equity-canvas');
-  const wrap = document.getElementById('equity-wrap');
-  const dpr = window.devicePixelRatio || 1;
-  const w = wrap.clientWidth, h = wrap.clientHeight;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+/* ---------------- 3. AI SIGNAL PANEL ---------------- */
+function assetCooldown(state, asset) {
+  const lastTsMap = (state && state.last_signal_ts) || {};
+  const ts = lastTsMap[asset];
+  if (!ts) return { known: true, ready: true, remain: 0 };
+  const ageSec = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (ageSec < SIGNAL_COOLDOWN_SEC) return { known: true, ready: false, remain: Math.ceil(SIGNAL_COOLDOWN_SEC - ageSec) };
+  return { known: true, ready: true, remain: 0 };
+}
+function renderAISignalPanel(onlineStatus, lastQuantFeature, state) {
+  const wrap = document.getElementById('ai-signal-body');
+  let html = '';
 
-  if (!m.curve.length) {
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = '12px system-ui';
-    ctx.fillText('Awaiting closed trades…', 14, h / 2);
+  if (onlineStatus && has(onlineStatus.n_updates) && has(onlineStatus.warmup_trades)) {
+    const pct = Math.min(100, (onlineStatus.n_updates / onlineStatus.warmup_trades) * 100);
+    html += `
+      <div style="font-size:10px;color:var(--text-secondary);">MODEL WARMUP &mdash; ${onlineStatus.n_updates}/${onlineStatus.warmup_trades} trades
+        &middot; <b style="color:${onlineStatus.is_warmed_up ? 'var(--green)' : 'var(--yellow)'}">${onlineStatus.is_warmed_up ? 'LIVE' : 'WARMUP'}</b></div>
+      <div class="warmup-track"><div class="warmup-fill" style="width:${pct.toFixed(1)}%"></div></div>
+    `;
+  } else {
+    html += `<div style="margin-bottom:8px;">MODEL WARMUP ${noData()}</div>`;
+  }
+
+  if (lastQuantFeature) {
+    const pct = (lastQuantFeature.model_probability * 100).toFixed(1);
+    html += `<div style="font-size:10px;color:var(--text-secondary);margin-top:4px;">LAST SIGNAL CONFIDENCE (shadow model, ${lastQuantFeature.asset})</div>
+      <div style="font-size:18px;font-weight:800;color:var(--cyan);">${pct}%</div>
+      <div style="font-size:9.5px;color:var(--text-muted);">${fmtClock(lastQuantFeature.timestamp)}</div>`;
+  } else {
+    html += `<div style="margin-top:6px;">LAST SIGNAL CONFIDENCE ${noData()}</div>`;
+  }
+
+  html += `<div style="margin-top:8px;font-size:10px;color:var(--text-secondary);">DETECTOR STATUS</div>`;
+  TRACKED_ASSETS.forEach(asset => {
+    const cd = assetCooldown(state, asset);
+    const label = !state ? noData() : (cd.ready ? `<span class="pill ready">READY</span>` : `<span class="pill cooldown">COOLDOWN ${cd.remain}s</span>`);
+    html += `<div class="sig-asset-row"><span>${asset}</span>${label}</div>`;
+  });
+
+  html += `<div class="sig-asset-row"><span>Market Bias</span>${noData()}</div>`;
+  html += `<div class="sig-asset-row"><span>Macro Sentiment</span>${noData()}</div>`;
+  wrap.innerHTML = html;
+}
+
+/* ---------------- 4. DECISION TIMELINE ---------------- */
+function tlNode(name, cls, label) {
+  return `<div class="tl-node ${cls}"><span class="tl-dot"></span><span class="name">${name}</span><span class="state">${label}</span></div><div class="tl-arrow">&#9660;</div>`;
+}
+function renderDecisionTimeline(liveStatus, state, trades) {
+  const wrap = document.getElementById('timeline-body');
+  const parts = [];
+
+  // MARKET DATA / FEATURES: derived from live_status.json freshness (written
+  // every poll tick by run.py right after computing a live feature snapshot)
+  if (!liveStatus) {
+    parts.push(tlNode('MARKET DATA', 'nodata', 'NO DATA'));
+    parts.push(tlNode('FEATURES', 'nodata', 'NO DATA'));
+  } else {
+    const age = fmtAge(liveStatus.updated_at);
+    const fresh = age != null && age < STALE_AFTER_MS;
+    parts.push(tlNode('MARKET DATA', fresh ? 'active' : 'waiting', fresh ? 'ACTIVE' : 'STALE'));
+    if (!fresh) {
+      parts.push(tlNode('FEATURES', 'waiting', 'STALE'));
+    } else if (has(liveStatus.btc_eth_correlation)) {
+      parts.push(tlNode('FEATURES', 'active', 'ACTIVE'));
+    } else {
+      parts.push(tlNode('FEATURES', 'waiting', 'WARMING UP'));
+    }
+  }
+
+  // REPRICING DETECTOR: free to fire iff at least one tracked asset isn't in cooldown
+  if (!state) {
+    parts.push(tlNode('REPRICING DETECTOR', 'nodata', 'NO DATA'));
+  } else {
+    const anyReady = TRACKED_ASSETS.some(a => assetCooldown(state, a).ready);
+    parts.push(tlNode('REPRICING DETECTOR', anyReady ? 'active' : 'blocked', anyReady ? 'ACTIVE' : 'COOLDOWN'));
+  }
+
+  // RISK CHECK: system_stopped flag
+  if (!state) {
+    parts.push(tlNode('RISK CHECK', 'nodata', 'NO DATA'));
+  } else {
+    const stopped = !!state.system_stopped;
+    parts.push(tlNode('RISK CHECK', stopped ? 'blocked' : 'active', stopped ? 'BLOCKED' : 'PASS'));
+  }
+
+  // SIGNAL: was any asset's cooldown timer started recently (i.e. a signal fired)?
+  if (!state || !state.last_signal_ts) {
+    parts.push(tlNode('SIGNAL', state ? 'waiting' : 'nodata', state ? 'WAITING' : 'NO DATA'));
+  } else {
+    const anyRecent = Object.values(state.last_signal_ts).some(ts => {
+      const age = fmtAge(ts); return age != null && age < 5 * 60 * 1000;
+    });
+    parts.push(tlNode('SIGNAL', anyRecent ? 'active' : 'waiting', anyRecent ? 'RECENT' : 'WAITING'));
+  }
+
+  // TRADE: any open positions right now?
+  if (!trades) {
+    parts.push(tlNode('TRADE', 'nodata', 'NO DATA'));
+  } else {
+    const openCount = trades.filter(t => t.status === 'open').length;
+    parts.push(tlNode('TRADE', openCount > 0 ? 'active' : 'waiting', openCount > 0 ? openCount + ' OPEN' : 'FLAT'));
+  }
+
+  wrap.innerHTML = `<div class="timeline">${parts.slice(0, -1).join('')}</div>`; // drop trailing arrow
+}
+
+/* ---------------- 5. AI REASONING ---------------- */
+function renderReasoning(trades, onlineStatus) {
+  const wrap = document.getElementById('reasoning-body');
+  const withReason = trades ? trades.filter(t => t.signal_reason).sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts)) : [];
+  const last = withReason[0];
+
+  let html = '';
+  if (!last) {
+    html += `<div class="reason-line"><div class="reason-label">Last Signal Reason</div><div>${noData('NO RECENT SIGNAL')}</div></div>`;
+  } else {
+    html += `
+      <div class="reason-line"><div class="reason-label">${last.asset} &middot; ${last.direction} &middot; ${fmtClock(last.open_ts)}</div>
+        <div class="reason-quote">"${last.signal_reason}"</div></div>
+      <div class="reason-line"><div class="reason-label">Entry Price</div><div class="reason-value num">${last.entry_price.toFixed(3)}</div></div>
+      <div class="reason-line"><div class="reason-label">Confidence Score</div><div class="reason-value num">${(last.signal_confidence * 100).toFixed(1)}%</div></div>
+      <div class="reason-line"><div class="reason-label">Source</div><div class="reason-value">${last.signal_source}</div></div>
+    `;
+  }
+
+  html += `<div class="reason-line" style="margin-top:10px;border-top:1px solid var(--grid);padding-top:8px;">
+    <div class="reason-label">Multi-Scenario Probability</div>`;
+  if (onlineStatus && onlineStatus.is_warmed_up && onlineStatus.fitted) {
+    html += `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Model is live, but only outputs a single P(YES win) scalar &mdash; no multi-scenario breakdown exists to show.</div>`;
+  } else {
+    const status = onlineStatus ? `warmup ${onlineStatus.n_updates}/${onlineStatus.warmup_trades}` : 'status unknown';
+    html += `<div style="margin-top:4px;">${noData('NO DATA — model in warmup (' + status + ')')}</div>`;
+  }
+  html += `</div>`;
+  wrap.innerHTML = html;
+}
+
+/* ---------------- 6. CORRELATION MAP ---------------- */
+function corrColor(r) {
+  if (r == null) return 'rgba(255,255,255,0.04)';
+  const abs = Math.min(1, Math.abs(r));
+  return r >= 0 ? `rgba(0,255,65,${0.12 + abs * 0.35})` : `rgba(255,59,59,${0.12 + abs * 0.35})`;
+}
+function renderCorrelation(liveStatus) {
+  const wrap = document.getElementById('corr-body');
+  const r = liveStatus ? liveStatus.btc_eth_correlation : null;
+  const rTxt = has(r) ? r.toFixed(3) : null;
+
+  let html = `<div class="corr-grid">
+    <div></div><div class="corr-head">BTC</div><div class="corr-head">ETH</div>
+    <div class="corr-row-label">BTC</div>
+    <div class="corr-cell" style="background:${corrColor(1)}">1.00</div>
+    <div class="corr-cell" style="background:${corrColor(r)}">${rTxt != null ? rTxt : noData()}</div>
+    <div class="corr-row-label">ETH</div>
+    <div class="corr-cell" style="background:${corrColor(r)}">${rTxt != null ? rTxt : noData()}</div>
+    <div class="corr-cell" style="background:${corrColor(1)}">1.00</div>
+  </div>`;
+  html += `<div class="metric-row" style="margin-top:10px;"><span class="label">SOL</span><span class="value">${noData('EXCLUDED FROM STRATEGY')}</span></div>`;
+  html += `<div class="metric-row"><span class="label">Macro Events</span><span class="value">${noData()}</span></div>`;
+  if (liveStatus) {
+    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:8px;">rolling correlation of BTC/ETH YES-price returns, last update ${fmtClock(liveStatus.updated_at)}</div>`;
+  }
+  wrap.innerHTML = html;
+}
+
+/* ---------------- 7. LIVE TRADE TABLE ---------------- */
+function renderTradeTable(trades) {
+  const posBody = document.getElementById('positions-body');
+  const tradesBody = document.getElementById('trades-body');
+  if (!trades) {
+    posBody.innerHTML = `<tr><td class="empty-row">${noData()}</td></tr>`;
+    tradesBody.innerHTML = `<tr><td class="empty-row">${noData()}</td></tr>`;
     return;
   }
 
-  const pad = 24;
-  const min = Math.min(0, ...m.curve), max = Math.max(0, ...m.curve);
-  const span = (max - min) || 1;
-  const x = i => m.curve.length > 1 ? (i / (m.curve.length - 1)) * (w - pad * 2) + pad : w / 2;
-  const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
+  const open = trades.filter(t => t.status === 'open').sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts));
+  posBody.innerHTML = open.length ? open.map(t => `
+    <tr class="open">
+      <td>${t.asset}</td><td>${t.direction}</td>
+      <td class="num">${t.entry_price.toFixed(3)}</td>
+      <td>${fmtClock(t.open_ts)}</td>
+      <td class="num pnl">$${t.size_usd.toFixed(2)}</td>
+    </tr>`).join('') : `<tr><td class="empty-row">No open positions</td></tr>`;
 
-  // gridlines
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const gy = pad + (i / 4) * (h - pad * 2);
-    ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(w - pad, gy); ctx.stroke();
-  }
-
-  const positive = m.curve[m.curve.length - 1] >= 0;
-  const lineColor = positive ? '#35F2A0' : '#FF4D6D';
-
-  // area fill
-  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
-  grad.addColorStop(0, positive ? 'rgba(53,242,160,0.25)' : 'rgba(255,77,109,0.25)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.beginPath();
-  ctx.moveTo(x(0), y(m.curve[0]));
-  m.curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
-  ctx.lineTo(x(m.curve.length - 1), y(0));
-  ctx.lineTo(x(0), y(0));
-  ctx.closePath();
-  ctx.fillStyle = grad;
-  ctx.fill();
-
-  // line
-  ctx.beginPath();
-  ctx.moveTo(x(0), y(m.curve[0]));
-  m.curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
-  ctx.strokeStyle = lineColor;
-  ctx.lineWidth = 2;
-  ctx.shadowColor = lineColor;
-  ctx.shadowBlur = 8;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // current value label
-  ctx.fillStyle = lineColor;
-  ctx.font = 'bold 12px system-ui';
-  ctx.fillText(fmtUsd(m.curve[m.curve.length - 1]), w - pad - 70, pad - 4);
-}
-
-/* ---------------- execution log (real) ---------------- */
-const seenTradeIds = new Set();
-function renderExecLog(trades) {
-  const body = document.getElementById('exec-log-body');
-  const sorted = trades.slice().sort((a, b) => {
-    const aTs = a.status === 'open' ? a.open_ts : (a.close_ts || a.open_ts);
-    const bTs = b.status === 'open' ? b.open_ts : (b.close_ts || b.open_ts);
-    return new Date(bTs) - new Date(aTs);
-  }).slice(0, 40);
-
-  if (!sorted.length) {
-    body.innerHTML = '<tr><td colspan="9"><div class="empty">No activity yet</div></td></tr>';
-    return;
-  }
-
-  body.innerHTML = sorted.map(t => {
-    const isNew = !seenTradeIds.has(t.trade_id + ':' + t.status);
-    seenTradeIds.add(t.trade_id + ':' + t.status);
-    const rowCls = t.status === 'open' ? 'active' : (t.result === 'WIN' ? 'win' : 'loss');
-    const time = t.status === 'open' ? t.open_ts : (t.close_ts || t.open_ts);
-    const statusLabel = t.status === 'open' ? 'ACTIVE' : t.result;
-    const exit = t.close_price != null ? t.close_price.toFixed(3) : '—';
-    const pnl = t.pnl_usd != null ? fmtUsd(t.pnl_usd) : '—';
-    return `<tr class="${rowCls}${isNew ? ' new' : ''}">
-      <td class="mono plain">${fmtClock(time)}</td>
-      <td class="plain">${t.asset}</td>
-      <td class="plain">${t.direction}</td>
-      <td class="plain">${(t.signal_reason || '').slice(0, 26)}</td>
-      <td class="num plain">${(t.signal_confidence != null ? (t.signal_confidence * 100).toFixed(0) : '--')}%</td>
-      <td class="num plain">${t.entry_price.toFixed(3)}</td>
-      <td class="num plain">${exit}</td>
-      <td class="num">${pnl}</td>
-      <td class="status"><span class="status-pill">${statusLabel}</span></td>
-    </tr>`;
-  }).join('');
-}
-
-/* ---------------- recent positions (real) ---------------- */
-function renderPositions(open) {
-  const body = document.getElementById('positions-body');
-  if (!open.length) {
-    body.innerHTML = '<tr><td colspan="7"><div class="empty">No open positions</div></td></tr>';
-    return;
-  }
-  const rows = open.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts));
-  body.innerHTML = rows.map(t => `
-    <tr class="active">
-      <td class="plain">${t.asset} 5M UP/DOWN</td>
-      <td class="plain">${t.direction}</td>
-      <td class="num plain">${(t.signal_confidence * 100).toFixed(0)}%</td>
-      <td class="num plain">${fmtUsd(t.size_usd, { decimals: 2 })}</td>
-      <td class="num plain">${fmtUsd(t.size_usd, { decimals: 2 })}</td>
-      <td class="num plain">--</td>
-      <td class="status"><span class="status-pill">OPEN</span></td>
-    </tr>
-  `).join('');
-}
-
-/* ---------------- status bar + header ---------------- */
-function renderStatusBar(state) {
-  const stopped = !!(state && state.system_stopped);
-  document.getElementById('sb-status').textContent = stopped ? 'STOPPED' : 'RUNNING';
-  document.getElementById('sb-status').style.color = stopped ? 'var(--red)' : 'var(--green)';
-  if (state && state.session_start) {
-    document.getElementById('sb-session').textContent = fmtDuration(Date.now() - new Date(state.session_start).getTime());
-  }
-  document.getElementById('sb-sync').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
+  const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null)
+    .sort((a, b) => new Date(b.close_ts) - new Date(a.close_ts)).slice(0, 20);
+  tradesBody.innerHTML = closed.length ? closed.map(t => `
+    <tr class="${t.result === 'WIN' ? 'win' : 'loss'}">
+      <td>${fmtClock(t.close_ts)}</td><td>${t.asset}</td><td>${t.direction}</td>
+      <td class="num">${t.entry_price.toFixed(3)}</td>
+      <td>${t.result}</td>
+      <td class="num pnl">${fmtUsd(t.pnl_usd)}</td>
+    </tr>`).join('') : `<tr><td class="empty-row">No closed trades yet</td></tr>`;
 }
 
 /* =============================================================================
-   SIMULATED LAYER
-   Ticker, candlestick tape, order book, network topology, and AI gauges have
-   no real backing data source anywhere in this project (no OHLC aggregator,
-   no stored depth ladder, no regime classifier). These are procedurally
-   generated and animated for visual completeness, and each panel header says
-   "simulated" so this is never mistaken for live bot telemetry.
+   REFRESH LOOP
    ============================================================================= */
-
-/* ---------------- ticker ---------------- */
-const TICKER_SEED = [
-  ['BTC', 'blue'], ['ETH', 'blue'], ['SOL', 'blue'], ['POLYMARKET', 'purple'],
-  ['CPI', 'yellow'], ['FED', 'yellow'], ['INFLATION', 'yellow'], ['ELECTIONS', 'purple'],
-  ['AI', 'purple'], ['ETF', 'blue'], ['BREAKING', 'red'], ['CATALYST', 'yellow'],
-];
-function buildTickerItems(n) {
-  const items = [];
-  for (let i = 0; i < n; i++) {
-    const [sym, tone] = TICKER_SEED[i % TICKER_SEED.length];
-    const chg = (Math.random() * 6 - 2.4);
-    const up = chg >= 0;
-    const vol = (Math.random() * 40 + 2).toFixed(1) + 'M';
-    const conf = Math.round(Math.random() * 35 + 60);
-    items.push({ sym, tone, chg, up, vol, conf });
-  }
-  return items;
-}
-function renderTicker() {
-  const items = buildTickerItems(24);
-  const html = items.map(it => `
-    <span class="tick-item">
-      <span class="sym" style="color:var(--${it.tone})">${it.sym}</span>
-      <span class="chg ${it.up ? 'up' : 'down'}">${it.up ? '+' : ''}${it.chg.toFixed(2)}%</span>
-      <span class="arrow ${it.up ? 'up' : 'down'}">${it.up ? '&#9650;' : '&#9660;'}</span>
-      <span class="vol">VOL ${it.vol}</span>
-      <span class="conf">CONF ${it.conf}%</span>
-    </span>
-  `).join('');
-  // duplicate content back-to-back so the -50% translateX loop is seamless
-  document.getElementById('ticker-track').innerHTML = html + html;
+async function refresh() {
+  const [trades, state, onlineStatus, liveStatus, lastQuantFeature] = await Promise.all([
+    loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
+  ]);
+  renderHeader(state);
+  renderPortfolio(trades);
+  renderAISignalPanel(onlineStatus, lastQuantFeature, state);
+  renderDecisionTimeline(liveStatus, state, trades);
+  renderReasoning(trades, onlineStatus);
+  renderCorrelation(liveStatus);
+  renderTradeTable(trades);
 }
 
-/* ---------------- candlestick tape (simulated) ---------------- */
-const candleState = { candles: [], price: 0.42, ema: 0.42 };
-function seedCandles() {
-  let p = 0.42;
-  for (let i = 0; i < 60; i++) {
-    const o = p;
-    const drift = (Math.random() - 0.5) * 0.02;
-    const c = clamp(o + drift, 0.05, 0.95);
-    const hi = Math.max(o, c) + Math.random() * 0.006;
-    const lo = Math.min(o, c) - Math.random() * 0.006;
-    const vol = Math.random() * 800 + 100;
-    candleState.candles.push({ o, h: hi, l: lo, c, vol, signal: Math.random() < 0.08 ? (c > o ? 'buy' : 'sell') : null });
-    p = c;
-  }
-  candleState.price = p;
-  candleState.ema = p;
-}
-function stepCandle() {
-  const last = candleState.candles[candleState.candles.length - 1];
-  const drift = (Math.random() - 0.5) * 0.015;
-  const c = clamp(last.c + drift, 0.05, 0.95);
-  const hi = Math.max(last.c, c) + Math.random() * 0.004;
-  const lo = Math.min(last.c, c) - Math.random() * 0.004;
-  const vol = Math.random() * 800 + 100;
-  candleState.candles.push({ o: last.c, h: hi, l: lo, c, vol, signal: Math.random() < 0.06 ? (c > last.c ? 'buy' : 'sell') : null });
-  if (candleState.candles.length > 70) candleState.candles.shift();
-  candleState.price = c;
-  candleState.ema = candleState.ema + (c - candleState.ema) * (2 / 22);
-}
-function renderChart() {
-  const wrap = document.getElementById('chart-wrap');
-  const canvas = document.getElementById('chart-canvas');
-  const dpr = window.devicePixelRatio || 1;
-  const w = wrap.clientWidth, h = wrap.clientHeight;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-
-  const candles = candleState.candles;
-  const volH = 34, padTop = 26, padBottom = 18, padRight = 54;
-  const plotH = h - padTop - padBottom - volH;
-  const plotW = w - padRight;
-  const n = candles.length;
-  const cw = plotW / n;
-
-  const highs = candles.map(c => c.h), lows = candles.map(c => c.l);
-  const min = Math.min(...lows), max = Math.max(...highs);
-  const span = (max - min) || 1;
-  const y = v => padTop + (1 - (v - min) / span) * plotH;
-  const maxVol = Math.max(...candles.map(c => c.vol));
-
-  // gridlines
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  for (let i = 0; i <= 4; i++) {
-    const gy = padTop + (i / 4) * plotH;
-    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(plotW, gy); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ctx.font = '9px system-ui';
-    ctx.fillText((max - (i / 4) * span).toFixed(3), plotW + 6, gy + 3);
-  }
-
-  // volume bars
-  candles.forEach((c, i) => {
-    const x = i * cw;
-    const bh = (c.vol / maxVol) * (volH - 4);
-    ctx.fillStyle = c.c >= c.o ? 'rgba(53,242,160,0.35)' : 'rgba(255,77,109,0.35)';
-    ctx.fillRect(x + cw * 0.15, h - padBottom - bh, cw * 0.7, bh);
-  });
-
-  // VWAP (simple running average of typical price, illustrative)
-  let cum = 0, cumVol = 0;
-  const vwapPts = candles.map(c => {
-    const typical = (c.h + c.l + c.c) / 3;
-    cum += typical * c.vol; cumVol += c.vol;
-    return cum / cumVol;
-  });
-  ctx.beginPath();
-  vwapPts.forEach((v, i) => { const x = i * cw + cw / 2; i === 0 ? ctx.moveTo(x, y(v)) : ctx.lineTo(x, y(v)); });
-  ctx.strokeStyle = '#FFC94D'; ctx.lineWidth = 1.3; ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1;
-
-  // EMA21
-  let ema = candles[0].c;
-  const emaPts = candles.map(c => { ema = ema + (c.c - ema) * (2 / 22); return ema; });
-  ctx.beginPath();
-  emaPts.forEach((v, i) => { const x = i * cw + cw / 2; i === 0 ? ctx.moveTo(x, y(v)) : ctx.lineTo(x, y(v)); });
-  ctx.strokeStyle = '#3FA9FF'; ctx.lineWidth = 1.3; ctx.stroke();
-
-  // support / resistance (recent range extremes)
-  const recent = candles.slice(-30);
-  const supportY = y(Math.min(...recent.map(c => c.l)));
-  const resistY = y(Math.max(...recent.map(c => c.h)));
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = 'rgba(63,169,255,0.5)'; ctx.beginPath(); ctx.moveTo(0, supportY); ctx.lineTo(plotW, supportY); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,77,109,0.5)'; ctx.beginPath(); ctx.moveTo(0, resistY); ctx.lineTo(plotW, resistY); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // candles + buy/sell/AI-signal markers
-  candles.forEach((c, i) => {
-    const x = i * cw + cw / 2;
-    const up = c.c >= c.o;
-    const color = up ? '#35F2A0' : '#FF4D6D';
-    ctx.strokeStyle = color; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, y(c.h)); ctx.lineTo(x, y(c.l)); ctx.stroke();
-    const bodyTop = y(Math.max(c.o, c.c)), bodyBot = y(Math.min(c.o, c.c));
-    ctx.fillStyle = color;
-    ctx.fillRect(x - cw * 0.32, bodyTop, cw * 0.64, Math.max(1.2, bodyBot - bodyTop));
-
-    if (c.signal) {
-      ctx.fillStyle = '#B285FF';
-      ctx.beginPath();
-      if (c.signal === 'buy') {
-        ctx.moveTo(x, y(c.l) + 14); ctx.lineTo(x - 4, y(c.l) + 20); ctx.lineTo(x + 4, y(c.l) + 20);
-      } else {
-        ctx.moveTo(x, y(c.h) - 14); ctx.lineTo(x - 4, y(c.h) - 20); ctx.lineTo(x + 4, y(c.h) - 20);
-      }
-      ctx.closePath(); ctx.fill();
-    }
-  });
-
-  // current price tag
-  const priceY = y(candleState.price);
-  const priceUp = candleState.price >= candles[candles.length - 2].c;
-  document.querySelectorAll('.chart-price-tag').forEach(e => e.remove());
-  const tag = document.createElement('div');
-  tag.className = 'chart-price-tag';
-  tag.style.top = priceY + 'px';
-  tag.style.background = priceUp ? '#35F2A0' : '#FF4D6D';
-  tag.style.color = '#05070A';
-  tag.textContent = candleState.price.toFixed(3);
-  wrap.appendChild(tag);
-}
-
-/* ---------------- order book (simulated) ---------------- */
-function renderOrderBook() {
-  const mid = candleState.price;
-  const spread = 0.004 + Math.random() * 0.003;
-  const asks = [], bids = [];
-  let cum = 0;
-  for (let i = 8; i >= 1; i--) {
-    const price = mid + spread / 2 + i * 0.0025;
-    const size = Math.round(Math.random() * 900 + 60);
-    cum += size;
-    asks.push({ price, size, total: cum });
-  }
-  cum = 0;
-  for (let i = 1; i <= 8; i++) {
-    const price = mid - spread / 2 - i * 0.0025;
-    const size = Math.round(Math.random() * 900 + 60);
-    cum += size;
-    bids.push({ price, size, total: cum });
-  }
-  const maxTotal = Math.max(asks[0].total, bids[bids.length - 1].total);
-
-  document.getElementById('ob-asks').innerHTML = asks.map(r => `
-    <div class="ob-row ask"><div class="bar" style="width:${(r.total / maxTotal * 100).toFixed(0)}%"></div>
-      <span class="num mono">${r.price.toFixed(4)}</span><span class="num mono">${r.size}</span><span class="num mono">${r.total}</span></div>
-  `).join('');
-  document.getElementById('ob-bids').innerHTML = bids.map(r => `
-    <div class="ob-row bid"><div class="bar" style="width:${(r.total / maxTotal * 100).toFixed(0)}%"></div>
-      <span class="num mono">${r.price.toFixed(4)}</span><span class="num mono">${r.size}</span><span class="num mono">${r.total}</span></div>
-  `).join('');
-  document.getElementById('ob-mid').innerHTML = `<span>MID <b class="num">${mid.toFixed(4)}</b></span><span>SPREAD <b class="num">${spread.toFixed(4)}</b></span>`;
-}
-
-/* ---------------- market topology network graph (simulated) ---------------- */
-const TOPO_KINDS = [
-  { key: 'bullish', color: '#35F2A0' }, { key: 'bearish', color: '#FF4D6D' },
-  { key: 'neutral', color: '#57626F' }, { key: 'catalyst', color: '#FFC94D' },
-  { key: 'support', color: '#3FA9FF' }, { key: 'resistance', color: '#8C2C41' },
-  { key: 'merge', color: '#B285FF' }, { key: 'flip', color: '#FFFFFF' },
-];
-let topoNodes = [];
-function seedTopology(w, h) {
-  const n = 160;
-  topoNodes = Array.from({ length: n }, () => {
-    const kind = TOPO_KINDS[Math.floor(Math.random() * TOPO_KINDS.length)];
-    return {
-      x: Math.random() * w, y: Math.random() * h,
-      vx: (Math.random() - 0.5) * 0.15, vy: (Math.random() - 0.5) * 0.15,
-      r: Math.random() * 1.6 + 1.2, kind, phase: Math.random() * Math.PI * 2,
-    };
-  });
-}
-function stepTopology(canvas, ctx, w, h, t) {
-  ctx.clearRect(0, 0, w, h);
-  topoNodes.forEach(node => {
-    node.x += node.vx; node.y += node.vy;
-    if (node.x < 0 || node.x > w) node.vx *= -1;
-    if (node.y < 0 || node.y > h) node.vy *= -1;
-  });
-  // connections between nearby nodes, pulsing opacity
-  ctx.lineWidth = 0.6;
-  for (let i = 0; i < topoNodes.length; i++) {
-    for (let j = i + 1; j < topoNodes.length; j++) {
-      const a = topoNodes[i], b = topoNodes[j];
-      const dx = a.x - b.x, dy = a.y - b.y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < 60 * 60) {
-        const pulse = (Math.sin(t / 900 + a.phase) + 1) / 2;
-        ctx.strokeStyle = `rgba(63,169,255,${0.05 + pulse * 0.08})`;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      }
-    }
-  }
-  topoNodes.forEach(node => {
-    const glow = (Math.sin(t / 700 + node.phase) + 1) / 2;
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, node.r + glow * 0.8, 0, Math.PI * 2);
-    ctx.fillStyle = node.kind.color;
-    ctx.globalAlpha = 0.55 + glow * 0.4;
-    ctx.shadowColor = node.kind.color;
-    ctx.shadowBlur = 6;
-    ctx.fill();
-    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-  });
-}
-
-/* ---------------- AI market state gauges (simulated) ---------------- */
-const gaugeState = {
-  bull: 46, bear: 31, neutral: 23, confidence: 62, volatility: 41,
-  momentum: 12, trend: 55, horizon: 5,
-  regimes: ['TRENDING', 'MEAN-REVERTING', 'HIGH-VOL CHOP', 'BREAKOUT WATCH', 'RANGE-BOUND'],
-  regime: 'RANGE-BOUND',
-};
-function driftGauges() {
-  const g = gaugeState;
-  g.bull = clamp(g.bull + (Math.random() - 0.5) * 6, 5, 90);
-  g.bear = clamp(g.bear + (Math.random() - 0.5) * 6, 5, 90);
-  const total = g.bull + g.bear;
-  if (total > 96) { g.bull *= 96 / total; g.bear *= 96 / total; }
-  g.neutral = clamp(100 - g.bull - g.bear, 2, 90);
-  g.confidence = clamp(g.confidence + (Math.random() - 0.5) * 8, 20, 96);
-  g.volatility = clamp(g.volatility + (Math.random() - 0.5) * 10, 8, 95);
-  g.momentum = clamp(g.momentum + (Math.random() - 0.5) * 14, -95, 95);
-  g.trend = clamp(g.trend + (Math.random() - 0.5) * 8, 5, 96);
-  if (Math.random() < 0.15) g.regime = g.regimes[Math.floor(Math.random() * g.regimes.length)];
-}
-function renderGauges() {
-  const g = gaugeState;
-  const rows = [
-    ['Bull Probability', g.bull, 'var(--green)'],
-    ['Bear Probability', g.bear, 'var(--red)'],
-    ['Neutral Probability', g.neutral, 'var(--text-muted)'],
-    ['Confidence', g.confidence, 'var(--blue)'],
-    ['Volatility', g.volatility, 'var(--yellow)'],
-    ['Momentum', (g.momentum + 100) / 2, 'var(--purple)', g.momentum.toFixed(0)],
-    ['Trend Strength', g.trend, 'var(--blue)'],
-  ];
-  document.getElementById('gauge-list').innerHTML = rows.map(([label, pct, color, displayOverride]) => `
-    <div class="gauge-row">
-      <div class="gauge-label">${label}</div>
-      <div class="gauge-track"><div class="gauge-fill" style="width:${clamp(pct,0,100).toFixed(0)}%; background:${color}; box-shadow:0 0 8px ${color};"></div></div>
-      <div class="gauge-val num">${displayOverride != null ? displayOverride : pct.toFixed(0)}${displayOverride != null ? '' : '%'}</div>
-    </div>
-  `).join('') + `
-    <div class="gauge-row">
-      <div class="gauge-label">Prediction Horizon</div>
-      <div class="gauge-track"><div class="gauge-fill" style="width:100%; background:var(--text-muted);"></div></div>
-      <div class="gauge-val num">${g.horizon}m</div>
-    </div>
-  `;
-  document.getElementById('regime-tag-wrap').innerHTML = `
-    <div class="gauge-label">Regime</div>
-    <div class="regime-tag" style="color:var(--blue); border-color:var(--blue);">${g.regime}</div>
-  `;
-}
-
-/* =============================================================================
-   INIT + LOOPS
-   ============================================================================= */
-function setupCanvasResize(canvasId, wrapId, onResize) {
-  const canvas = document.getElementById(canvasId);
-  const wrap = document.getElementById(wrapId);
-  const ro = new ResizeObserver(() => onResize());
-  ro.observe(wrap);
-}
-
-async function refreshRealData() {
-  const [trades, state] = await Promise.all([loadTrades(), loadState()]);
-  const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
-  const open = trades.filter(t => t.status === 'open');
-  const m = renderPortfolio(trades);
-  renderEquityCurve(m);
-  renderExecLog(trades);
-  renderPositions(open);
-  renderStatusBar(state);
-}
-
-function startTopology() {
-  const canvas = document.getElementById('topo-canvas');
-  const ctx = canvas.getContext('2d');
-  function resize() {
-    const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = w * dpr; canvas.height = h * dpr;
-    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    seedTopology(w, h);
-  }
-  new ResizeObserver(resize).observe(canvas.parentElement);
-  resize();
-  function loop(t) {
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    stepTopology(canvas, ctx, w, h, t);
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-}
-
-function init() {
-  renderTicker();
-  setInterval(renderTicker, 45000);
-
-  seedCandles();
-  new ResizeObserver(renderChart).observe(document.getElementById('chart-wrap'));
-  renderChart();
-  setInterval(() => { stepCandle(); renderChart(); }, 2500);
-
-  renderOrderBook();
-  setInterval(renderOrderBook, 1400);
-
-  renderGauges();
-  setInterval(() => { driftGauges(); renderGauges(); }, 2000);
-
-  startTopology();
-
-  refreshRealData();
-  setInterval(refreshRealData, REFRESH_MS);
-}
-
-init();
+refresh();
+setInterval(refresh, REFRESH_MS);
+setInterval(() => { document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false }); }, 1000);
 </script>
 </body>
 </html>

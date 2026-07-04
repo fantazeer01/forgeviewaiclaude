@@ -8,7 +8,10 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("run")
 
-from config.settings import MARKET_POLL_INTERVAL_SEC, ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD
+from config.settings import (
+    MARKET_POLL_INTERVAL_SEC, ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
+    LIVE_STATUS_FILE,
+)
 from core.market_fetcher import MarketFetcher
 from core.repricing_detector import RepricingDetector, RepricingSignal
 from core.state_manager import StateManager
@@ -55,6 +58,7 @@ def main():
                 live_features.update(market["market_id"], market["asset"], market["yes_price"], market["no_price"])
                 repricing_signal = signal_gen.process_market(market)
                 snapshot = live_features.extract(market, fetcher)
+                _export_live_status(snapshot)
                 _decide_and_open(engine, online_model, market, repricing_signal, snapshot, tg)
             if (datetime.datetime.now(datetime.timezone.utc) - last_report_ts).total_seconds() > 3600:
                 report = stats_rep.generate_report()
@@ -128,6 +132,25 @@ def _log_signal(signal):
     os.makedirs(os.path.dirname(SIGNALS_LOG), exist_ok=True)
     with open(SIGNALS_LOG, "a") as f:
         f.write(json.dumps(signal.to_dict()) + "\n")
+
+def _export_live_status(snapshot):
+    """Mirrors the live BTC/ETH correlation (and a fresh timestamp the
+    dashboard can use as a poll-liveness signal) to a small JSON file --
+    LiveFeatureCollector's own state lives only in this process's memory and
+    is otherwise unreadable from a browser."""
+    import json
+    os.makedirs(os.path.dirname(LIVE_STATUS_FILE), exist_ok=True)
+    data = {
+        "btc_eth_correlation": snapshot.get("btc_eth_correlation"),
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    tmp_path = LIVE_STATUS_FILE + ".tmp"
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp_path, LIVE_STATUS_FILE)
+    except Exception as e:
+        logger.error(f"live status export error: {e}")
 
 if __name__ == "__main__":
     main()

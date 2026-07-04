@@ -1,3 +1,5 @@
+import datetime
+import json
 import logging
 import os
 import pickle
@@ -9,6 +11,7 @@ from sklearn.linear_model import SGDClassifier
 from config.settings import (
     KELLY_FRACTION_CAP, ONLINE_MODEL_STATE_FILE, ONLINE_MODEL_WARMUP_TRADES,
     ONLINE_MODEL_CONFIDENCE_THRESHOLD, ONLINE_MODEL_MAX_TRADE_USD,
+    ONLINE_MODEL_STATUS_FILE,
 )
 from core.kelly_criterion import net_odds_from_price, kelly_fraction
 from core.live_features import FEATURE_NAMES
@@ -188,9 +191,33 @@ class OnlineQuantModel:
             os.replace(tmp_path, self.state_path)
         except Exception as e:
             logger.error(f"OnlineQuantModel save error: {e}")
+        self._export_status()
+
+    def _export_status(self):
+        """Writes a small JSON mirror of the warmup/fit status a browser can
+        actually read -- the .pkl file above is a Python pickle and can't be
+        parsed client-side. Called after every save() and on load() so the
+        dashboard always reflects the model's real last-known state, not a
+        guess."""
+        status = {
+            "n_updates": self._n_updates,
+            "warmup_trades": self.warmup_trades,
+            "fitted": self._fitted,
+            "is_warmed_up": self.is_warmed_up(),
+            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        try:
+            os.makedirs(os.path.dirname(ONLINE_MODEL_STATUS_FILE), exist_ok=True)
+            tmp_path = ONLINE_MODEL_STATUS_FILE + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(status, f)
+            os.replace(tmp_path, ONLINE_MODEL_STATUS_FILE)
+        except Exception as e:
+            logger.error(f"OnlineQuantModel status export error: {e}")
 
     def _load(self):
         if not os.path.exists(self.state_path):
+            self._export_status()
             return
         try:
             with open(self.state_path, "rb") as f:
@@ -210,3 +237,4 @@ class OnlineQuantModel:
             self._pending = state.get("pending", {})
         except Exception as e:
             logger.error(f"OnlineQuantModel load error: {e}")
+        self._export_status()
