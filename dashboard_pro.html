@@ -56,11 +56,6 @@
     font-size: 8.5px; letter-spacing: 0.08em; color: var(--text-muted);
     border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; padding: 1px 5px;
   }
-  .field-na {
-    color: var(--text-muted);
-    font-size: 11px;
-    letter-spacing: 0.02em;
-  }
   .scanning {
     display: inline-block;
     color: var(--cyan);
@@ -242,7 +237,7 @@
   <span class="sep">|</span>
   <span>LATENCY <b id="hdr-latency" class="num">--</b></span>
   <span class="sep">|</span>
-  <span>GPU <span class="field-na" title="GPU monitoring is not available in this setup (CPU-only bot, no GPU telemetry source)">N/A</span></span>
+  <span>API <b id="hdr-api-calls" class="num">--</b></span>
   <span class="sep">|</span>
   <span>EXCHANGE <b id="hdr-exchange">--</b></span>
   <span class="sep">|</span>
@@ -408,6 +403,16 @@
                                    p99_ms/last_ms over a rolling 200-call
                                    window. Feeds the header bar's LATENCY
                                    field. Not used by any trading decision.
+   data/api_stats.json            NEW: written by core/market_fetcher.py
+                                   every API_STATS_EXPORT_INTERVAL_SEC (60s)
+                                   from the same _timed_get call-counter as
+                                   latency.json above -- calls_last_minute is
+                                   a genuine rolling-60s count of real
+                                   Polymarket HTTP calls, calls_total is the
+                                   lifetime counter since this process
+                                   started. Feeds the header bar's API
+                                   field (replaces the old GPU placeholder,
+                                   which had nothing real to show).
    data/fear_greed.json           NEW: written by run.py every 15 min from
                                    alternative.me's free Fear & Greed Index
                                    API (core/market_bias.py
@@ -529,13 +534,14 @@ async function loadLastMarketBias() {
 }
 async function loadExchangeStatus() { return await fetchJson('data/exchange_status.json'); }
 async function loadLatency() { return await fetchJson('data/latency.json'); }
+async function loadApiStats() { return await fetchJson('data/api_stats.json'); }
 async function loadFearGreed() { return await fetchJson('data/fear_greed.json'); }
 async function loadMacroEvents() { return await fetchJson('data/macro_events.json'); }
 async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bias.jsonl'); }
 async function loadSignalCombinerStatus() { return await fetchJson('data/signal_combiner_status.json'); }
 
 /* ---------------- 1. HEADER ---------------- */
-function renderHeader(state, exchangeStatus, latency, liveStatus) {
+function renderHeader(state, exchangeStatus, latency, liveStatus, apiStats) {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   document.getElementById('hdr-sync').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   const statusEl = document.getElementById('hdr-status');
@@ -543,6 +549,7 @@ function renderHeader(state, exchangeStatus, latency, liveStatus) {
   const streakEl = document.getElementById('hdr-streak');
   const exchEl = document.getElementById('hdr-exchange');
   const latEl = document.getElementById('hdr-latency');
+  const apiEl = document.getElementById('hdr-api-calls');
   const quantModeWrap = document.getElementById('hdr-quant-mode-wrap');
   quantModeWrap.innerHTML = (liveStatus && liveStatus.quant_only_mode === true)
     ? `<span class="quant-mode-badge">QUANT MODE</span>` : '';
@@ -557,6 +564,12 @@ function renderHeader(state, exchangeStatus, latency, liveStatus) {
     latEl.title = `avg ${latency.avg_ms}ms / p99 ${latency.p99_ms}ms over ${latency.sample_count} real Polymarket calls`;
   } else {
     latEl.innerHTML = noData();
+  }
+  if (apiStats && has(apiStats.calls_last_minute)) {
+    apiEl.textContent = apiStats.calls_last_minute + '/min';
+    apiEl.title = `${apiStats.calls_total} real Polymarket API calls total this session, last updated ${fmtClock(apiStats.last_updated)}`;
+  } else {
+    apiEl.innerHTML = noData();
   }
   if (!state) {
     statusEl.innerHTML = noData(); dailyEl.innerHTML = noData(); streakEl.innerHTML = noData();
@@ -1128,13 +1141,13 @@ function renderEquityCurve(m) {
    ============================================================================= */
 async function refresh() {
   const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus,
-         latency, fearGreed, macroEvents, biasHistory, combinerStatus] = await Promise.all([
+         latency, fearGreed, macroEvents, biasHistory, combinerStatus, apiStats] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
     loadLastBtcSignals(20), loadLastMarketBias(), loadExchangeStatus(),
     loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
-    loadSignalCombinerStatus(),
+    loadSignalCombinerStatus(), loadApiStats(),
   ]);
-  renderHeader(state, exchangeStatus, latency, liveStatus);
+  renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
   const portfolio = renderPortfolio(trades);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
   renderDecisionTimeline(liveStatus, state, trades, combinerStatus);

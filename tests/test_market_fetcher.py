@@ -399,3 +399,57 @@ def test_timed_get_records_a_sample_even_when_request_raises(mocker):
     except RuntimeError:
         pass
     assert len(fetcher._latencies_ms) == 1
+
+
+def test_timed_get_increments_api_call_count(mocker):
+    fetcher = MarketFetcher()
+    resp = mocker.Mock()
+    mocker.patch.object(fetcher.session, "get", return_value=resp)
+    mocker.patch.object(fetcher, "_export_latency_status")
+    mocker.patch.object(fetcher, "_export_api_stats")
+    fetcher._timed_get("http://example.test", timeout=5)
+    fetcher._timed_get("http://example.test", timeout=5)
+    assert fetcher.api_call_count == 2
+    assert len(fetcher._api_call_ts) == 2
+
+
+def test_export_api_stats_writes_calls_last_minute_and_total(tmp_path, mocker):
+    mocker.patch("core.market_fetcher.API_STATS_LOG", str(tmp_path / "api_stats.json"))
+    fetcher = MarketFetcher()
+    now = 1000.0
+    # 3 calls within the last 60s, 2 calls older than 60s
+    fetcher._api_call_ts = [now - 90, now - 70, now - 50, now - 10, now - 1]
+    fetcher.api_call_count = 5
+    fetcher._export_api_stats(now)
+    data = json.loads((tmp_path / "api_stats.json").read_text())
+    assert data["calls_last_minute"] == 3
+    assert data["calls_total"] == 5
+    assert "last_updated" in data
+
+
+def test_export_api_stats_prunes_stale_timestamps(mocker):
+    mocker.patch("core.market_fetcher.API_STATS_LOG", "unused")
+    fetcher = MarketFetcher()
+    now = 1000.0
+    fetcher._api_call_ts = [now - 90, now - 70, now - 50]
+    fetcher._export_api_stats(now)
+    assert fetcher._api_call_ts == [now - 50]
+
+
+def test_maybe_export_api_stats_skips_within_interval(mocker):
+    mocker.patch("core.market_fetcher.API_STATS_EXPORT_INTERVAL_SEC", 60)
+    fetcher = MarketFetcher()
+    export_mock = mocker.patch.object(fetcher, "_export_api_stats")
+    fetcher._last_api_stats_export = 1000.0
+    fetcher._maybe_export_api_stats(1030.0)  # only 30s elapsed
+    export_mock.assert_not_called()
+
+
+def test_maybe_export_api_stats_fires_after_interval(mocker):
+    mocker.patch("core.market_fetcher.API_STATS_EXPORT_INTERVAL_SEC", 60)
+    fetcher = MarketFetcher()
+    export_mock = mocker.patch.object(fetcher, "_export_api_stats")
+    fetcher._last_api_stats_export = 1000.0
+    fetcher._maybe_export_api_stats(1065.0)  # 65s elapsed
+    export_mock.assert_called_once_with(1065.0)
+    assert fetcher._last_api_stats_export == 1065.0

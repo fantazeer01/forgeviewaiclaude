@@ -6,7 +6,10 @@ import time
 import os
 import statistics
 from typing import Optional
-from config.settings import POLYMARKET_GAMMA_BASE, POLYMARKET_API_BASE, LATENCY_LOG, LATENCY_WINDOW
+from config.settings import (
+    POLYMARKET_GAMMA_BASE, POLYMARKET_API_BASE, LATENCY_LOG, LATENCY_WINDOW,
+    API_STATS_LOG, API_STATS_EXPORT_INTERVAL_SEC,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +24,52 @@ class MarketFetcher:
         self.session = requests.Session()
         self.session.headers.update({"Accept": "application/json"})
         self._latencies_ms: list[float] = []
+        self.api_call_count = 0
+        self._api_call_ts: list[float] = []
+        self._last_api_stats_export = 0.0
 
     def _timed_get(self, url, **kwargs):
         """Every real Polymarket HTTP call in this class goes through here so
         data/latency.json reflects genuinely measured round-trip time, not a
         guess -- used only by the dashboard's LATENCY widget, never on any
-        trading-critical decision path."""
+        trading-critical decision path. Also the single point where every
+        real API call is counted for data/api_stats.json (header bar's API
+        calls/min field)."""
         start = time.monotonic()
+        self._record_api_call(start)
         try:
             return self.session.get(url, **kwargs)
         finally:
             elapsed_ms = (time.monotonic() - start) * 1000
             self._record_latency(elapsed_ms)
+
+    def _record_api_call(self, now: float):
+        self.api_call_count += 1
+        self._api_call_ts.append(now)
+        self._maybe_export_api_stats(now)
+
+    def _maybe_export_api_stats(self, now: float):
+        if now - self._last_api_stats_export < API_STATS_EXPORT_INTERVAL_SEC:
+            return
+        self._last_api_stats_export = now
+        self._export_api_stats(now)
+
+    def _export_api_stats(self, now: float):
+        cutoff = now - 60
+        self._api_call_ts = [t for t in self._api_call_ts if t > cutoff]
+        data = {
+            "calls_last_minute": len(self._api_call_ts),
+            "calls_total": self.api_call_count,
+            "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        try:
+            os.makedirs(os.path.dirname(API_STATS_LOG), exist_ok=True)
+            tmp_path = API_STATS_LOG + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp_path, API_STATS_LOG)
+        except Exception as e:
+            logger.error(f"api stats export error: {e}")
 
     def _record_latency(self, elapsed_ms: float):
         self._latencies_ms.append(elapsed_ms)
