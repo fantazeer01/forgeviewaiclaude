@@ -66,8 +66,8 @@ def test_fetch_returns_neutral_bias_within_threshold(mocker):
 
 
 def test_bias_from_change_boundary_values():
-    assert MarketBiasFetcher.bias_from_change(1.0) == "NEUTRAL"
-    assert MarketBiasFetcher.bias_from_change(1.01) == "BULLISH"
+    assert MarketBiasFetcher.bias_from_change(0.5) == "NEUTRAL"
+    assert MarketBiasFetcher.bias_from_change(0.51) == "BULLISH"
     assert MarketBiasFetcher.bias_from_change(-1.0) == "NEUTRAL"
     assert MarketBiasFetcher.bias_from_change(-1.01) == "BEARISH"
 

@@ -56,6 +56,11 @@
     font-size: 8.5px; letter-spacing: 0.08em; color: var(--text-muted);
     border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; padding: 1px 5px;
   }
+  .field-na {
+    color: var(--text-muted);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
   .scanning {
     display: inline-block;
     color: var(--cyan);
@@ -237,7 +242,7 @@
   <span class="sep">|</span>
   <span>LATENCY <b id="hdr-latency" class="num">--</b></span>
   <span class="sep">|</span>
-  <span>GPU <span class="no-data">NO DATA</span></span>
+  <span>GPU <span class="field-na" title="GPU monitoring is not available in this setup (CPU-only bot, no GPU telemetry source)">N/A</span></span>
   <span class="sep">|</span>
   <span>EXCHANGE <b id="hdr-exchange">--</b></span>
   <span class="sep">|</span>
@@ -730,7 +735,7 @@ function tlNode(name, cls, label) {
 // the flow-dot animation only ever plays when a NEW signal has genuinely
 // fired (state.last_signal_ts changed), never on a timer or decoratively
 let _lastSeenSignalTs = undefined;
-function renderDecisionTimeline(liveStatus, state, trades) {
+function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
   const wrap = document.getElementById('timeline-body');
   const parts = [];
 
@@ -752,12 +757,16 @@ function renderDecisionTimeline(liveStatus, state, trades) {
     }
   }
 
-  // REPRICING DETECTOR: free to fire iff at least one tracked asset isn't in cooldown
-  if (!state) {
-    parts.push(tlNode('REPRICING DETECTOR', 'nodata', 'NO DATA'));
+  // SIGNAL COMBINER: quant-only mode's real trading input (repricing was
+  // fully disabled, see QUANT_ONLY_MODE) -- active iff data/signal_combiner_
+  // status.json exists and was updated recently (the combiner runs every
+  // poll tick regardless of whether any individual signal fires).
+  if (!combinerStatus) {
+    parts.push(tlNode('SIGNAL COMBINER', 'nodata', 'NO DATA'));
   } else {
-    const anyReady = TRACKED_ASSETS.some(a => assetCooldown(state, a).ready);
-    parts.push(tlNode('REPRICING DETECTOR', anyReady ? 'active' : 'blocked', anyReady ? 'ACTIVE' : 'COOLDOWN'));
+    const age = fmtAge(combinerStatus.updated_at);
+    const fresh = age != null && age < STALE_AFTER_MS;
+    parts.push(tlNode('SIGNAL COMBINER', fresh ? 'active' : 'blocked', fresh ? 'ACTIVE' : 'INACTIVE'));
   }
 
   // RISK CHECK: system_stopped flag
@@ -1128,7 +1137,7 @@ async function refresh() {
   renderHeader(state, exchangeStatus, latency, liveStatus);
   const portfolio = renderPortfolio(trades);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
-  renderDecisionTimeline(liveStatus, state, trades);
+  renderDecisionTimeline(liveStatus, state, trades, combinerStatus);
   renderReasoning(trades, onlineStatus);
   renderCorrelation(liveStatus, biasHistory);
   renderTradeTable(trades);
