@@ -104,7 +104,7 @@
     max-width: 1900px; margin: 0 auto; padding: 12px;
     display: grid;
     grid-template-columns: 300px 1fr 380px;
-    grid-template-rows: 360px 360px 280px 200px;
+    grid-template-rows: 360px 360px 280px 200px 130px 300px 280px;
     gap: 12px;
   }
   @media (max-width: 1200px) {
@@ -219,6 +219,53 @@
   .chart-caption {
     font-size: 9px; color: var(--text-muted); padding: 4px 12px 8px; border-top: 1px solid var(--grid);
   }
+
+  /* ---- execution cycle ---- */
+  .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 18px; }
+  .exec-step {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    position: relative; z-index: 1;
+  }
+  .exec-step .dot {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 2px solid var(--border-hi); background: var(--panel);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--text-muted); font-weight: 800;
+    transition: all 0.3s ease;
+  }
+  .exec-step .label { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+  .exec-step .detail { font-size: 9px; color: var(--text-muted); max-width: 140px; text-align: center; min-height: 11px; }
+  .exec-step.done .dot { border-color: rgba(0,255,65,0.4); color: var(--green); background: rgba(0,255,65,0.06); }
+  .exec-step.done .label { color: var(--text-secondary); }
+  .exec-step.current .dot {
+    border-color: var(--green); color: #05070A; background: var(--green);
+    box-shadow: 0 0 14px rgba(0,255,65,0.55);
+    animation: execPulse 1.3s ease-in-out infinite;
+  }
+  .exec-step.current .label { color: var(--green); }
+  .exec-step.current .detail { color: var(--text-primary); }
+  @keyframes execPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+  .exec-connector { flex: 0 0 auto; width: 40px; height: 2px; background: var(--border); margin: 0 -6px 22px; position: relative; }
+  .exec-connector.done { background: rgba(0,255,65,0.4); }
+
+  /* ---- strategy decision tree ---- */
+  #tree-edge-line { font-size: 10px; color: var(--text-secondary); padding: 6px 12px; border-bottom: 1px solid var(--grid); }
+  #tree-edge-line b { color: var(--text-primary); }
+  .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
+  .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
+  .tree-node-label { font-size: 10px; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-node-sub { font-size: 9px; fill: var(--text-muted); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
+  .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
+
+  /* ---- monte carlo ---- */
+  .mc-stats { display: flex; gap: 18px; padding: 8px 12px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); }
+  .mc-stat .mc-label { font-size: 9px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .mc-stat .mc-value { font-size: 15px; font-weight: 800; }
+
+  /* ---- pace ---- */
+  .pace-hero { font-size: 22px; font-weight: 800; }
+  .pace-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -343,6 +390,43 @@
     </div>
   </div>
 
+  <!-- ROW 5: EXECUTION CYCLE (full width) -->
+  <div class="panel" style="grid-column: 1 / span 3; grid-row:5;">
+    <div class="panel-head">
+      <div class="panel-title">Execution Cycle</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="panel-body" id="exec-cycle-body"></div>
+  </div>
+
+  <!-- ROW 6: STRATEGY DECISION TREE (full width) -->
+  <div class="panel" style="grid-column: 1 / span 3; grid-row:6;">
+    <div class="panel-head">
+      <div class="panel-title">Strategy Decision Tree</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div id="tree-edge-line"></div>
+    <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
+  </div>
+
+  <!-- ROW 7: MONTE CARLO | PACE -->
+  <div class="panel" style="grid-column: 1 / span 2; grid-row:7;">
+    <div class="panel-head">
+      <div class="panel-title">Monte Carlo &middot; 1000 Simulated Paths (Real Win Rate/Avg Win/Avg Loss)</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="mc-stats" id="mc-stats"></div>
+    <div class="chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
+  </div>
+
+  <div class="panel" style="grid-column:3; grid-row:7;">
+    <div class="panel-head">
+      <div class="panel-title">Pace</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="panel-body" id="pace-body"></div>
+  </div>
+
 </div>
 
 <script>
@@ -432,6 +516,16 @@
                                    Polymarket contract-price correlation
                                    above it (different underlying series,
                                    not directly comparable).
+   data/execution_cycle.json      NEW: written by run.py at each real stage
+                                   of the scan->detect->validate->size->fill
+                                   pipeline (_export_execution_cycle), plus a
+                                   separate settle event when a trade closes.
+                                   Feeds the Execution Cycle panel. This is a
+                                   live pointer to the single most-recent
+                                   stage reached across any market, not a
+                                   per-trade history -- most ticks only ever
+                                   reach "scan" (no signal that tick), which
+                                   is the honest common case.
    -----------------------------------------------------------------------------
    If a source file is missing, unreachable, or a specific field inside it is
    null, the corresponding widget renders NO DATA. Nothing is invented.
@@ -440,7 +534,7 @@
 const REFRESH_MS = 5000;
 const TRACKED_ASSETS = ['BTC', 'ETH']; // SOL is explicitly out of scope (config REPRICING_FROZEN.assets)
 const SIGNAL_COOLDOWN_SEC = 120; // mirrors config/settings.py -- keep in sync if that changes
-const MAX_DAILY_LOSS_USD = 10000.0;
+const MAX_DAILY_LOSS_USD = 1000.0; // mirrors config/settings.py -- keep in sync if that changes
 const MAX_LOSS_STREAK = 50;
 const STALE_AFTER_MS = 15000; // how old a telemetry file's timestamp can be before we call it stale, not "active"
 
@@ -535,6 +629,7 @@ async function loadLastMarketBias() {
 async function loadExchangeStatus() { return await fetchJson('data/exchange_status.json'); }
 async function loadLatency() { return await fetchJson('data/latency.json'); }
 async function loadApiStats() { return await fetchJson('data/api_stats.json'); }
+async function loadExecutionCycle() { return await fetchJson('data/execution_cycle.json'); }
 async function loadFearGreed() { return await fetchJson('data/fear_greed.json'); }
 async function loadMacroEvents() { return await fetchJson('data/macro_events.json'); }
 async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bias.jsonl'); }
@@ -1011,7 +1106,233 @@ function renderSignalCombiner(status) {
   }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the 0.45-0.60 yes_price band (D-002).</td></tr>`;
 }
 
-/* ---------------- 8. BTC CANDLESTICK (real, single-sample-per-signal) ---------------- */
+/* ---------------- 9. EXECUTION CYCLE ---------------- */
+const EXEC_STAGES = ['scan', 'detect', 'validate', 'size', 'fill', 'settle'];
+function renderExecutionCycle(cycle) {
+  const wrap = document.getElementById('exec-cycle-body');
+  if (!cycle || !cycle.stage) {
+    wrap.innerHTML = noData();
+    return;
+  }
+  const idx = EXEC_STAGES.indexOf(cycle.stage);
+  const age = fmtAge(cycle.updated_at);
+  // fill/settle events are naturally sparse (a real trade doesn't open every
+  // tick), so this panel uses a wider staleness window than the 15s
+  // STALE_AFTER_MS other freshness-based widgets use for constantly-ticking
+  // telemetry -- otherwise every real fill would look "stale" within seconds.
+  const fresh = age != null && age < STALE_AFTER_MS * 8;
+  let row = '<div class="exec-cycle-row">';
+  EXEC_STAGES.forEach((stage, i) => {
+    if (i > 0) row += `<div class="exec-connector ${fresh && i <= idx ? 'done' : ''}"></div>`;
+    const isCurrent = fresh && i === idx;
+    const isDone = fresh && i < idx;
+    const cls = isCurrent ? 'current' : (isDone ? 'done' : '');
+    row += `<div class="exec-step ${cls}">
+      <div class="dot">${i + 1}</div>
+      <div class="label">${stage}</div>
+      <div class="detail">${isCurrent ? (cycle.detail || '') : ''}</div>
+    </div>`;
+  });
+  row += '</div>';
+  const captionText = fresh
+    ? `last stage: <b>${cycle.stage.toUpperCase()}</b>${cycle.asset ? ' &middot; ' + cycle.asset : ''} &middot; ${fmtClock(cycle.updated_at)}. Reflects the single most recent real event across any market -- most ticks only reach SCAN (no signal that tick), and SETTLE reflects whichever trade closed most recently, not necessarily the one that just filled.`
+    : `stale &mdash; last real event was ${fmtClock(cycle.updated_at)}. Bot may be idle or between ticks.`;
+  wrap.innerHTML = row + `<div class="chart-caption" style="border-top:none;">${captionText}</div>`;
+}
+
+/* ---------------- 10. STRATEGY DECISION TREE (animated SVG) ---------------- */
+const TREE_NODES = {
+  tick:       { x: 60,  y: 100, label: 'TICK' },
+  scan:       { x: 190, y: 100, label: 'SCAN' },
+  classify:   { x: 320, y: 100, label: 'CLASSIFY' },
+  order_book: { x: 460, y: 40,  label: 'ORDER BOOK' },
+  momentum:   { x: 460, y: 100, label: 'MOMENTUM' },
+  volume:     { x: 460, y: 160, label: 'VOLUME' },
+  size:       { x: 620, y: 100, label: 'SIZE' },
+  fill:       { x: 750, y: 100, label: 'FILL' },
+  pnl:        { x: 900, y: 100, label: 'P&L' },
+};
+const TREE_EDGES = [
+  ['tick', 'scan'], ['scan', 'classify'],
+  ['classify', 'order_book'], ['classify', 'momentum'], ['classify', 'volume'],
+  ['order_book', 'size'], ['momentum', 'size'], ['volume', 'size'],
+  ['size', 'fill'], ['fill', 'pnl'],
+];
+let _lastSeenTreeFillTs = undefined;
+function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus) {
+  const wrap = document.getElementById('tree-svg-wrap');
+  const edgeLine = document.getElementById('tree-edge-line');
+  const btcStatus = combinerStatus ? combinerStatus.BTC : null;
+
+  if (btcStatus) {
+    const fmtSig = s => (s && s.fired) ? `<span class="up">${(s.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted);">--</span>';
+    const combinedText = btcStatus.correlation_filter_blocked ? '<span class="down">BLOCKED</span>'
+      : btcStatus.price_out_of_band ? '<span style="color:var(--yellow);">OUT OF BAND</span>'
+      : has(btcStatus.combined_confidence) ? `<span class="${btcStatus.fired ? 'up' : ''}">${(btcStatus.combined_confidence * 100).toFixed(0)}%</span>`
+      : '<span style="color:var(--cyan);">scanning</span>';
+    edgeLine.innerHTML = `BTC edge confidence &middot; Order Book: ${fmtSig(btcStatus.order_book)} &nbsp; Momentum: ${fmtSig(btcStatus.momentum)} &nbsp; Volume: ${fmtSig(btcStatus.volume)} &nbsp; Combined: ${combinedText}`;
+  } else {
+    edgeLine.innerHTML = noData();
+  }
+
+  const liveFresh = !!(liveStatus && (() => { const a = fmtAge(liveStatus.updated_at); return a != null && a < STALE_AFTER_MS; })());
+  const cycleFresh = !!(executionCycle && (() => { const a = fmtAge(executionCycle.updated_at); return a != null && a < STALE_AFTER_MS * 8; })());
+  const cycleStage = cycleFresh ? executionCycle.stage : null;
+
+  const active = {
+    tick: liveFresh,
+    scan: liveFresh,
+    classify: !!btcStatus,
+    order_book: !!(btcStatus && btcStatus.order_book && btcStatus.order_book.fired),
+    momentum: !!(btcStatus && btcStatus.momentum && btcStatus.momentum.fired),
+    volume: !!(btcStatus && btcStatus.volume && btcStatus.volume.fired),
+    size: cycleStage === 'size' || cycleStage === 'fill',
+    fill: cycleStage === 'fill',
+    pnl: !!(portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length > 0),
+  };
+
+  let svg = `<svg viewBox="0 0 960 200" preserveAspectRatio="xMidYMid meet">`;
+  TREE_EDGES.forEach(([a, b]) => {
+    const n1 = TREE_NODES[a], n2 = TREE_NODES[b];
+    const lit = active[a] && active[b];
+    svg += `<line class="tree-edge" x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" stroke="${lit ? 'rgba(0,255,65,0.55)' : 'var(--border-hi)'}"/>`;
+  });
+  Object.entries(TREE_NODES).forEach(([key, n]) => {
+    const isActive = active[key];
+    const isPnl = key === 'pnl';
+    const r = isPnl ? 34 : 20;
+    const fill = isActive ? 'rgba(0,255,65,0.15)' : '#10161D';
+    const stroke = isActive ? '#00FF41' : 'rgba(255,255,255,0.18)';
+    svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`;
+    if (isPnl) {
+      const last = (portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length)
+        ? portfolio.sortedClosed[portfolio.sortedClosed.length - 1] : null;
+      const pnlText = last ? fmtUsd(last.pnl_usd) : 'NO DATA';
+      const pnlColor = last ? (last.pnl_usd >= 0 ? '#00FF41' : '#FF3B3B') : '#4E5A66';
+      svg += `<text x="${n.x}" y="${n.y - 4}" text-anchor="middle" fill="${pnlColor}" font-size="13" font-weight="800" font-family="ui-monospace, monospace">${pnlText}</text>`;
+      svg += `<text x="${n.x}" y="${n.y + 12}" class="tree-node-sub">last trade</text>`;
+    } else {
+      svg += `<text x="${n.x}" y="${n.y + r + 14}" class="tree-node-label">${n.label}</text>`;
+    }
+  });
+  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="5" fill="#00FF41" opacity="0">`
+       + `<animateMotion id="tree-flow-motion" path="M 60 100 L 900 100" dur="1.8s" begin="indefinite" fill="freeze"/>`
+       + `<animate id="tree-flow-opacity" attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.9;1" dur="1.8s" begin="indefinite" fill="freeze"/>`
+       + `</circle>`;
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+
+  // Only animate the traveling dot on a genuinely new FILL event (a real
+  // trade actually opened), never decoratively or on a timer -- mirrors the
+  // Decision Timeline's flow-dot discipline.
+  const lastFillTs = (executionCycle && executionCycle.stage === 'fill') ? executionCycle.updated_at : null;
+  if (lastFillTs && lastFillTs !== _lastSeenTreeFillTs) {
+    const isFirstPaint = _lastSeenTreeFillTs === undefined;
+    _lastSeenTreeFillTs = lastFillTs;
+    if (!isFirstPaint) {
+      const motion = document.getElementById('tree-flow-motion');
+      const opacityAnim = document.getElementById('tree-flow-opacity');
+      if (motion && opacityAnim) { motion.beginElement(); opacityAnim.beginElement(); }
+    }
+  }
+}
+
+/* ---------------- 11. MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss, 1000 simulated paths) ---------------- */
+function computeMonteCarlo(m) {
+  if (!m || !m.wins.length || !m.losses.length) return null;
+  const n = Math.min(m.closed.length, 5000);
+  const winRate = m.winRate, avgWin = m.avgWin, avgLoss = m.avgLoss;
+  const PATHS = 1000;
+  const finals = new Array(PATHS);
+  for (let p = 0; p < PATHS; p++) {
+    let total = 0;
+    for (let t = 0; t < n; t++) {
+      total += (Math.random() < winRate) ? avgWin : -avgLoss;
+    }
+    finals[p] = total;
+  }
+  finals.sort((a, b) => a - b);
+  const pct = frac => finals[Math.min(finals.length - 1, Math.max(0, Math.floor(frac * (finals.length - 1))))];
+  const mean = finals.reduce((s, v) => s + v, 0) / finals.length;
+  return { finals, n, p05: pct(0.05), p01: pct(0.01), mean };
+}
+function renderMonteCarlo(portfolio) {
+  const statsEl = document.getElementById('mc-stats');
+  const canvas = document.getElementById('mc-canvas');
+  const mc = computeMonteCarlo(portfolio);
+  if (!mc) {
+    statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
+    const { ctx, w, h } = resizeCanvasToParent(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
+    return;
+  }
+  statsEl.innerHTML = `
+    <div class="mc-stat"><div class="mc-label">Simulated Over</div><div class="mc-value num">${mc.n} trades &times; 1000 paths</div></div>
+    <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
+    <div class="mc-stat"><div class="mc-label">5th Percentile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
+    <div class="mc-stat"><div class="mc-label">P&lt;0.01 (99% VaR)</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
+  `;
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+  const pad = 26, BINS = 24;
+  const min = mc.finals[0], max = mc.finals[mc.finals.length - 1];
+  const span = (max - min) || 1;
+  const counts = new Array(BINS).fill(0);
+  mc.finals.forEach(v => {
+    let idx = Math.floor(((v - min) / span) * BINS);
+    idx = Math.max(0, Math.min(BINS - 1, idx));
+    counts[idx]++;
+  });
+  const maxCount = Math.max(...counts);
+  const plotW = w - pad * 2, plotH = h - pad * 2;
+  const barW = plotW / BINS;
+  for (let i = 0; i < BINS; i++) {
+    const binStart = min + (i / BINS) * span;
+    const barH = (counts[i] / maxCount) * plotH;
+    ctx.fillStyle = binStart >= 0 ? 'rgba(0,255,65,0.55)' : 'rgba(255,59,59,0.55)';
+    ctx.fillRect(pad + i * barW + 1, h - pad - barH, Math.max(1, barW - 2), barH);
+  }
+  const zeroX = pad + ((0 - min) / span) * plotW;
+  if (zeroX >= pad && zeroX <= w - pad) {
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath(); ctx.moveTo(zeroX, pad); ctx.lineTo(zeroX, h - pad); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '9px ui-monospace, monospace';
+  ctx.fillText(fmtUsd(min), pad, h - 8);
+  ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
+}
+
+/* ---------------- 12. PACE ---------------- */
+function renderPace(portfolio, state) {
+  const wrap = document.getElementById('pace-body');
+  if (!portfolio || !state || !state.session_start) {
+    wrap.innerHTML = noData();
+    return;
+  }
+  const sessionStartMs = new Date(state.session_start).getTime();
+  const hoursRunning = (Date.now() - sessionStartMs) / 3600000;
+  if (!(hoursRunning > 0)) {
+    wrap.innerHTML = noData('SESSION JUST STARTED');
+    return;
+  }
+  const pace = portfolio.totalPnl / hoursRunning;
+  const daily = pace * 24, weekly = pace * 24 * 7;
+  wrap.innerHTML = `
+    <div class="pace-hero num ${pace >= 0 ? 'up' : 'down'}">${fmtUsd(pace)}/hr</div>
+    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h running session (started ${fmtClock(state.session_start)})</div>
+    <div class="metric-list">
+      <div class="metric-row"><span class="label">Projected Daily</span><span class="value num ${daily >= 0 ? 'up' : 'down'}">${fmtUsd(daily)}</span></div>
+      <div class="metric-row"><span class="label">Projected Weekly</span><span class="value num ${weekly >= 0 ? 'up' : 'down'}">${fmtUsd(weekly)}</span></div>
+      <div class="metric-row"><span class="label">Total PnL (all-time)</span><span class="value num">${fmtUsd(portfolio.totalPnl)}</span></div>
+    </div>
+    <div class="pace-sub" style="margin-top:8px;">Linear extrapolation from all-time realized PnL over this session's runtime &mdash; not a forecast guarantee, and will look inflated right after a bot restart when hours_running is still small.</div>
+  `;
+}
+
+/* ---------------- 13. BTC CANDLESTICK (real, single-sample-per-signal) ---------------- */
 function resizeCanvasToParent(canvas) {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
@@ -1084,7 +1405,7 @@ function renderCandlestick(signals) {
   ctx.fillText(last.features.yes_price.toFixed(3), pad.l + plotW + 4, y(last.features.yes_price) + 3);
 }
 
-/* ---------------- 9. EQUITY CURVE (real, all trades) ---------------- */
+/* ---------------- 14. EQUITY CURVE (real, all trades) ---------------- */
 function renderEquityCurve(m) {
   const canvas = document.getElementById('equity-canvas');
   const { ctx, w, h } = resizeCanvasToParent(canvas);
@@ -1144,11 +1465,11 @@ function renderEquityCurve(m) {
    ============================================================================= */
 async function refresh() {
   const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus,
-         latency, fearGreed, macroEvents, biasHistory, combinerStatus, apiStats] = await Promise.all([
+         latency, fearGreed, macroEvents, biasHistory, combinerStatus, apiStats, executionCycle] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
     loadLastBtcSignals(20), loadLastMarketBias(), loadExchangeStatus(),
     loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
-    loadSignalCombinerStatus(), loadApiStats(),
+    loadSignalCombinerStatus(), loadApiStats(), loadExecutionCycle(),
   ]);
   renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
   const portfolio = renderPortfolio(trades);
@@ -1160,10 +1481,15 @@ async function refresh() {
   renderCandlestick(btcSignals);
   renderEquityCurve(portfolio);
   renderSignalCombiner(combinerStatus);
+  renderExecutionCycle(executionCycle);
+  renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus);
+  renderMonteCarlo(portfolio);
+  renderPace(portfolio, state);
 }
 
 new ResizeObserver(() => refresh()).observe(document.getElementById('candle-wrap'));
 new ResizeObserver(() => refresh()).observe(document.getElementById('equity-wrap'));
+new ResizeObserver(() => refresh()).observe(document.getElementById('mc-chart-wrap'));
 
 refresh();
 setInterval(refresh, REFRESH_MS);

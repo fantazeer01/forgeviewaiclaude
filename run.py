@@ -12,7 +12,7 @@ from config.settings import (
     MARKET_POLL_INTERVAL_SEC,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
-    QUANT_ONLY_MODE,
+    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -76,6 +76,8 @@ def main():
             signal_gen.resolve_pending()
             markets = fetcher.get_active_5min_markets()
             for market in markets:
+                _export_execution_cycle("scan", asset=market["asset"], market_id=market["market_id"],
+                                         detail="scanning market for signals")
                 live_features.update(market["market_id"], market["asset"], market["yes_price"], market["no_price"])
                 # kept only for its shadow-logging side effect (data/quant_features.jsonl via the
                 # old static QuantModel) -- its return value is NOT used for trading decisions in
@@ -86,6 +88,9 @@ def main():
                 combined_signal = signal_combiner.combine(
                     market, fetcher, snapshot.get("btc_eth_correlation"),
                 )
+                if combined_signal is not None:
+                    _export_execution_cycle("detect", asset=combined_signal.asset,
+                                             market_id=combined_signal.market_id, detail=combined_signal.reason)
                 _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg)
             if (datetime.datetime.now(datetime.timezone.utc) - last_report_ts).total_seconds() > 3600:
                 report = stats_rep.generate_report()
@@ -105,6 +110,7 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
     should_trade, direction, win_probability, reason = online_model.decide(snapshot, combined_signal)
     if not should_trade:
         return None
+    _export_execution_cycle("validate", asset=market["asset"], market_id=market["market_id"], detail=reason)
     if online_model.is_warmed_up():
         signal = RepricingSignal(
             asset=market["asset"], market_id=market["market_id"], direction=direction,
@@ -113,6 +119,8 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             minutes_remaining=market.get("minutes_remaining", 5.0),
         )
         size_usd = online_model.kelly_size(combined_signal.confidence)
+        _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
+                                 size_usd=size_usd, detail=f"sized at ${size_usd:.2f}")
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)
     else:
         # warm-up bootstrap fallback: the model has no training data of its own
@@ -126,6 +134,8 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         signal = combined_signal
         trade = engine.open_trade(signal, source="repricing")
     if trade:
+        _export_execution_cycle("fill", asset=trade.asset, market_id=trade.market_id, trade_id=trade.trade_id,
+                                 size_usd=trade.size_usd, detail=f"{trade.direction} @ {trade.entry_price:.3f}")
         online_model.record_features(trade.market_id, snapshot)
         tg.send_signal(signal, trade)
         _log_signal(signal)
@@ -148,6 +158,9 @@ def _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep, online_model
             continue
         closed = engine.close_trade(trade.market_id, outcome)
         if closed:
+            _export_execution_cycle("settle", asset=closed.asset, market_id=closed.market_id,
+                                     trade_id=closed.trade_id, pnl_usd=closed.pnl_usd,
+                                     detail=f"{closed.result} pnl={closed.pnl_usd:+.2f}")
             online_model.resolve(closed.market_id, 1 if closed.result == "WIN" else 0)
             tg.send_close(closed, tracker.compute_stats())
             logger.info(stats_rep.generate_report())
@@ -276,6 +289,34 @@ def _export_live_status(snapshot):
         os.replace(tmp_path, LIVE_STATUS_FILE)
     except Exception as e:
         logger.error(f"live status export error: {e}")
+
+def _export_execution_cycle(stage: str, asset=None, market_id=None, trade_id=None,
+                             size_usd=None, pnl_usd=None, detail=""):
+    """Writes the single most-recently-reached real pipeline stage (scan ->
+    detect -> validate -> size -> fill, plus a separate settle event when a
+    trade closes) for the dashboard's animated Execution Cycle panel. This is
+    a live pointer, not a per-trade history -- most ticks only ever reach
+    "scan" since most markets don't produce a signal, which is the honest
+    common case, not a bug."""
+    import json
+    data = {
+        "stage": stage,
+        "asset": asset,
+        "market_id": market_id,
+        "trade_id": trade_id,
+        "size_usd": size_usd,
+        "pnl_usd": pnl_usd,
+        "detail": detail,
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    try:
+        os.makedirs(os.path.dirname(EXECUTION_CYCLE_FILE), exist_ok=True)
+        tmp_path = EXECUTION_CYCLE_FILE + ".tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp_path, EXECUTION_CYCLE_FILE)
+    except Exception as e:
+        logger.error(f"execution cycle export error: {e}")
 
 if __name__ == "__main__":
     main()

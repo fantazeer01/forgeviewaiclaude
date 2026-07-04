@@ -144,3 +144,10 @@ SIGNAL_COMBINER_MAX_YES_PRICE = 0.60
 # for trading decisions.
 QUANT_ONLY_MODE = True
 SIGNAL_COMBINER_STATUS_FILE = "data/signal_combiner_status.json"
+
+# Execution cycle telemetry: written by run.py at each real stage of the
+# scan->detect->validate->size->fill pipeline (plus a separate settle event
+# when a trade closes), feeding the dashboard's animated Execution Cycle
+# panel. Always reflects whichever stage was most recently reached across
+# any market on this tick -- not a per-trade history, just a live pointer.
+EXECUTION_CYCLE_FILE = "data/execution_cycle.json"
