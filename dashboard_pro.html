@@ -994,18 +994,21 @@ function renderSignalCombiner(status) {
   body.innerHTML = assets.map(asset => {
     const s = status[asset];
     const blocked = s.correlation_filter_blocked;
+    const priceFiltered = s.price_out_of_band;
     const combinedCell = blocked
       ? `<span class="down">BLOCKED</span>`
+      : priceFiltered
+      ? `<span style="color:var(--yellow);">OUT OF PRICE BAND</span>`
       : (has(s.combined_confidence) ? `<span class="${s.fired ? 'up' : ''}">${(s.combined_confidence * 100).toFixed(0)}%${s.fired ? ' FIRE' : ''}</span>` : scanning());
     return `<tr class="${s.fired ? 'win' : ''}">
       <td class="plain">${asset}</td>
-      <td class="plain">${signalCell(s.order_book)}</td>
-      <td class="plain">${signalCell(s.momentum)}</td>
-      <td class="plain">${signalCell(s.volume)}</td>
+      <td class="plain">${priceFiltered ? '<span style="color:var(--yellow);">skipped</span>' : signalCell(s.order_book)}</td>
+      <td class="plain">${priceFiltered ? '<span style="color:var(--yellow);">skipped</span>' : signalCell(s.momentum)}</td>
+      <td class="plain">${priceFiltered ? '<span style="color:var(--yellow);">skipped</span>' : signalCell(s.volume)}</td>
       <td class="plain">${blocked ? '<span class="down">BLOCKED</span>' : '<span class="up">clear</span>'}</td>
       <td class="plain">${combinedCell}</td>
     </tr>`;
-  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header).</td></tr>`;
+  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the 0.45-0.60 yes_price band (D-002).</td></tr>`;
 }
 
 /* ---------------- 8. BTC CANDLESTICK (real, single-sample-per-signal) ---------------- */

@@ -124,6 +124,16 @@ SIGNAL_COMBINER_WEIGHTS = {
     "volume": 0.15,
 }
 SIGNAL_COMBINER_THRESHOLD = 0.60
+# BUG FIX (2026-07-04): REPRICING_FROZEN.min_yes_price/max_yes_price (0.45/0.60)
+# was NEVER enforced on the live quant-only trading path -- order_book_signal,
+# momentum_signal, and volume_signal all ignore yes_price entirely, so trades
+# were firing at prices like 0.165/0.345/0.375 that docs/polymarket/DECISIONS.md
+# D-002 found have a materially lower win rate than the 0.45-0.60 band. These
+# constants are enforced directly in SignalCombiner.combine() (see
+# core/signal_combiner.py), independent of REPRICING_FROZEN (which belongs to
+# the now-disabled legacy repricing detector and must stay untouched for it).
+SIGNAL_COMBINER_MIN_YES_PRICE = 0.45
+SIGNAL_COMBINER_MAX_YES_PRICE = 0.60
 
 # Quant-only mode: the repricing detector is fully disabled as a live trading
 # input. Trades require BOTH online_model's own calibrated p > 0.5 AND

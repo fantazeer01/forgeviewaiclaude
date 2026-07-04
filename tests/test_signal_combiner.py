@@ -148,6 +148,32 @@ def test_signal_stats_accumulates_across_multiple_combine_calls(combiner):
     assert data["signal_stats"]["order_book"]["fired_today"] == 2
 
 
+def test_price_below_band_blocks_combine_entirely(combiner):
+    import json
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}  # would otherwise fire at 0.95
+    result = combiner.combine(make_market(yes_price=0.30, no_price=0.70), FakeFetcher(top), btc_eth_correlation=None)
+    assert result is None
+    with open(combiner.status_path) as f:
+        data = json.load(f)
+    assert data["BTC"]["price_out_of_band"] is True
+    assert data["BTC"]["fired"] is False
+    assert data["BTC"]["order_book"]["fired"] is False  # signal never even evaluated
+
+
+def test_price_above_band_blocks_combine_entirely(combiner):
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+    result = combiner.combine(make_market(yes_price=0.75, no_price=0.25), FakeFetcher(top), btc_eth_correlation=None)
+    assert result is None
+
+
+def test_price_at_band_edges_is_not_filtered(combiner):
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+    result_low = combiner.combine(make_market(yes_price=0.45, no_price=0.55), FakeFetcher(top), btc_eth_correlation=None)
+    assert result_low is not None
+    result_high = combiner.combine(make_market(yes_price=0.60, no_price=0.40), FakeFetcher(top), btc_eth_correlation=None)
+    assert result_high is not None
+
+
 def test_signal_stats_persists_across_new_combiner_instance_same_day(tmp_path):
     import json
     from core.signals.volume_signal import VolumeSignalGenerator

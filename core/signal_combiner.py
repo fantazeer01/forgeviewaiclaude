@@ -6,6 +6,7 @@ from typing import Optional
 
 from config.settings import (
     SIGNAL_COMBINER_WEIGHTS, SIGNAL_COMBINER_THRESHOLD, SIGNAL_COMBINER_STATUS_FILE,
+    SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE,
 )
 from core.repricing_detector import RepricingSignal
 from core.signals.order_book_signal import OrderBookSignalGenerator
@@ -37,6 +38,14 @@ class SignalCombiner:
     one of the weighted signals: if it blocks (BTC/ETH correlation > 0.8
     and BTC just dropped, for an ETH market), combine() returns None
     immediately regardless of how strong the other signals are.
+
+    A second FILTER (also not one of the weighted signals): yes_price must
+    fall within [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]
+    (0.45-0.60), per docs/polymarket/DECISIONS.md D-002's finding that price
+    is the one factor that actually predicts win rate. None of the 3 signals
+    above look at price at all, so without this gate combine() would happily
+    fire on a market at yes_price=0.165 with the same confidence as one at
+    0.50.
     """
 
     SIGNAL_NAMES = ("order_book", "momentum", "volume")
@@ -121,11 +130,39 @@ class SignalCombiner:
                 "momentum": self._signal_summary(None),
                 "volume": self._signal_summary(None),
                 "correlation_filter_blocked": True,
+                "price_out_of_band": False,
                 "combined_confidence": None,
                 "fired": False,
             }
             self._export_status()
             logger.info(f"Signal combiner blocked by correlation filter: {asset} {market_id}")
+            return None
+
+        # PRICE BAND FILTER (bug fix 2026-07-04): none of order_book/momentum/
+        # volume signals below look at yes_price at all, so without this
+        # check trades were firing at prices like 0.165/0.345 that
+        # docs/polymarket/DECISIONS.md D-002 found have a materially lower
+        # win rate than the 0.45-0.60 band -- this is the live-path
+        # equivalent of the old repricing_detector's min_yes_price/
+        # max_yes_price, which stopped applying to real trades once
+        # QUANT_ONLY_MODE removed repricing from the trading path entirely.
+        yes_price = market["yes_price"]
+        price_out_of_band = not (SIGNAL_COMBINER_MIN_YES_PRICE <= yes_price <= SIGNAL_COMBINER_MAX_YES_PRICE)
+        if price_out_of_band:
+            self._status[asset] = {
+                "order_book": self._signal_summary(None),
+                "momentum": self._signal_summary(None),
+                "volume": self._signal_summary(None),
+                "correlation_filter_blocked": False,
+                "price_out_of_band": True,
+                "combined_confidence": None,
+                "fired": False,
+            }
+            self._export_status()
+            logger.info(
+                f"Signal combiner blocked by price band: {asset} {market_id} "
+                f"yes_price={yes_price} not in [{SIGNAL_COMBINER_MIN_YES_PRICE}, {SIGNAL_COMBINER_MAX_YES_PRICE}]"
+            )
             return None
 
         order_book_signal = self.order_book_gen.generate(market, fetcher)
@@ -164,6 +201,7 @@ class SignalCombiner:
             "momentum": self._signal_summary(momentum_signal),
             "volume": self._signal_summary(volume_signal),
             "correlation_filter_blocked": False,
+            "price_out_of_band": False,
             "combined_confidence": round(combined_confidence, 3) if combined_confidence is not None else None,
             "fired": result is not None,
         }
