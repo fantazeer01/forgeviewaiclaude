@@ -1,4 +1,4 @@
-from core.market_bias import MarketBiasFetcher
+from core.market_bias import MarketBiasFetcher, FearGreedFetcher
 
 
 def make_response(mocker, payload):
@@ -14,14 +14,31 @@ def test_fetch_returns_parsed_fields_and_bullish_bias(mocker):
         return_value=make_response(mocker, {
             "bitcoin": {"usd": 62000.0, "usd_24h_change": 2.5},
             "ethereum": {"usd": 1750.0, "usd_24h_change": 1.1},
+            "solana": {"usd": 150.0, "usd_24h_change": 3.3},
         }),
     )
     result = MarketBiasFetcher().fetch()
     assert result == {
         "btc_price": 62000.0, "btc_24h_change": 2.5,
         "eth_price": 1750.0, "eth_24h_change": 1.1,
+        "sol_price": 150.0, "sol_24h_change": 3.3,
         "market_bias": "BULLISH",
     }
+
+
+def test_fetch_still_works_when_solana_missing_from_response(mocker):
+    # SOL is best-effort and must never block the BTC-driven bias result
+    mocker.patch(
+        "core.market_bias.requests.get",
+        return_value=make_response(mocker, {
+            "bitcoin": {"usd": 62000.0, "usd_24h_change": 2.5},
+            "ethereum": {"usd": 1750.0, "usd_24h_change": 1.1},
+        }),
+    )
+    result = MarketBiasFetcher().fetch()
+    assert result["sol_price"] is None
+    assert result["sol_24h_change"] is None
+    assert result["market_bias"] == "BULLISH"
 
 
 def test_fetch_returns_bearish_bias_below_threshold(mocker):
@@ -71,3 +88,26 @@ def test_fetch_returns_none_on_incomplete_response(mocker):
 def test_fetch_returns_none_on_missing_coin_key(mocker):
     mocker.patch("core.market_bias.requests.get", return_value=make_response(mocker, {}))
     assert MarketBiasFetcher().fetch() is None
+
+
+def test_fear_greed_fetch_returns_value_and_classification(mocker):
+    mocker.patch(
+        "core.market_bias.requests.get",
+        return_value=make_response(mocker, {
+            "name": "Fear and Greed Index",
+            "data": [{"value": "67", "value_classification": "Greed", "timestamp": "1", "time_until_update": "1"}],
+            "metadata": {"error": None},
+        }),
+    )
+    result = FearGreedFetcher().fetch()
+    assert result == {"value": 67, "classification": "Greed"}
+
+
+def test_fear_greed_fetch_returns_none_on_empty_data(mocker):
+    mocker.patch("core.market_bias.requests.get", return_value=make_response(mocker, {"data": []}))
+    assert FearGreedFetcher().fetch() is None
+
+
+def test_fear_greed_fetch_returns_none_on_request_exception(mocker):
+    mocker.patch("core.market_bias.requests.get", side_effect=RuntimeError("network down"))
+    assert FearGreedFetcher().fetch() is None

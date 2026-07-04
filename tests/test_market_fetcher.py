@@ -1,6 +1,8 @@
 import datetime
 import json
 
+import pytest
+
 from core.market_fetcher import MarketFetcher
 
 
@@ -353,3 +355,47 @@ def test_ping_returns_false_on_error(mocker):
     fetcher = MarketFetcher()
     mocker.patch.object(fetcher.session, "get", side_effect=RuntimeError("network down"))
     assert fetcher.ping() is False
+
+
+def test_record_latency_writes_avg_p99_last_to_disk(tmp_path, mocker):
+    mocker.patch("core.market_fetcher.LATENCY_LOG", str(tmp_path / "latency.json"))
+    fetcher = MarketFetcher()
+    for v in [100, 200, 150, 300, 120]:
+        fetcher._record_latency(v)
+    data = json.loads((tmp_path / "latency.json").read_text())
+    assert data["last_ms"] == 120
+    assert data["avg_ms"] == pytest.approx((100 + 200 + 150 + 300 + 120) / 5, abs=0.1)
+    assert data["sample_count"] == 5
+    assert data["p99_ms"] == 300  # with 5 samples, p99 index falls on the max
+
+
+def test_record_latency_evicts_oldest_beyond_window(mocker):
+    mocker.patch("core.market_fetcher.LATENCY_LOG", "unused")
+    mocker.patch("core.market_fetcher.LATENCY_WINDOW", 3)
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher, "_export_latency_status")
+    for v in [10, 20, 30, 40]:
+        fetcher._record_latency(v)
+    assert fetcher._latencies_ms == [20, 30, 40]
+
+
+def test_timed_get_records_a_sample(mocker):
+    fetcher = MarketFetcher()
+    resp = mocker.Mock()
+    mocker.patch.object(fetcher.session, "get", return_value=resp)
+    mocker.patch.object(fetcher, "_export_latency_status")
+    result = fetcher._timed_get("http://example.test", timeout=5)
+    assert result is resp
+    assert len(fetcher._latencies_ms) == 1
+    assert fetcher._latencies_ms[0] >= 0
+
+
+def test_timed_get_records_a_sample_even_when_request_raises(mocker):
+    fetcher = MarketFetcher()
+    mocker.patch.object(fetcher.session, "get", side_effect=RuntimeError("boom"))
+    mocker.patch.object(fetcher, "_export_latency_status")
+    try:
+        fetcher._timed_get("http://example.test", timeout=5)
+    except RuntimeError:
+        pass
+    assert len(fetcher._latencies_ms) == 1

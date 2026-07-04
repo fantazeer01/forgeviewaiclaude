@@ -11,9 +11,11 @@ logger = logging.getLogger("run")
 from config.settings import (
     MARKET_POLL_INTERVAL_SEC, ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
+    FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
 )
 from core.market_fetcher import MarketFetcher
-from core.market_bias import MarketBiasFetcher
+from core.market_bias import MarketBiasFetcher, FearGreedFetcher
+from core.macro_events import MacroEventsFetcher
 from core.repricing_detector import RepricingDetector, RepricingSignal
 from core.state_manager import StateManager
 from core.dedup_guard import DedupGuard
@@ -28,6 +30,8 @@ from reporting.telegram_reporter import TelegramReporter
 # module-level so the market_bias_provider lambda passed into QuantSignalGenerator
 # always reads the latest fetched value, not a snapshot taken at startup
 _external_status = {"bias": None, "last_check_ts": None}
+_fear_greed_status = {"last_check_ts": None}
+_macro_events_status = {"last_check_ts": None}
 
 def main():
     logger.info("=== ForgeViewAI starting ===")
@@ -35,6 +39,8 @@ def main():
     dedup = DedupGuard()
     fetcher = MarketFetcher()
     bias_fetcher = MarketBiasFetcher()
+    fear_greed_fetcher = FearGreedFetcher()
+    macro_events_fetcher = MacroEventsFetcher()
     detector = RepricingDetector()
     engine = PaperTradingEngine(state, dedup)
     tracker = PnLTracker()
@@ -59,6 +65,8 @@ def main():
                 _auto_reset_on_stop(state, tg)
             _maybe_reset_daily(state)
             _maybe_refresh_external_status(bias_fetcher, fetcher)
+            _maybe_refresh_fear_greed(fear_greed_fetcher)
+            _maybe_refresh_macro_events(macro_events_fetcher)
             _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep, online_model)
             signal_gen.resolve_pending()
             markets = fetcher.get_active_5min_markets()
@@ -183,6 +191,55 @@ def _export_exchange_status(ok: bool, now: datetime.datetime):
         os.replace(tmp_path, EXCHANGE_STATUS_FILE)
     except Exception as e:
         logger.error(f"exchange status export error: {e}")
+
+def _maybe_refresh_fear_greed(fear_greed_fetcher: FearGreedFetcher):
+    """Runs at most once every FEAR_GREED_REFRESH_SEC (15 min) -- the index
+    itself only updates roughly daily in reality, so polling every 60s like
+    the price checks would be pointless API load for no new information."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    last = _fear_greed_status["last_check_ts"]
+    if last and (now - last).total_seconds() < FEAR_GREED_REFRESH_SEC:
+        return
+    _fear_greed_status["last_check_ts"] = now
+    result = fear_greed_fetcher.fetch()
+    if not result:
+        logger.warning("Fear & Greed fetch failed this cycle")
+        return
+    import json
+    os.makedirs(os.path.dirname(FEAR_GREED_LOG), exist_ok=True)
+    data = dict(result)
+    data["updated_at"] = now.isoformat()
+    tmp_path = FEAR_GREED_LOG + ".tmp"
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp_path, FEAR_GREED_LOG)
+    except Exception as e:
+        logger.error(f"fear & greed export error: {e}")
+
+def _maybe_refresh_macro_events(macro_events_fetcher: MacroEventsFetcher):
+    """Runs at most once every MACRO_EVENTS_REFRESH_SEC (1 hour) -- the
+    economic calendar changes at most a few times a day, so this is by far
+    the least frequently refreshed external check."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    last = _macro_events_status["last_check_ts"]
+    if last and (now - last).total_seconds() < MACRO_EVENTS_REFRESH_SEC:
+        return
+    _macro_events_status["last_check_ts"] = now
+    events = macro_events_fetcher.fetch_next_events(3)
+    if events is None:
+        logger.warning("Macro events fetch failed this cycle")
+        return
+    import json
+    os.makedirs(os.path.dirname(MACRO_EVENTS_LOG), exist_ok=True)
+    data = {"events": events, "updated_at": now.isoformat()}
+    tmp_path = MACRO_EVENTS_LOG + ".tmp"
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp_path, MACRO_EVENTS_LOG)
+    except Exception as e:
+        logger.error(f"macro events export error: {e}")
 
 def _export_live_status(snapshot):
     """Mirrors the live BTC/ETH correlation (and a fresh timestamp the

@@ -3,8 +3,10 @@ import json
 import logging
 import datetime
 import time
+import os
+import statistics
 from typing import Optional
-from config.settings import POLYMARKET_GAMMA_BASE, POLYMARKET_API_BASE
+from config.settings import POLYMARKET_GAMMA_BASE, POLYMARKET_API_BASE, LATENCY_LOG, LATENCY_WINDOW
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,46 @@ class MarketFetcher:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({"Accept": "application/json"})
+        self._latencies_ms: list[float] = []
+
+    def _timed_get(self, url, **kwargs):
+        """Every real Polymarket HTTP call in this class goes through here so
+        data/latency.json reflects genuinely measured round-trip time, not a
+        guess -- used only by the dashboard's LATENCY widget, never on any
+        trading-critical decision path."""
+        start = time.monotonic()
+        try:
+            return self.session.get(url, **kwargs)
+        finally:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            self._record_latency(elapsed_ms)
+
+    def _record_latency(self, elapsed_ms: float):
+        self._latencies_ms.append(elapsed_ms)
+        if len(self._latencies_ms) > LATENCY_WINDOW:
+            self._latencies_ms.pop(0)
+        self._export_latency_status(elapsed_ms)
+
+    def _export_latency_status(self, last_ms: float):
+        sorted_lat = sorted(self._latencies_ms)
+        avg_ms = statistics.mean(sorted_lat)
+        p99_idx = min(len(sorted_lat) - 1, int(len(sorted_lat) * 0.99))
+        p99_ms = sorted_lat[p99_idx]
+        data = {
+            "avg_ms": round(avg_ms, 1),
+            "p99_ms": round(p99_ms, 1),
+            "last_ms": round(last_ms, 1),
+            "sample_count": len(sorted_lat),
+            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        try:
+            os.makedirs(os.path.dirname(LATENCY_LOG), exist_ok=True)
+            tmp_path = LATENCY_LOG + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp_path, LATENCY_LOG)
+        except Exception as e:
+            logger.error(f"latency export error: {e}")
 
     def get_active_5min_markets(self) -> list[dict]:
         try:
@@ -48,7 +90,7 @@ class MarketFetcher:
         widget only -- not used by any trading-critical path (which already
         has its own per-call error handling and never depends on this)."""
         try:
-            resp = self.session.get(f"{POLYMARKET_GAMMA_BASE}/markets", params={"limit": 1}, timeout=5)
+            resp = self._timed_get(f"{POLYMARKET_GAMMA_BASE}/markets", params={"limit": 1}, timeout=5)
             resp.raise_for_status()
             return True
         except Exception as e:
@@ -58,7 +100,7 @@ class MarketFetcher:
     def get_market_resolution(self, condition_id: str) -> Optional[dict]:
         try:
             url = f"{POLYMARKET_API_BASE}/markets/{condition_id}"
-            resp = self.session.get(url, timeout=10)
+            resp = self._timed_get(url, timeout=10)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -91,7 +133,7 @@ class MarketFetcher:
     def _fetch_markets_by_slug(self, slugs: list[str]) -> list[dict]:
         url = f"{POLYMARKET_GAMMA_BASE}/markets"
         params = [("slug", s) for s in slugs] + [("limit", len(slugs))]
-        resp = self.session.get(url, params=params, timeout=15)
+        resp = self._timed_get(url, params=params, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
@@ -156,7 +198,7 @@ class MarketFetcher:
 
     def _fetch_order_book(self, token_id: str) -> dict:
         url = f"{POLYMARKET_API_BASE}/book"
-        resp = self.session.get(url, params={"token_id": token_id}, timeout=10)
+        resp = self._timed_get(url, params={"token_id": token_id}, timeout=10)
         resp.raise_for_status()
         return resp.json()
 

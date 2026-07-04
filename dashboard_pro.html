@@ -217,7 +217,7 @@
   <span class="sep">|</span>
   <span>LOSS STREAK <b id="hdr-streak" class="num">--</b></span>
   <span class="sep">|</span>
-  <span>LATENCY <span class="no-data">NO DATA</span></span>
+  <span>LATENCY <b id="hdr-latency" class="num">--</b></span>
   <span class="sep">|</span>
   <span>GPU <span class="no-data">NO DATA</span></span>
   <span class="sep">|</span>
@@ -358,6 +358,32 @@
                                    MarketFetcher.ping() (a lightweight real
                                    GET against Polymarket's Gamma API) --
                                    feeds the header bar's EXCHANGE field.
+   data/latency.json              NEW: written by core/market_fetcher.py
+                                   after EVERY real Polymarket HTTP call
+                                   (MarketFetcher._timed_get wraps every
+                                   session.get in the class) -- avg_ms/
+                                   p99_ms/last_ms over a rolling 200-call
+                                   window. Feeds the header bar's LATENCY
+                                   field. Not used by any trading decision.
+   data/fear_greed.json           NEW: written by run.py every 15 min from
+                                   alternative.me's free Fear & Greed Index
+                                   API (core/market_bias.py
+                                   FearGreedFetcher) -- feeds AI Signal
+                                   Panel's Macro Sentiment field.
+   data/macro_events.json         NEW: written by run.py every hour from
+                                   ForexFactory's free weekly economic
+                                   calendar (core/macro_events.py) --
+                                   next/latest 3 high-impact USD events.
+                                   Feeds AI Signal Panel's event list.
+   data/market_bias.jsonl (full   Correlation Map's SOL x BTC section reads
+   history, not just last entry)  the FULL file (not just the last entry)
+                                   to compute a real rolling Pearson
+                                   correlation of BTC/SOL spot-price
+                                   returns client-side -- a different,
+                                   clearly-labeled metric from the
+                                   Polymarket contract-price correlation
+                                   above it (different underlying series,
+                                   not directly comparable).
    -----------------------------------------------------------------------------
    If a source file is missing, unreachable, or a specific field inside it is
    null, the corresponding widget renders NO DATA. Nothing is invented.
@@ -459,20 +485,31 @@ async function loadLastMarketBias() {
   return rows[rows.length - 1];
 }
 async function loadExchangeStatus() { return await fetchJson('data/exchange_status.json'); }
+async function loadLatency() { return await fetchJson('data/latency.json'); }
+async function loadFearGreed() { return await fetchJson('data/fear_greed.json'); }
+async function loadMacroEvents() { return await fetchJson('data/macro_events.json'); }
+async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bias.jsonl'); }
 
 /* ---------------- 1. HEADER ---------------- */
-function renderHeader(state, exchangeStatus) {
+function renderHeader(state, exchangeStatus, latency) {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   document.getElementById('hdr-sync').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   const statusEl = document.getElementById('hdr-status');
   const dailyEl = document.getElementById('hdr-daily-loss');
   const streakEl = document.getElementById('hdr-streak');
   const exchEl = document.getElementById('hdr-exchange');
+  const latEl = document.getElementById('hdr-latency');
   if (exchangeStatus && has(exchangeStatus.status)) {
     exchEl.textContent = exchangeStatus.status;
     exchEl.className = exchangeStatus.status === 'OK' ? 'exch-ok' : 'exch-error';
   } else {
     exchEl.innerHTML = noData();
+  }
+  if (latency && has(latency.last_ms)) {
+    latEl.textContent = Math.round(latency.last_ms) + 'ms';
+    latEl.title = `avg ${latency.avg_ms}ms / p99 ${latency.p99_ms}ms over ${latency.sample_count} real Polymarket calls`;
+  } else {
+    latEl.innerHTML = noData();
   }
   if (!state) {
     statusEl.innerHTML = noData(); dailyEl.innerHTML = noData(); streakEl.innerHTML = noData();
@@ -505,7 +542,21 @@ function computePortfolio(trades) {
     running += t.pnl_usd; peak = Math.max(peak, running); maxDD = Math.max(maxDD, peak - running);
     return running;
   });
-  return { closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, profitFactor, expectancy, maxDD };
+
+  const now = Date.now();
+  const weekAgo = now - 7 * 24 * 3600 * 1000;
+  const monthAgo = now - 30 * 24 * 3600 * 1000;
+  const weeklyClosed = closed.filter(t => t.close_ts && new Date(t.close_ts).getTime() > weekAgo);
+  const monthlyClosed = closed.filter(t => t.close_ts && new Date(t.close_ts).getTime() > monthAgo);
+  const weeklyPnl = closed.length ? weeklyClosed.reduce((s, t) => s + t.pnl_usd, 0) : null;
+  const monthlyPnl = closed.length ? monthlyClosed.reduce((s, t) => s + t.pnl_usd, 0) : null;
+  const earliestTradeMs = sortedClosed.length ? new Date(sortedClosed[0].close_ts).getTime() : null;
+  const historyDays = earliestTradeMs != null ? (now - earliestTradeMs) / (24 * 3600 * 1000) : null;
+
+  return {
+    closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, profitFactor, expectancy, maxDD,
+    weeklyPnl, monthlyPnl, historyDays,
+  };
 }
 function renderPortfolio(trades) {
   const heroEl = document.getElementById('pf-total-pnl');
@@ -528,16 +579,16 @@ function renderPortfolio(trades) {
     ['Max Drawdown', m.closed.length ? fmtUsd(-m.maxDD) : null],
     ['Profit Factor', m.profitFactor == null ? null : (isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : '&infin;')],
     ['Expectancy/Trade', m.expectancy == null ? null : fmtUsd(m.expectancy)],
-    ['Weekly PnL', null],
-    ['Monthly PnL', null],
+    ['Weekly PnL (7d)', m.weeklyPnl == null ? null : fmtUsd(m.weeklyPnl)],
+    ['Monthly PnL (30d)', m.monthlyPnl == null ? null : fmtUsd(m.monthlyPnl)],
   ];
   document.getElementById('pf-metrics').innerHTML = rows.map(([label, val]) => `
     <div class="metric-row">
       <span class="label">${label}</span>
       <span class="value num">${val != null ? val : noData()}</span>
     </div>
-  `).join('') + (rows.slice(-2).every(r => r[1] == null)
-    ? '<div style="font-size:9.5px;color:var(--text-muted);margin-top:6px;">weekly/monthly PnL: not enough history yet</div>' : '');
+  `).join('') + (m.historyDays != null && m.historyDays < 30
+    ? `<div style="font-size:9.5px;color:var(--text-muted);margin-top:6px;">trade history spans only ${m.historyDays.toFixed(1)} days, so weekly/monthly figures may equal (or nearly equal) the all-time total</div>` : '');
   return m;
 }
 
@@ -550,7 +601,15 @@ function assetCooldown(state, asset) {
   if (ageSec < SIGNAL_COOLDOWN_SEC) return { known: true, ready: false, remain: Math.ceil(SIGNAL_COOLDOWN_SEC - ageSec) };
   return { known: true, ready: true, remain: 0 };
 }
-function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias) {
+function fearGreedColor(classification) {
+  const c = (classification || '').toLowerCase();
+  if (c.includes('extreme fear')) return 'var(--red)';
+  if (c === 'fear') return '#FF9457';
+  if (c.includes('extreme greed')) return 'var(--green)';
+  if (c === 'greed') return '#7CE87A';
+  return 'var(--text-secondary)'; // neutral
+}
+function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents) {
   const wrap = document.getElementById('ai-signal-body');
   let html = '';
 
@@ -586,15 +645,38 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias) 
     html += `<div class="sig-asset-row"><span>Market Bias (BTC 24h)</span><span class="bias-tag ${biasCls}">${marketBias.market_bias}</span></div>`;
     const btcChg = marketBias.btc_24h_change;
     const ethChg = marketBias.eth_24h_change;
+    const solChg = marketBias.sol_24h_change;
     html += `
       <div class="spot-row"><span>BTC SPOT</span><span class="price num">$${marketBias.btc_price.toLocaleString(undefined, {maximumFractionDigits:0})}</span><span class="num ${btcChg >= 0 ? 'up' : 'down'}">${btcChg >= 0 ? '+' : ''}${btcChg.toFixed(2)}%</span></div>
       <div class="spot-row"><span>ETH SPOT</span><span class="price num">$${marketBias.eth_price.toLocaleString(undefined, {maximumFractionDigits:2})}</span><span class="num ${ethChg >= 0 ? 'up' : 'down'}">${ethChg >= 0 ? '+' : ''}${ethChg.toFixed(2)}%</span></div>
+      <div class="spot-row"><span>SOL SPOT</span><span class="price num">${has(marketBias.sol_price) ? '$' + marketBias.sol_price.toLocaleString(undefined, {maximumFractionDigits:2}) : noData()}</span><span class="num ${has(solChg) ? (solChg >= 0 ? 'up' : 'down') : ''}">${has(solChg) ? (solChg >= 0 ? '+' : '') + solChg.toFixed(2) + '%' : ''}</span></div>
       <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">source: CoinGecko, last checked ${fmtClock(marketBias.timestamp)}</div>
     `;
   } else {
     html += `<div class="sig-asset-row"><span>Market Bias</span>${noData()}</div>`;
   }
-  html += `<div class="sig-asset-row"><span>Macro Sentiment</span>${noData()}</div>`;
+
+  if (fearGreed && has(fearGreed.value)) {
+    html += `<div class="sig-asset-row"><span>Macro Sentiment</span>
+      <span style="font-weight:800;color:${fearGreedColor(fearGreed.classification)};">FEAR &amp; GREED: ${fearGreed.value} (${fearGreed.classification})</span></div>`;
+  } else {
+    html += `<div class="sig-asset-row"><span>Macro Sentiment</span>${noData()}</div>`;
+  }
+
+  html += `<div style="margin-top:8px;font-size:10px;color:var(--text-secondary);">NEXT HIGH-IMPACT USD EVENTS</div>`;
+  if (macroEvents && Array.isArray(macroEvents.events) && macroEvents.events.length) {
+    html += macroEvents.events.map(e => {
+      const d = new Date(e.date);
+      const dateTxt = isNaN(d.getTime()) ? e.date : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `<div class="sig-asset-row" style="font-size:10px;"><span>${dateTxt}</span><span style="color:var(--text-primary);text-align:right;">${e.title}</span></div>`;
+    }).join('');
+    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">source: ForexFactory economic calendar. This environment's clock may not align with the feed's real-world "this week" window -- dates shown are exactly as reported by the feed.</div>`;
+  } else if (macroEvents && Array.isArray(macroEvents.events)) {
+    html += `<div class="sig-asset-row"><span>Events</span>${noData('NONE FOUND THIS WEEK')}</div>`;
+  } else {
+    html += `<div class="sig-asset-row"><span>Events</span>${noData()}</div>`;
+  }
+
   wrap.innerHTML = html;
 }
 
@@ -722,12 +804,41 @@ function corrTextColor(r) {
   if (abs > 0.4) return '#05070A'; // dark text once the tile is bright enough to need contrast
   return r >= 0 ? 'var(--green)' : 'var(--red)';
 }
-function renderCorrelation(liveStatus) {
+const SPOT_CORR_MIN_RETURNS = 10; // require at least this many 60s-apart samples before trusting a correlation
+function pearsonCorrelation(seriesA, seriesB) {
+  const n = Math.min(seriesA.length, seriesB.length);
+  if (n < 2) return null;
+  const retA = [], retB = [];
+  for (let i = 1; i < n; i++) {
+    retA.push(seriesA[i] - seriesA[i - 1]);
+    retB.push(seriesB[i] - seriesB[i - 1]);
+  }
+  if (retA.length < SPOT_CORR_MIN_RETURNS) return null;
+  const meanA = retA.reduce((s, v) => s + v, 0) / retA.length;
+  const meanB = retB.reduce((s, v) => s + v, 0) / retB.length;
+  let cov = 0, varA = 0, varB = 0;
+  for (let i = 0; i < retA.length; i++) {
+    cov += (retA[i] - meanA) * (retB[i] - meanB);
+    varA += (retA[i] - meanA) ** 2;
+    varB += (retB[i] - meanB) ** 2;
+  }
+  if (varA === 0 || varB === 0) return null;
+  return cov / Math.sqrt(varA * varB);
+}
+function computeSolBtcSpotCorrelation(biasHistory) {
+  if (!biasHistory || !biasHistory.length) return { corr: null, n: 0 };
+  const usable = biasHistory.filter(r => has(r.btc_price) && has(r.sol_price));
+  const recent = usable.slice(-60); // roughly the last hour at a 60s cadence
+  return { corr: pearsonCorrelation(recent.map(r => r.btc_price), recent.map(r => r.sol_price)), n: recent.length };
+}
+
+function renderCorrelation(liveStatus, biasHistory) {
   const wrap = document.getElementById('corr-body');
   const r = liveStatus ? liveStatus.btc_eth_correlation : null;
   const rTxt = has(r) ? (r >= 0 ? '+' : '') + r.toFixed(3) : null;
 
-  let html = `<div class="corr-grid">
+  let html = `<div style="font-size:9px;color:var(--text-muted);">POLYMARKET CONTRACT-PRICE CORRELATION</div>`;
+  html += `<div class="corr-grid">
     <div></div><div class="corr-head">BTC</div><div class="corr-head">ETH</div>
     <div class="corr-row-label">BTC</div>
     <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
@@ -736,10 +847,18 @@ function renderCorrelation(liveStatus) {
     <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
     <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
   </div>`;
-  html += `<div class="metric-row" style="margin-top:10px;"><span class="label">SOL</span><span class="value">${noData('EXCLUDED FROM STRATEGY')}</span></div>`;
-  html += `<div class="metric-row"><span class="label">Macro Events</span><span class="value">${noData()}</span></div>`;
   if (liveStatus) {
-    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:8px;">rolling correlation of BTC/ETH YES-price returns, last update ${fmtClock(liveStatus.updated_at)}</div>`;
+    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:4px;">source: live_status.json, last update ${fmtClock(liveStatus.updated_at)}</div>`;
+  }
+
+  const sol = computeSolBtcSpotCorrelation(biasHistory);
+  html += `<div style="font-size:9px;color:var(--text-muted);margin-top:12px;border-top:1px solid var(--grid);padding-top:8px;">COINGECKO SPOT-PRICE CORRELATION (different series -- not directly comparable to the grid above)</div>`;
+  if (has(sol.corr)) {
+    const solTxt = (sol.corr >= 0 ? '+' : '') + sol.corr.toFixed(3);
+    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value" style="color:${corrTextColor(sol.corr) === '#05070A' ? (sol.corr >= 0 ? 'var(--green)' : 'var(--red)') : corrTextColor(sol.corr)}">${solTxt}</span></div>`;
+    html += `<div style="font-size:9px;color:var(--text-muted);">n=${sol.n} samples (~60s cadence)</div>`;
+  } else {
+    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value">${noData(sol.n ? 'BUILDING HISTORY' : 'NO DATA')}</span></div>`;
   }
   wrap.innerHTML = html;
 }
@@ -906,16 +1025,18 @@ function renderEquityCurve(m) {
    REFRESH LOOP
    ============================================================================= */
 async function refresh() {
-  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus] = await Promise.all([
+  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus,
+         latency, fearGreed, macroEvents, biasHistory] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
     loadLastBtcSignals(20), loadLastMarketBias(), loadExchangeStatus(),
+    loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
   ]);
-  renderHeader(state, exchangeStatus);
+  renderHeader(state, exchangeStatus, latency);
   const portfolio = renderPortfolio(trades);
-  renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias);
+  renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
   renderDecisionTimeline(liveStatus, state, trades);
   renderReasoning(trades, onlineStatus);
-  renderCorrelation(liveStatus);
+  renderCorrelation(liveStatus, biasHistory);
   renderTradeTable(trades);
   renderCandlestick(btcSignals);
   renderEquityCurve(portfolio);
