@@ -96,17 +96,43 @@ def test_kelly_size_zero_when_no_edge(model):
     assert size == pytest.approx(0.0, abs=1e-6)
 
 
-def test_kelly_size_capped_at_quarter_of_bankroll(model):
-    # near-certain win at a cheap price -> full Kelly wants nearly all of bankroll,
-    # but sizing must never exceed the 0.25 cap
+def test_kelly_size_capped_at_max_trade_usd(model):
+    # near-certain win at a cheap price -> full Kelly (even after the 0.25
+    # fractional cap) wants $250 of a $1000 bankroll, but the hard dollar cap
+    # must clamp this to ONLINE_MODEL_MAX_TRADE_USD ($10) regardless
     size = model.kelly_size(win_probability=0.99, entry_price=0.1, bankroll=1000.0)
-    assert size == pytest.approx(250.0, abs=0.01)
+    assert size == pytest.approx(10.0, abs=0.01)
 
 
 def test_kelly_size_positive_with_real_edge(model):
     size = model.kelly_size(win_probability=0.7, entry_price=0.4, bankroll=1000.0)
     assert size > 0.0
-    assert size <= 250.0
+    assert size <= 10.0
+
+
+def test_kelly_size_never_exceeds_max_trade_usd_even_with_saturated_probability(model):
+    # a barely-trained SGDClassifier can saturate to p=1.0; the dollar cap
+    # must hold even at that extreme, across a range of entry prices
+    for entry_price in (0.05, 0.2, 0.5, 0.8):
+        size = model.kelly_size(win_probability=1.0, entry_price=entry_price, bankroll=1000.0)
+        assert size <= 10.0
+
+
+def test_warmup_trades_not_restored_from_persisted_state(tmp_path):
+    # warmup_trades is a live config knob, not trained model state -- raising
+    # ONLINE_MODEL_WARMUP_TRADES between runs must actually take effect for
+    # an existing state file, not get silently overridden by whatever value
+    # was saved the last time the file was written
+    state_path = str(tmp_path / "online_model.pkl")
+    low_bar_model = OnlineQuantModel(state_path=state_path, warmup_trades=5)
+    for i in range(5):
+        low_bar_model.update(make_features(yes_price=0.3 + i * 0.05), i % 2)
+    assert low_bar_model.is_warmed_up() is True
+
+    raised_bar_model = OnlineQuantModel(state_path=state_path, warmup_trades=200)
+    assert raised_bar_model.n_updates == 5
+    assert raised_bar_model.warmup_trades == 200
+    assert raised_bar_model.is_warmed_up() is False
 
 
 def test_standardizer_handles_missing_features_without_crashing(model):

@@ -8,7 +8,7 @@ from sklearn.linear_model import SGDClassifier
 
 from config.settings import (
     KELLY_FRACTION_CAP, ONLINE_MODEL_STATE_FILE, ONLINE_MODEL_WARMUP_TRADES,
-    ONLINE_MODEL_CONFIDENCE_THRESHOLD,
+    ONLINE_MODEL_CONFIDENCE_THRESHOLD, ONLINE_MODEL_MAX_TRADE_USD,
 )
 from core.kelly_criterion import net_odds_from_price, kelly_fraction
 from core.live_features import FEATURE_NAMES
@@ -33,13 +33,17 @@ class OnlineQuantModel:
     from zero evidence, so it needs a warm-up period before its predictions
     can be trusted with real trading decisions.
 
-    For the first ONLINE_MODEL_WARMUP_TRADES (50) resolved trades, decide()
+    For the first ONLINE_MODEL_WARMUP_TRADES (200) resolved trades, decide()
     always defers to the repricing signal passed in -- trading behavior is
     unchanged during warm-up, but every one of those resolutions is still fed
-    into the model as a training example. After 50 updates, decide() ignores
-    the repricing signal's fire/no-fire decision and instead fires whenever
-    the model's own predicted win probability crosses the confidence
-    threshold, sized via Kelly criterion.
+    into the model as a training example. After warm-up, decide() ignores the
+    repricing signal's fire/no-fire decision and instead fires whenever the
+    model's own predicted win probability crosses the confidence threshold,
+    sized via Kelly criterion and hard-capped at ONLINE_MODEL_MAX_TRADE_USD
+    ($10) regardless of predicted confidence -- a raised warm-up floor alone
+    doesn't guarantee a well-calibrated model (a from-scratch SGDClassifier
+    can still saturate to p=1.0 on limited data and demand a huge Kelly size;
+    the hard dollar cap is what actually bounds the damage from that).
     """
 
     def __init__(self, feature_names: list[str] = FEATURE_NAMES,
@@ -139,10 +143,15 @@ class OnlineQuantModel:
     def kelly_size(self, win_probability: float, entry_price: float, bankroll: float) -> float:
         """f = (p*b - (1-p)) / b, capped at KELLY_FRACTION_CAP (0.25) -- the
         literal formula requested, not the more conservative quarter-Kelly
-        (f * 0.25) variant core/kelly_criterion.py also offers."""
+        (f * 0.25) variant core/kelly_criterion.py also offers. The resulting
+        dollar size is then hard-capped at ONLINE_MODEL_MAX_TRADE_USD ($10)
+        regardless of win_probability or the fractional-Kelly result -- a
+        saturated (near-0 or near-1) probability from an undertrained model
+        would otherwise still demand a maximal-fraction position."""
         net_odds = net_odds_from_price(entry_price)
         f = min(kelly_fraction(win_probability, net_odds), KELLY_FRACTION_CAP)
-        return round(f * bankroll, 4)
+        size = f * bankroll
+        return round(min(size, ONLINE_MODEL_MAX_TRADE_USD), 4)
 
     def record_features(self, market_id: str, features: dict):
         """Stash the feature snapshot a decision was made from, keyed by
@@ -187,7 +196,11 @@ class OnlineQuantModel:
             with open(self.state_path, "rb") as f:
                 state = pickle.load(f)
             self.feature_names = state["feature_names"]
-            self.warmup_trades = state.get("warmup_trades", self.warmup_trades)
+            # warmup_trades is deliberately NOT restored from the persisted
+            # state: it's a live policy knob (config), not trained model
+            # state. Restoring it here would mean a raised
+            # ONLINE_MODEL_WARMUP_TRADES never actually takes effect for an
+            # existing state file, silently keeping the old (lower) bar.
             self.clf = state["clf"]
             self._fitted = state["fitted"]
             self._n_updates = state["n_updates"]
