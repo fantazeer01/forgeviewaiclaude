@@ -58,3 +58,32 @@ FEAR_GREED_REFRESH_SEC = 900
 MACRO_CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 MACRO_EVENTS_LOG = "data/macro_events.json"
 MACRO_EVENTS_REFRESH_SEC = 3600
+
+# ---- order book signal ----
+ORDER_BOOK_RATIO_THRESHOLD = 2.0
+
+# ---- momentum (bounce/reversal) signal ----
+MOMENTUM_WINDOW_SEC = 45
+MOMENTUM_MIN_SAMPLES = 3
+
+# ---- correlation filter ----
+CORRELATION_HIGH_THRESHOLD = 0.8
+CORRELATION_LOW_THRESHOLD = 0.3
+CORRELATION_BTC_DROP_THRESHOLD = 0.02
+CORRELATION_BTC_WINDOW_SEC = 45
+
+# ---- volume signal ----
+VOLUME_HISTORY_LOG = "data/volume_history.jsonl"
+VOLUME_RATIO_THRESHOLD = 1.5
+VOLUME_LOOKBACK_DAYS = 7
+VOLUME_RECORD_INTERVAL_SEC = 3600
+
+# ---- signal combiner ----
+SIGNAL_COMBINER_WEIGHTS = {
+    "repricing": 0.35,
+    "order_book": 0.25,
+    "momentum": 0.25,
+    "volume": 0.15,
+}
+SIGNAL_COMBINER_THRESHOLD = 0.60
+SIGNAL_COMBINER_STATUS_FILE = "data/signal_combiner_status.json"

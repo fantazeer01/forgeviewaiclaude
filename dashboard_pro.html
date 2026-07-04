@@ -89,7 +89,7 @@
     max-width: 1900px; margin: 0 auto; padding: 12px;
     display: grid;
     grid-template-columns: 300px 1fr 380px;
-    grid-template-rows: 360px 360px 280px;
+    grid-template-rows: 360px 360px 280px 200px;
     gap: 12px;
   }
   @media (max-width: 1200px) {
@@ -195,6 +195,8 @@
     font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
     padding: 8px 12px 2px;
   }
+  #signal-combiner-table tbody td.plain { color: var(--text-primary); }
+  #signal-combiner-table tbody tr.win { background: rgba(0,255,65,0.06); }
 
   /* ---- candlestick / equity canvases ---- */
   .chart-wrap { position: relative; flex: 1; min-height: 0; }
@@ -305,6 +307,22 @@
     <div class="sub-panel-title">Last 20 Trades</div>
     <div class="panel-body nopad" style="overflow:auto;">
       <table class="dense"><tbody id="trades-body"></tbody></table>
+    </div>
+  </div>
+
+  <div class="panel" style="grid-column: 1 / span 3; grid-row:4;">
+    <div class="panel-head">
+      <div class="panel-title">Signal Combiner &middot; Per-Signal Breakdown</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="panel-body nopad" style="overflow:auto;">
+      <table class="dense" id="signal-combiner-table">
+        <thead><tr>
+          <th>Asset</th><th>Repricing (0.35)</th><th>Order Book (0.25)</th><th>Momentum (0.25)</th>
+          <th>Volume (0.15)</th><th>Correlation Filter</th><th>Combined</th>
+        </tr></thead>
+        <tbody id="signal-combiner-body"></tbody>
+      </table>
     </div>
   </div>
 
@@ -489,6 +507,7 @@ async function loadLatency() { return await fetchJson('data/latency.json'); }
 async function loadFearGreed() { return await fetchJson('data/fear_greed.json'); }
 async function loadMacroEvents() { return await fetchJson('data/macro_events.json'); }
 async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bias.jsonl'); }
+async function loadSignalCombinerStatus() { return await fetchJson('data/signal_combiner_status.json'); }
 
 /* ---------------- 1. HEADER ---------------- */
 function renderHeader(state, exchangeStatus, latency) {
@@ -893,6 +912,41 @@ function renderTradeTable(trades) {
     </tr>`).join('') : `<tr><td class="empty-row">No closed trades yet</td></tr>`;
 }
 
+/* ---------------- 8. SIGNAL COMBINER PER-SIGNAL BREAKDOWN ---------------- */
+function signalCell(sig) {
+  if (!sig || !has(sig.fired)) return noData();
+  if (!sig.fired) return `<span style="color:var(--text-muted);">no fire</span>`;
+  return `<span class="up">${(sig.confidence * 100).toFixed(0)}%</span> <span style="color:var(--text-muted);font-size:9px;">${sig.reason || ''}</span>`;
+}
+function renderSignalCombiner(status) {
+  const body = document.getElementById('signal-combiner-body');
+  if (!status) {
+    body.innerHTML = `<tr><td colspan="7" class="empty-row">${noData()}</td></tr>`;
+    return;
+  }
+  const assets = Object.keys(status).filter(k => k !== 'updated_at');
+  if (!assets.length) {
+    body.innerHTML = `<tr><td colspan="7" class="empty-row">${noData('NO MARKETS POLLED YET')}</td></tr>`;
+    return;
+  }
+  body.innerHTML = assets.map(asset => {
+    const s = status[asset];
+    const blocked = s.correlation_filter_blocked;
+    const combinedCell = blocked
+      ? `<span class="down">BLOCKED</span>`
+      : (has(s.combined_confidence) ? `<span class="${s.fired ? 'up' : ''}">${(s.combined_confidence * 100).toFixed(0)}%${s.fired ? ' FIRE' : ''}</span>` : noData('NO ACTIVE SIGNALS'));
+    return `<tr class="${s.fired ? 'win' : ''}">
+      <td class="plain">${asset}</td>
+      <td class="plain">${signalCell(s.repricing)}</td>
+      <td class="plain">${signalCell(s.order_book)}</td>
+      <td class="plain">${signalCell(s.momentum)}</td>
+      <td class="plain">${signalCell(s.volume)}</td>
+      <td class="plain">${blocked ? '<span class="down">BLOCKED</span>' : '<span class="up">clear</span>'}</td>
+      <td class="plain">${combinedCell}</td>
+    </tr>`;
+  }).join('') + `<tr><td colspan="7" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header).</td></tr>`;
+}
+
 /* ---------------- 8. BTC CANDLESTICK (real, single-sample-per-signal) ---------------- */
 function resizeCanvasToParent(canvas) {
   const dpr = window.devicePixelRatio || 1;
@@ -1026,10 +1080,11 @@ function renderEquityCurve(m) {
    ============================================================================= */
 async function refresh() {
   const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus,
-         latency, fearGreed, macroEvents, biasHistory] = await Promise.all([
+         latency, fearGreed, macroEvents, biasHistory, combinerStatus] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
     loadLastBtcSignals(20), loadLastMarketBias(), loadExchangeStatus(),
     loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
+    loadSignalCombinerStatus(),
   ]);
   renderHeader(state, exchangeStatus, latency);
   const portfolio = renderPortfolio(trades);
@@ -1040,6 +1095,7 @@ async function refresh() {
   renderTradeTable(trades);
   renderCandlestick(btcSignals);
   renderEquityCurve(portfolio);
+  renderSignalCombiner(combinerStatus);
 }
 
 new ResizeObserver(() => refresh()).observe(document.getElementById('candle-wrap'));
