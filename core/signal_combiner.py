@@ -17,13 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class SignalCombiner:
-    """Combines 4 independent trading signals into one weighted-confidence
-    decision:
+    """Combines 3 independent trading signals into one weighted-confidence
+    decision (quant-only mode -- repricing was removed entirely, not just
+    down-weighted; see QUANT_ONLY_MODE in config/settings.py):
 
-        repricing:   0.35  (the existing RepricingDetector signal, passed in
-                             -- this class does not recompute it, so the
-                             existing shadow-logging/cooldown behavior around
-                             it is untouched)
         order_book:  0.25  (core/signals/order_book_signal.py)
         momentum:    0.25  (core/signals/momentum_signal.py)
         volume:      0.15  (core/signals/volume_signal.py)
@@ -31,15 +28,15 @@ class SignalCombiner:
     Final confidence is a weighted AVERAGE of only the signals that actually
     fired this tick (weights renormalized among the active subset), not a
     weighted sum with silent zero-padding for signals that didn't fire --
-    e.g. if only repricing (0.35) and volume (0.15) fire, the combined
-    confidence is (0.35*c_repricing + 0.15*c_volume) / (0.35+0.15), not
-    divided by the full 1.0. A trade only fires when that combined
+    e.g. if only momentum (0.25) and volume (0.15) fire, the combined
+    confidence is (0.25*c_momentum + 0.15*c_volume) / (0.25+0.15), not
+    divided by some larger total. A trade only fires when that combined
     confidence exceeds SIGNAL_COMBINER_THRESHOLD (0.60).
 
     core/signals/correlation_signal.py's CorrelationFilter is a FILTER, not
-    one of the 4 weighted signals: if it blocks (BTC/ETH correlation > 0.8
+    one of the weighted signals: if it blocks (BTC/ETH correlation > 0.8
     and BTC just dropped, for an ETH market), combine() returns None
-    immediately regardless of how strong the other 4 signals are.
+    immediately regardless of how strong the other signals are.
     """
 
     def __init__(self, order_book_gen: Optional[OrderBookSignalGenerator] = None,
@@ -60,7 +57,7 @@ class SignalCombiner:
             return {"fired": False, "confidence": None, "reason": None}
         return {"fired": True, "confidence": signal.confidence, "reason": signal.reason}
 
-    def combine(self, market: dict, fetcher, repricing_signal: Optional[RepricingSignal],
+    def combine(self, market: dict, fetcher,
                 btc_eth_correlation: Optional[float]) -> Optional[RepricingSignal]:
         asset = market["asset"]
         market_id = market["market_id"]
@@ -74,7 +71,6 @@ class SignalCombiner:
         blocked = self.correlation_filter.should_block(asset, btc_eth_correlation)
         if blocked:
             self._status[asset] = {
-                "repricing": self._signal_summary(repricing_signal),
                 "order_book": self._signal_summary(None),
                 "momentum": self._signal_summary(None),
                 "volume": self._signal_summary(None),
@@ -91,8 +87,6 @@ class SignalCombiner:
         volume_signal = self.volume_gen.generate(market)
 
         active = {}
-        if repricing_signal is not None:
-            active["repricing"] = repricing_signal
         if order_book_signal is not None:
             active["order_book"] = order_book_signal
         if momentum_signal is not None:
@@ -117,7 +111,6 @@ class SignalCombiner:
                 )
 
         self._status[asset] = {
-            "repricing": self._signal_summary(repricing_signal),
             "order_book": self._signal_summary(order_book_signal),
             "momentum": self._signal_summary(momentum_signal),
             "volume": self._signal_summary(volume_signal),

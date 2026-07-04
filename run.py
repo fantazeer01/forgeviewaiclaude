@@ -12,6 +12,7 @@ from config.settings import (
     MARKET_POLL_INTERVAL_SEC, ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
+    QUANT_ONLY_MODE,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -54,6 +55,8 @@ def main():
     tg = TelegramReporter()
     logger.info(f"Online model: {online_model.n_updates}/{online_model.warmup_trades} warm-up trades "
                 f"({'LIVE (model-driven)' if online_model.is_warmed_up() else 'WARMUP (repricing rule)'})")
+    logger.info(f"QUANT_ONLY_MODE={QUANT_ONLY_MODE}: repricing signal is "
+                f"{'DISABLED for trading (shadow-logging only)' if QUANT_ONLY_MODE else 'active'}")
 
     if state.is_stopped():
         _auto_reset_on_stop(state, tg)
@@ -74,11 +77,14 @@ def main():
             markets = fetcher.get_active_5min_markets()
             for market in markets:
                 live_features.update(market["market_id"], market["asset"], market["yes_price"], market["no_price"])
-                repricing_signal = signal_gen.process_market(market)
+                # kept only for its shadow-logging side effect (data/quant_features.jsonl via the
+                # old static QuantModel) -- its return value is NOT used for trading decisions in
+                # quant-only mode; the signal combiner no longer accepts or weights it at all.
+                signal_gen.process_market(market)
                 snapshot = live_features.extract(market, fetcher)
                 _export_live_status(snapshot)
                 combined_signal = signal_combiner.combine(
-                    market, fetcher, repricing_signal, snapshot.get("btc_eth_correlation"),
+                    market, fetcher, snapshot.get("btc_eth_correlation"),
                 )
                 _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg)
             if (datetime.datetime.now(datetime.timezone.utc) - last_report_ts).total_seconds() > 3600:
@@ -95,8 +101,8 @@ def main():
             logger.error(f"Loop error: {e}", exc_info=True)
             time.sleep(30)
 
-def _decide_and_open(engine, online_model, market, repricing_signal, snapshot, tg):
-    should_trade, direction, win_probability, reason = online_model.decide(snapshot, repricing_signal)
+def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg):
+    should_trade, direction, win_probability, reason = online_model.decide(snapshot, combined_signal)
     if not should_trade:
         return None
     if online_model.is_warmed_up():
@@ -112,7 +118,15 @@ def _decide_and_open(engine, online_model, market, repricing_signal, snapshot, t
             return None
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)
     else:
-        signal = repricing_signal
+        # warm-up bootstrap fallback: the model has no training data of its own
+        # yet, so it still needs *some* real trades to learn from. In
+        # QUANT_ONLY_MODE this fallback is disabled too -- repricing is fully
+        # off as a trading input, not just during live mode -- so no trade
+        # opens here at all until the model is warmed up some other way.
+        if QUANT_ONLY_MODE:
+            logger.debug("QUANT_ONLY_MODE: skipping warm-up repricing fallback trade")
+            return None
+        signal = combined_signal
         trade = engine.open_trade(signal, source="repricing")
     if trade:
         online_model.record_features(trade.market_id, snapshot)
@@ -255,6 +269,7 @@ def _export_live_status(snapshot):
     os.makedirs(os.path.dirname(LIVE_STATUS_FILE), exist_ok=True)
     data = {
         "btc_eth_correlation": snapshot.get("btc_eth_correlation"),
+        "quant_only_mode": QUANT_ONLY_MODE,
         "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     tmp_path = LIVE_STATUS_FILE + ".tmp"

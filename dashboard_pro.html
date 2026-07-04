@@ -74,6 +74,13 @@
   .exch-ok { color: var(--green); }
   .exch-error { color: var(--red); }
 
+  .quant-mode-badge {
+    display: inline-block; margin-left: 10px; padding: 2px 8px;
+    border: 1px solid var(--purple); border-radius: 4px;
+    color: var(--purple); font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+    box-shadow: 0 0 8px rgba(168,85,247,0.35);
+  }
+
   .bias-tag {
     display: inline-block; padding: 3px 10px; border-radius: 4px;
     font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
@@ -210,6 +217,7 @@
 
 <div id="header-bar">
   <span class="brand">FORGEVIEWAI // QUANT TERMINAL</span>
+  <span id="hdr-quant-mode-wrap"></span>
   <span class="sep">|</span>
   <span>TIME <b id="hdr-time" class="num">--:--:--</b></span>
   <span class="sep">|</span>
@@ -356,7 +364,10 @@
                                    data/quant_features.jsonl (that file is the
                                    OLDER shadow QuantFeatureExtractor's output,
                                    a different feature set) -- this is the
-                                   correct real source for it.
+                                   correct real source for it. Also carries
+                                   quant_only_mode (mirrors
+                                   config.settings.QUANT_ONLY_MODE) -- feeds
+                                   the header's QUANT MODE badge.
    data/quant_features.jsonl      used for (a) "last signal confidence": the
                                    most recent entry's model_probability (the
                                    older shadow quant model's logged
@@ -510,7 +521,7 @@ async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bi
 async function loadSignalCombinerStatus() { return await fetchJson('data/signal_combiner_status.json'); }
 
 /* ---------------- 1. HEADER ---------------- */
-function renderHeader(state, exchangeStatus, latency) {
+function renderHeader(state, exchangeStatus, latency, liveStatus) {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   document.getElementById('hdr-sync').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   const statusEl = document.getElementById('hdr-status');
@@ -518,6 +529,9 @@ function renderHeader(state, exchangeStatus, latency) {
   const streakEl = document.getElementById('hdr-streak');
   const exchEl = document.getElementById('hdr-exchange');
   const latEl = document.getElementById('hdr-latency');
+  const quantModeWrap = document.getElementById('hdr-quant-mode-wrap');
+  quantModeWrap.innerHTML = (liveStatus && liveStatus.quant_only_mode === true)
+    ? `<span class="quant-mode-badge">QUANT MODE</span>` : '';
   if (exchangeStatus && has(exchangeStatus.status)) {
     exchEl.textContent = exchangeStatus.status;
     exchEl.className = exchangeStatus.status === 'OK' ? 'exch-ok' : 'exch-error';
@@ -1086,7 +1100,7 @@ async function refresh() {
     loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
     loadSignalCombinerStatus(),
   ]);
-  renderHeader(state, exchangeStatus, latency);
+  renderHeader(state, exchangeStatus, latency, liveStatus);
   const portfolio = renderPortfolio(trades);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
   renderDecisionTimeline(liveStatus, state, trades);

@@ -100,11 +100,23 @@ VOLUME_LOOKBACK_DAYS = 7
 VOLUME_RECORD_INTERVAL_SEC = 3600
 
 # ---- signal combiner ----
+# repricing was removed from this dict entirely (not just zeroed) per the
+# quant-only-mode sprint: it's disabled as a trading input, not merely
+# down-weighted. The remaining 3 weights don't need to sum to 1.0 -- combine()
+# renormalizes among whichever of these actually fire on a given tick.
 SIGNAL_COMBINER_WEIGHTS = {
-    "repricing": 0.35,
     "order_book": 0.25,
     "momentum": 0.25,
     "volume": 0.15,
 }
 SIGNAL_COMBINER_THRESHOLD = 0.60
+
+# Quant-only mode: the repricing detector is fully disabled as a live trading
+# input. Trades require BOTH online_model's own calibrated p > 0.5 AND
+# signal_combiner's order_book+momentum+volume confidence > 0.60 (see
+# core/online_model.py decide() and run.py's defense-in-depth skip of any
+# signal_source="repricing" trade). The repricing detector/signal_gen keep
+# running for shadow-logging purposes only (data/quant_features.jsonl), not
+# for trading decisions.
+QUANT_ONLY_MODE = True
 SIGNAL_COMBINER_STATUS_FILE = "data/signal_combiner_status.json"
