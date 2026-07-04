@@ -77,7 +77,7 @@
     max-width: 1900px; margin: 0 auto; padding: 12px;
     display: grid;
     grid-template-columns: 300px 1fr 380px;
-    grid-template-rows: 400px 420px;
+    grid-template-rows: 360px 360px 280px;
     gap: 12px;
   }
   @media (max-width: 1200px) {
@@ -137,6 +137,19 @@
   .tl-node.nodata .state { color: var(--text-muted); }
   .tl-arrow { text-align: center; color: var(--text-muted); font-size: 10px; line-height: 1; }
   .tl-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  #timeline-body { position: relative; }
+  .tl-flow-dot {
+    position: absolute; left: 3px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--cyan); box-shadow: 0 0 10px var(--cyan), 0 0 3px #fff;
+    opacity: 0; pointer-events: none; z-index: 5;
+  }
+  .tl-flow-dot.run { animation: tl-flow 1.6s ease-in-out 1; }
+  @keyframes tl-flow {
+    0%   { top: 0%;   opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { top: 96%;  opacity: 0; }
+  }
 
   /* ---- AI reasoning ---- */
   .reason-line { margin-bottom: 8px; }
@@ -169,6 +182,13 @@
   .sub-panel-title {
     font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
     padding: 8px 12px 2px;
+  }
+
+  /* ---- candlestick / equity canvases ---- */
+  .chart-wrap { position: relative; flex: 1; min-height: 0; }
+  .chart-wrap canvas { display: block; width: 100%; height: 100%; }
+  .chart-caption {
+    font-size: 9px; color: var(--text-muted); padding: 4px 12px 8px; border-top: 1px solid var(--grid);
   }
 </style>
 </head>
@@ -217,16 +237,17 @@
     <div class="panel-body" id="ai-signal-body"></div>
   </div>
 
-  <!-- TOP RIGHT: DECISION TIMELINE -->
+  <!-- TOP RIGHT: BTC CANDLESTICK -->
   <div class="panel" style="grid-column:3; grid-row:1;">
     <div class="panel-head">
-      <div class="panel-title">Decision Timeline</div>
+      <div class="panel-title">BTC YES Price &middot; Last 20 Signals</div>
       <span class="real-tag">REAL</span>
     </div>
-    <div class="panel-body" id="timeline-body"></div>
+    <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
+    <div class="chart-caption">source: data/quant_features.jsonl (BTC, stage=signal). Each bar is ONE recorded price sample per signal, not an intra-period OHLC bar &mdash; open=high=low=close by construction, colored by change vs. the previous signal.</div>
   </div>
 
-  <!-- BOTTOM LEFT: CORRELATION MAP -->
+  <!-- ROW 2: CORRELATION MAP | AI REASONING | DECISION TIMELINE -->
   <div class="panel" style="grid-column:1; grid-row:2;">
     <div class="panel-head">
       <div class="panel-title">Correlation Map</div>
@@ -235,7 +256,6 @@
     <div class="panel-body" id="corr-body"></div>
   </div>
 
-  <!-- CENTER: AI REASONING PANEL -->
   <div class="panel" style="grid-column:2; grid-row:2;">
     <div class="panel-head">
       <div class="panel-title">AI Reasoning</div>
@@ -244,14 +264,30 @@
     <div class="panel-body" id="reasoning-body"></div>
   </div>
 
-  <!-- BOTTOM RIGHT: LIVE TRADE TABLE -->
   <div class="panel" style="grid-column:3; grid-row:2;">
+    <div class="panel-head">
+      <div class="panel-title">Decision Timeline</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="panel-body" id="timeline-body"></div>
+  </div>
+
+  <!-- ROW 3: EQUITY CURVE (spans 2 cols) | LIVE TRADE TABLE -->
+  <div class="panel" style="grid-column: 1 / span 2; grid-row:3;">
+    <div class="panel-head">
+      <div class="panel-title">Equity Curve &middot; Cumulative PnL, All Trades</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
+  </div>
+
+  <div class="panel" style="grid-column:3; grid-row:3;">
     <div class="panel-head">
       <div class="panel-title">Live Trades</div>
       <span class="real-tag">REAL</span>
     </div>
     <div class="sub-panel-title">Open Positions</div>
-    <div class="panel-body nopad" style="flex: 0 0 auto; max-height: 120px; overflow:auto;">
+    <div class="panel-body nopad" style="flex: 0 0 auto; max-height: 90px; overflow:auto;">
       <table class="dense"><tbody id="positions-body"></tbody></table>
     </div>
     <div class="sub-panel-title">Last 20 Trades</div>
@@ -291,10 +327,12 @@
                                    OLDER shadow QuantFeatureExtractor's output,
                                    a different feature set) -- this is the
                                    correct real source for it.
-   data/quant_features.jsonl      used only for "last signal confidence": the
-                                   most recent entry's model_probability
-                                   (the older shadow quant model's logged
-                                   confidence at signal time).
+   data/quant_features.jsonl      used for (a) "last signal confidence": the
+                                   most recent entry's model_probability (the
+                                   older shadow quant model's logged
+                                   confidence at signal time), and (b) the BTC
+                                   candlestick panel: the last 20 asset=BTC,
+                                   stage=signal entries' features.yes_price.
    -----------------------------------------------------------------------------
    If a source file is missing, unreachable, or a specific field inside it is
    null, the corresponding widget renders NO DATA. Nothing is invented.
@@ -383,6 +421,13 @@ async function loadLastQuantFeature() {
   }
   return null;
 }
+async function loadLastBtcSignals(n) {
+  const rows = await fetchJsonl('data/quant_features.jsonl');
+  if (!rows) return null;
+  const btcSignals = rows.filter(r => r.asset === 'BTC' && r.stage === 'signal'
+    && r.features && r.features.yes_price != null);
+  return btcSignals.slice(-n);
+}
 
 /* ---------------- 1. HEADER ---------------- */
 function renderHeader(state) {
@@ -416,11 +461,13 @@ function computePortfolio(trades) {
   const avgLoss = losses.length ? grossLoss / losses.length : 0;
   const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : null);
   const expectancy = closed.length ? totalPnl / closed.length : null;
+  const sortedClosed = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
   let running = 0, peak = 0, maxDD = 0;
-  closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts)).forEach(t => {
+  const curve = sortedClosed.map(t => {
     running += t.pnl_usd; peak = Math.max(peak, running); maxDD = Math.max(maxDD, peak - running);
+    return running;
   });
-  return { closed, wins, losses, totalPnl, winRate, avgWin, avgLoss, profitFactor, expectancy, maxDD };
+  return { closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, profitFactor, expectancy, maxDD };
 }
 function renderPortfolio(trades) {
   const heroEl = document.getElementById('pf-total-pnl');
@@ -505,6 +552,10 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state) {
 function tlNode(name, cls, label) {
   return `<div class="tl-node ${cls}"><span class="tl-dot"></span><span class="name">${name}</span><span class="state">${label}</span></div><div class="tl-arrow">&#9660;</div>`;
 }
+// tracks the most recent real signal-fire timestamp seen across refreshes so
+// the flow-dot animation only ever plays when a NEW signal has genuinely
+// fired (state.last_signal_ts changed), never on a timer or decoratively
+let _lastSeenSignalTs = undefined;
 function renderDecisionTimeline(liveStatus, state, trades) {
   const wrap = document.getElementById('timeline-body');
   const parts = [];
@@ -561,7 +612,18 @@ function renderDecisionTimeline(liveStatus, state, trades) {
     parts.push(tlNode('TRADE', openCount > 0 ? 'active' : 'waiting', openCount > 0 ? openCount + ' OPEN' : 'FLAT'));
   }
 
-  wrap.innerHTML = `<div class="timeline">${parts.slice(0, -1).join('')}</div>`; // drop trailing arrow
+  wrap.innerHTML = `<div class="timeline">${parts.slice(0, -1).join('')}</div><div class="tl-flow-dot" id="tl-flow-dot"></div>`; // drop trailing arrow
+
+  // fire the flow-dot animation only when a real signal timestamp advances
+  const latestTs = (state && state.last_signal_ts)
+    ? Object.values(state.last_signal_ts).sort().slice(-1)[0]
+    : null;
+  if (latestTs && _lastSeenSignalTs !== undefined && latestTs !== _lastSeenSignalTs) {
+    const dot = document.getElementById('tl-flow-dot');
+    dot.classList.remove('run'); void dot.offsetWidth; // restart animation if still mid-run
+    dot.classList.add('run');
+  }
+  _lastSeenSignalTs = latestTs;
 }
 
 /* ---------------- 5. AI REASONING ---------------- */
@@ -596,24 +658,33 @@ function renderReasoning(trades, onlineStatus) {
 }
 
 /* ---------------- 6. CORRELATION MAP ---------------- */
+// vivid, saturation scales with |r|: near-zero reads as a faint tint, strong
+// correlation (either sign) reads as a solid, high-contrast tile
 function corrColor(r) {
   if (r == null) return 'rgba(255,255,255,0.04)';
   const abs = Math.min(1, Math.abs(r));
-  return r >= 0 ? `rgba(0,255,65,${0.12 + abs * 0.35})` : `rgba(255,59,59,${0.12 + abs * 0.35})`;
+  const alpha = 0.22 + abs * 0.62;
+  return r >= 0 ? `rgba(0,255,65,${alpha.toFixed(2)})` : `rgba(255,59,59,${alpha.toFixed(2)})`;
+}
+function corrTextColor(r) {
+  if (r == null) return 'var(--text-muted)';
+  const abs = Math.min(1, Math.abs(r));
+  if (abs > 0.4) return '#05070A'; // dark text once the tile is bright enough to need contrast
+  return r >= 0 ? 'var(--green)' : 'var(--red)';
 }
 function renderCorrelation(liveStatus) {
   const wrap = document.getElementById('corr-body');
   const r = liveStatus ? liveStatus.btc_eth_correlation : null;
-  const rTxt = has(r) ? r.toFixed(3) : null;
+  const rTxt = has(r) ? (r >= 0 ? '+' : '') + r.toFixed(3) : null;
 
   let html = `<div class="corr-grid">
     <div></div><div class="corr-head">BTC</div><div class="corr-head">ETH</div>
     <div class="corr-row-label">BTC</div>
-    <div class="corr-cell" style="background:${corrColor(1)}">1.00</div>
-    <div class="corr-cell" style="background:${corrColor(r)}">${rTxt != null ? rTxt : noData()}</div>
+    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
+    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
     <div class="corr-row-label">ETH</div>
-    <div class="corr-cell" style="background:${corrColor(r)}">${rTxt != null ? rTxt : noData()}</div>
-    <div class="corr-cell" style="background:${corrColor(1)}">1.00</div>
+    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
+    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
   </div>`;
   html += `<div class="metric-row" style="margin-top:10px;"><span class="label">SOL</span><span class="value">${noData('EXCLUDED FROM STRATEGY')}</span></div>`;
   html += `<div class="metric-row"><span class="label">Macro Events</span><span class="value">${noData()}</span></div>`;
@@ -653,21 +724,155 @@ function renderTradeTable(trades) {
     </tr>`).join('') : `<tr><td class="empty-row">No closed trades yet</td></tr>`;
 }
 
+/* ---------------- 8. BTC CANDLESTICK (real, single-sample-per-signal) ---------------- */
+function resizeCanvasToParent(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+function renderCandlestick(signals) {
+  const canvas = document.getElementById('candle-canvas');
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  if (!signals || signals.length < 2) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(signals ? 'Not enough BTC signals yet' : 'NO DATA', 12, h / 2);
+    return;
+  }
+
+  const pad = { t: 10, r: 46, b: 20, l: 4 };
+  const prices = signals.map(s => s.features.yes_price);
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const span = (max - min) || 0.01;
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+  const n = signals.length;
+  const slot = plotW / n;
+  const y = v => pad.t + (1 - (v - min) / span) * plotH;
+
+  // gridlines + price axis
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '9px ui-monospace, monospace';
+  for (let i = 0; i <= 3; i++) {
+    const gy = pad.t + (i / 3) * plotH;
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy); ctx.stroke();
+    ctx.fillText((max - (i / 3) * span).toFixed(3), pad.l + plotW + 4, gy + 3);
+  }
+
+  // each "candle" = one real recorded yes_price sample; no fabricated OHLC
+  // spread, so open=high=low=close and it renders as a flat tick, colored by
+  // change vs the previous signal
+  signals.forEach((s, i) => {
+    const x = pad.l + i * slot + slot / 2;
+    const price = s.features.yes_price;
+    const prevPrice = i > 0 ? signals[i - 1].features.yes_price : price;
+    const up = price >= prevPrice;
+    ctx.strokeStyle = up ? '#00FF41' : '#FF3B3B';
+    ctx.lineWidth = Math.max(2, slot * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(x, y(price) - 1.2);
+    ctx.lineTo(x, y(price) + 1.2);
+    ctx.stroke();
+  });
+
+  // connecting line so the sequence still reads as a "chart," not scattered ticks
+  ctx.beginPath();
+  signals.forEach((s, i) => {
+    const x = pad.l + i * slot + slot / 2;
+    i === 0 ? ctx.moveTo(x, y(s.features.yes_price)) : ctx.lineTo(x, y(s.features.yes_price));
+  });
+  ctx.strokeStyle = 'rgba(0,229,255,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+
+  // last price tag
+  const last = signals[signals.length - 1];
+  const lastUp = signals.length > 1 && last.features.yes_price >= signals[signals.length - 2].features.yes_price;
+  ctx.fillStyle = lastUp ? '#00FF41' : '#FF3B3B';
+  ctx.font = 'bold 11px ui-monospace, monospace';
+  ctx.fillText(last.features.yes_price.toFixed(3), pad.l + plotW + 4, y(last.features.yes_price) + 3);
+}
+
+/* ---------------- 9. EQUITY CURVE (real, all trades) ---------------- */
+function renderEquityCurve(m) {
+  const canvas = document.getElementById('equity-canvas');
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  if (!m || !m.curve || !m.curve.length) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(m ? 'Awaiting closed trades...' : 'NO DATA', 12, h / 2);
+    return;
+  }
+
+  const pad = 26;
+  const curve = m.curve;
+  const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
+  const span = (max - min) || 1;
+  const x = i => curve.length > 1 ? (i / (curve.length - 1)) * (w - pad * 2) + pad : w / 2;
+  const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
+  const zeroY = y(0);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i <= 4; i++) {
+    const gy = pad + (i / 4) * (h - pad * 2);
+    ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(w - pad, gy); ctx.stroke();
+  }
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(w - pad, zeroY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const positive = curve[curve.length - 1] >= 0;
+  const lineColor = positive ? '#00FF41' : '#FF3B3B';
+
+  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+  grad.addColorStop(0, positive ? 'rgba(0,255,65,0.28)' : 'rgba(255,59,59,0.28)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(curve[0]));
+  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(curve.length - 1), zeroY);
+  ctx.lineTo(x(0), zeroY);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(curve[0]));
+  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.strokeStyle = lineColor; ctx.lineWidth = 2;
+  ctx.shadowColor = lineColor; ctx.shadowBlur = 8;
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  ctx.fillStyle = lineColor;
+  ctx.font = 'bold 12px ui-monospace, monospace';
+  ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length} trades)`, w - pad - 130, pad - 6);
+}
+
 /* =============================================================================
    REFRESH LOOP
    ============================================================================= */
 async function refresh() {
-  const [trades, state, onlineStatus, liveStatus, lastQuantFeature] = await Promise.all([
+  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
+    loadLastBtcSignals(20),
   ]);
   renderHeader(state);
-  renderPortfolio(trades);
+  const portfolio = renderPortfolio(trades);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state);
   renderDecisionTimeline(liveStatus, state, trades);
   renderReasoning(trades, onlineStatus);
   renderCorrelation(liveStatus);
   renderTradeTable(trades);
+  renderCandlestick(btcSignals);
+  renderEquityCurve(portfolio);
 }
+
+new ResizeObserver(() => refresh()).observe(document.getElementById('candle-wrap'));
+new ResizeObserver(() => refresh()).observe(document.getElementById('equity-wrap'));
 
 refresh();
 setInterval(refresh, REFRESH_MS);
