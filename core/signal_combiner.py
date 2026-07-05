@@ -41,11 +41,13 @@ class SignalCombiner:
 
     A second FILTER (also not one of the weighted signals): yes_price must
     fall within [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]
-    (0.45-0.60), per docs/polymarket/DECISIONS.md D-002's finding that price
-    is the one factor that actually predicts win rate. None of the 3 signals
-    above look at price at all, so without this gate combine() would happily
-    fire on a market at yes_price=0.165 with the same confidence as one at
-    0.50.
+    -- proven edge is 0.45-0.60 per docs/polymarket/DECISIONS.md D-002's
+    finding that price is the one factor that actually predicts win rate; see
+    config/settings.py for whether that band is currently widened for data
+    accumulation and the backtest results on why widening isn't free. None of
+    the 3 signals above look at price at all, so without this gate combine()
+    would happily fire on a market at yes_price=0.165 with the same confidence
+    as one at 0.50.
     """
 
     SIGNAL_NAMES = ("order_book", "momentum", "volume")

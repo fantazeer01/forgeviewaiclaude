@@ -688,6 +688,17 @@ function fmtAge(iso) {
   if (isNaN(d.getTime())) return null;
   return Date.now() - d.getTime();
 }
+// session_start_clean (set by the "Reset Session" button, POST /api/reset-session)
+// is a pure display cutoff -- never mutates paper_trades.jsonl. Every panel that
+// claims to show "session" stats must scope through this same helper so the
+// cutoff can't drift between panels (this was the bug in the Live Trades table:
+// it ignored the cutoff Portfolio/Pace already used).
+function scopeTradesToSession(trades, state) {
+  const sessionStartClean = state && state.session_start_clean;
+  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
+  if (!cutMs || isNaN(cutMs)) return { scoped: trades, cutMs: null };
+  return { scoped: trades.filter(t => t.open_ts && new Date(t.open_ts).getTime() >= cutMs), cutMs };
+}
 
 const _countState = new WeakMap();
 function animateNumber(el, target, formatter, duration) {
@@ -838,18 +849,11 @@ function renderPortfolio(trades, state) {
     document.getElementById('pf-metrics').innerHTML = '';
     return null;
   }
-  // session_start_clean is written by the dashboard server's "Reset Session"
-  // button (POST /api/reset-session) -- it never touches paper_trades.jsonl,
-  // it just moves the cutoff that "visible" stats are computed from.
-  const sessionStartClean = state && state.session_start_clean;
-  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
-  const scoped = (cutMs && !isNaN(cutMs))
-    ? trades.filter(t => t.open_ts && new Date(t.open_ts).getTime() >= cutMs)
-    : trades;
+  const { scoped, cutMs } = scopeTradesToSession(trades, state);
   if (titleEl) titleEl.textContent = cutMs ? 'SESSION STATS (since reset)' : 'Portfolio';
   if (subEl) {
     subEl.innerHTML = cutMs
-      ? `reset at ${fmtClock(sessionStartClean)} &middot; ${trades.length - scoped.length} earlier trade(s) hidden, still in paper_trades.jsonl`
+      ? `reset at ${fmtClock(state.session_start_clean)} &middot; ${trades.length - scoped.length} earlier trade(s) hidden, still in paper_trades.jsonl`
       : '';
   }
   const m = computePortfolio(scoped);
@@ -1667,7 +1671,7 @@ function renderReasoning(trades, onlineStatus) {
 }
 
 /* ---------------- 14. LIVE TRADE TABLE ---------------- */
-function renderTradeTable(trades) {
+function renderTradeTable(trades, state) {
   const posBody = document.getElementById('positions-body');
   const tradesBody = document.getElementById('trades-body');
   if (!trades) {
@@ -1675,6 +1679,7 @@ function renderTradeTable(trades) {
     tradesBody.innerHTML = `<tr><td class="empty-row">${noData()}</td></tr>`;
     return;
   }
+  trades = scopeTradesToSession(trades, state).scoped;
 
   const open = trades.filter(t => t.status === 'open').sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts));
   posBody.innerHTML = open.length ? open.map(t => `
@@ -1747,7 +1752,7 @@ function renderSignalCombiner(status) {
       <td class="plain">${blocked ? '<span class="down">BLOCKED</span>' : '<span class="up">clear</span>'}</td>
       <td class="plain">${combinedCell}</td>
     </tr>`;
-  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the 0.45-0.60 yes_price band (D-002).</td></tr>`;
+  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the yes_price band in config/settings.py SIGNAL_COMBINER_MIN/MAX_YES_PRICE (proven edge is 0.45-0.60 per D-002; temporarily widened to 0.35-0.65 on 2026-07-05 to accumulate fresh session data).</td></tr>`;
 }
 
 /* =============================================================================
@@ -1781,7 +1786,7 @@ async function refresh() {
   renderLiveFeed(trades);
   renderDecisionTimeline(liveStatus, state, trades, combinerStatus);
   renderReasoning(trades, onlineStatus);
-  renderTradeTable(trades);
+  renderTradeTable(trades, state);
   renderSignalCombiner(combinerStatus);
 }
 

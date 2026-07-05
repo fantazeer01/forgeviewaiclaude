@@ -132,8 +132,21 @@ SIGNAL_COMBINER_THRESHOLD = 0.60
 # constants are enforced directly in SignalCombiner.combine() (see
 # core/signal_combiner.py), independent of REPRICING_FROZEN (which belongs to
 # the now-disabled legacy repricing detector and must stay untouched for it).
-SIGNAL_COMBINER_MIN_YES_PRICE = 0.45
-SIGNAL_COMBINER_MAX_YES_PRICE = 0.60
+# TEMPORARY WIDENING (2026-07-05): the 0.45-0.60 band above is the proven
+# edge (historically +$6.68/trade avg, n=132) but is only in-band ~23-25% of
+# observed yes_price ticks, and the correct-band-enforcement fix in
+# core/signal_combiner.py (2026-07-04 23:05 UTC) dropped real trade volume to
+# ~0/day. Widened here to 0.35-0.65 to accumulate fresh session data faster.
+# Backtesting this exact widened range against all-time paper_trades.jsonl
+# shows the added region is NOT uniformly good: [0.35,0.45) alone historically
+# lost money (-$1.12/trade avg, n=268, net -$300.19) while [0.60,0.65) was
+# fine (+$1.41/trade avg, n=14, small sample) -- the widened band's blended
+# average (+$1.43/trade, n=411) is worse per-trade than the original 0.45-0.60
+# band alone. Revert to 0.45/0.60 (or narrow to e.g. 0.45-0.65) once enough
+# fresh trades have accumulated to re-decide with new-session data instead of
+# this backtest.
+SIGNAL_COMBINER_MIN_YES_PRICE = 0.35
+SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 
 # Quant-only mode: the repricing detector is fully disabled as a live trading
 # input. Trades require BOTH online_model's own calibrated p > 0.5 AND
