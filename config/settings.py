@@ -51,7 +51,23 @@ BET_SIZES = {0.60: 5, 0.70: 10, 0.80: 15, 0.90: 25}
 # combiner's independent agreement (a non-None combiner signal, which by
 # construction only exists when its confidence already exceeds
 # SIGNAL_COMBINER_THRESHOLD) -- see core/online_model.py.decide().
-ONLINE_MODEL_OWN_THRESHOLD = 0.5
+#
+# TEMPORARY LOWERING (2026-07-06): the model (297/200 warm-up trades, already
+# past warm-up) was trained almost entirely on 0.45-0.60 yes_price data, so
+# now that SIGNAL_COMBINER_MIN/MAX_YES_PRICE is temporarily 0.35-0.65 (see
+# above), it's extrapolating p<=0.5 for the new price wings just from lack of
+# training data there, blocking every combiner-agreed signal in that range.
+# Lowered to 0.3 here (not reset to 0.5 threshold + wiped model weights) --
+# a model *reset* was considered and rejected as the riskier option: with
+# QUANT_ONLY_MODE=True, run.py's warm-up fallback branch (the ONLY path that
+# would normally open trades and call record_features()/resolve() to
+# re-accumulate n_updates during warm-up) is explicitly skipped, so a reset
+# model would never open a trade and could never re-warm itself -- a
+# permanent trading halt, not just slower learning. Lowering this threshold
+# is a single reversible constant with no such failure mode. Revert to 0.5
+# once the model has enough resolved trades in the new 0.35-0.65 range to
+# have relearned it (or once the price band itself reverts to 0.45-0.60).
+ONLINE_MODEL_OWN_THRESHOLD = 0.3
 ONLINE_MODEL_COMBINER_THRESHOLD = 0.60
 # Probability calibration: the raw SGDClassifier sigmoid output saturates to
 # ~0.0/1.0 on this project's limited real training data (observed

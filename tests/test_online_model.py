@@ -1,5 +1,6 @@
 import pytest
 
+from config.settings import ONLINE_MODEL_OWN_THRESHOLD
 from core.online_model import OnlineQuantModel
 from core.repricing_detector import RepricingSignal
 
@@ -246,16 +247,17 @@ def test_live_mode_skips_when_combiner_confidence_too_low(model, mocker):
 
 def test_live_mode_skips_when_model_disagrees_even_if_combiner_fires(model, mocker):
     model._n_updates = model.warmup_trades
-    mocker.patch.object(model, "predict_proba_one", return_value=0.4)  # <= 0.5
+    below_threshold = ONLINE_MODEL_OWN_THRESHOLD - 0.1
+    mocker.patch.object(model, "predict_proba_one", return_value=below_threshold)
     strong_combiner_signal = make_repricing_signal(confidence=0.9)
     should_trade, direction, prob, reason = model.decide(make_features(), strong_combiner_signal)
     assert should_trade is False
-    assert prob == 0.4
+    assert prob == below_threshold
 
 
 def test_live_mode_boundary_model_exactly_at_threshold_does_not_fire(model, mocker):
     model._n_updates = model.warmup_trades
-    mocker.patch.object(model, "predict_proba_one", return_value=0.5)  # exactly at threshold, not >
+    mocker.patch.object(model, "predict_proba_one", return_value=ONLINE_MODEL_OWN_THRESHOLD)  # exactly at threshold, not >
     combiner_signal = make_repricing_signal(confidence=0.9)
     should_trade, _, _, _ = model.decide(make_features(), combiner_signal)
     assert should_trade is False

@@ -44,12 +44,18 @@ class OnlineQuantModel:
     can be trusted with real trading decisions.
 
     For the first ONLINE_MODEL_WARMUP_TRADES (200) resolved trades, decide()
-    always defers to the repricing signal passed in -- trading behavior is
-    unchanged during warm-up, but every one of those resolutions is still fed
-    into the model as a training example.
+    always defers to the repricing signal passed in, and (in isolation) every
+    one of those resolutions would be fed into the model as a training
+    example. CAUTION: under run.py's current QUANT_ONLY_MODE=True wiring,
+    this warm-up fallback branch is explicitly skipped (no trade opens, so
+    record_features()/resolve() are never called), so a model reset back to
+    n_updates=0 would never re-warm itself live -- it would need a non-empty
+    warm-up trading path (QUANT_ONLY_MODE=False, or a manual backfill) to
+    ever accumulate training examples again. Prefer temporarily adjusting
+    ONLINE_MODEL_OWN_THRESHOLD over resetting the model for this reason.
 
     After warm-up, a trade requires BOTH signals to agree: the model's own
-    (calibrated) prediction must exceed ONLINE_MODEL_OWN_THRESHOLD (0.5) AND
+    (calibrated) prediction must exceed ONLINE_MODEL_OWN_THRESHOLD AND
     the signal combiner's independent output (passed in as `repricing_signal`
     -- see run.py, which now feeds SignalCombiner.combine()'s result here
     instead of the raw repricing detector) must be non-None, i.e. already
@@ -214,7 +220,9 @@ class OnlineQuantModel:
         sufficient; this replaces the old single-model-confidence gate
         entirely. confidence_threshold is accepted for backward
         compatibility but no longer used in the live branch -- the model's
-        own bar is the fixed ONLINE_MODEL_OWN_THRESHOLD (0.5) per spec.
+        own bar is ONLINE_MODEL_OWN_THRESHOLD (see config/settings.py for the
+        current value and whether it's been temporarily lowered from its 0.5
+        spec value).
         """
         if not self.is_warmed_up():
             if repricing_signal is None:
