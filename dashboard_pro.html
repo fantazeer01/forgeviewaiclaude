@@ -499,8 +499,12 @@
                                    Live Trades table, Monte Carlo inputs.
    data/state.json                daily_loss_usd, loss_streak, system_stopped,
                                    last_signal_ts per asset, session_start.
-                                   Backs header STATUS, Risk Gauge, Pace's
-                                   hours_running, Decision Timeline.
+                                   Backs header STATUS, Risk Gauge, Decision
+                                   Timeline. Pace intentionally does NOT use
+                                   session_start/hours_running here -- that
+                                   resets on every bot restart and inflates
+                                   pace. It uses the earliest open_ts across
+                                   paper_trades.jsonl instead.
    data/online_model_status.json  NEW small export written by
                                    core/online_model.py (OnlineQuantModel.save()
                                    / _load()) every time the model updates or
@@ -845,14 +849,23 @@ function renderRiskGauge(state) {
     <div class="metric-row" style="margin-top:8px;"><span class="label">Loss Streak</span><span class="value num" style="color:${streakColor};">${streak} / ${MAX_LOSS_STREAK}</span></div>
   `;
 }
-function renderPace(portfolio, state) {
+function renderPace(portfolio, state, trades) {
   const wrap = document.getElementById('pace-body');
-  if (!portfolio || !state || !state.session_start) {
+  if (!portfolio || !trades || !trades.length) {
     wrap.innerHTML = noData();
     return;
   }
-  const sessionStartMs = new Date(state.session_start).getTime();
-  const hoursRunning = (Date.now() - sessionStartMs) / 3600000;
+  // Pace is measured from the FIRST trade ever opened, not session_start --
+  // session_start resets to ~now on every bot restart, which made pace spike
+  // absurdly high (e.g. $2,218/hr) right after a restart divided all-time PnL
+  // by a tiny number of hours.
+  const openTimes = trades.map(t => new Date(t.open_ts).getTime()).filter(ms => !isNaN(ms));
+  if (!openTimes.length) {
+    wrap.innerHTML = noData();
+    return;
+  }
+  const firstTradeMs = Math.min(...openTimes);
+  const hoursRunning = (Date.now() - firstTradeMs) / 3600000;
   if (!(hoursRunning > 0)) {
     wrap.innerHTML = noData('SESSION JUST STARTED');
     return;
@@ -861,12 +874,12 @@ function renderPace(portfolio, state) {
   const daily = pace * 24, weekly = pace * 24 * 7;
   wrap.innerHTML = `
     <div class="pace-hero num ${pace >= 0 ? 'up' : 'down'}">${fmtUsd(pace)}/hr</div>
-    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h running session (started ${fmtClock(state.session_start)})</div>
+    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h since first trade ever (${new Date(firstTradeMs).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</div>
     <div class="metric-list">
       <div class="metric-row"><span class="label">Projected Daily</span><span class="value num ${daily >= 0 ? 'up' : 'down'}">${fmtUsd(daily)}</span></div>
       <div class="metric-row"><span class="label">Projected Weekly</span><span class="value num ${weekly >= 0 ? 'up' : 'down'}">${fmtUsd(weekly)}</span></div>
     </div>
-    <div class="pace-sub" style="margin-top:6px;">Linear extrapolation from all-time realized PnL over this session's runtime &mdash; will look inflated right after a bot restart when hours_running is still small.</div>
+    <div class="pace-sub" style="margin-top:6px;">Linear extrapolation from all-time realized PnL over total calendar time since the first trade ever &mdash; stable across bot restarts (unlike a session-runtime basis).</div>
   `;
 }
 
@@ -1692,7 +1705,7 @@ async function refresh() {
   renderTicker(marketBias);
   const portfolio = renderPortfolio(trades);
   renderRiskGauge(state);
-  renderPace(portfolio, state);
+  renderPace(portfolio, state, trades);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
   renderTopCallout(portfolio);
   renderExecutionCycle(executionCycle);
