@@ -12,7 +12,7 @@ from config.settings import (
     MARKET_POLL_INTERVAL_SEC,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
-    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE,
+    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -78,6 +78,8 @@ def main():
             for market in markets:
                 _export_execution_cycle("scan", asset=market["asset"], market_id=market["market_id"],
                                          detail="scanning market for signals")
+                if market["asset"] in ("BTC", "ETH"):
+                    _log_price_history(market["asset"], market["yes_price"])
                 live_features.update(market["market_id"], market["asset"], market["yes_price"], market["no_price"])
                 # kept only for its shadow-logging side effect (data/quant_features.jsonl via the
                 # old static QuantModel) -- its return value is NOT used for trading decisions in
@@ -177,6 +179,22 @@ def _log_signal(signal):
     os.makedirs(os.path.dirname(SIGNALS_LOG), exist_ok=True)
     with open(SIGNALS_LOG, "a") as f:
         f.write(json.dumps(signal.to_dict()) + "\n")
+
+def _log_price_history(asset: str, yes_price: float):
+    """Appends one row per poll tick, unconditioned by any filter or signal --
+    unlike quant_features.jsonl's 'signal' stage (only written when the old
+    repricing rule fires), this is meant to answer where yes_price actually
+    spends its time so SIGNAL_COMBINER_MIN/MAX_YES_PRICE can be set from real
+    data instead of a biased sample."""
+    import json
+    os.makedirs(os.path.dirname(PRICE_HISTORY_LOG), exist_ok=True)
+    entry = {
+        "asset": asset,
+        "yes_price": yes_price,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    with open(PRICE_HISTORY_LOG, "a") as f:
+        f.write(json.dumps(entry) + "\n")
 
 def _maybe_refresh_external_status(bias_fetcher: MarketBiasFetcher, fetcher: MarketFetcher):
     """Runs at most once every MARKET_BIAS_REFRESH_SEC (60s), independent of

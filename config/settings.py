@@ -22,6 +22,12 @@ DEDUP_STATE_FILE = "data/dedup_state.json"
 TRADES_LOG = "data/paper_trades.jsonl"
 SIGNALS_LOG = "data/signals_log.jsonl"
 QUANT_FEATURES_LOG = "data/quant_features.jsonl"
+# Raw, unconditioned yes_price sample for BTC/ETH, written every poll tick
+# regardless of whether any signal fires or any filter blocks -- unlike
+# quant_features.jsonl (which only logs when the old repricing rule fires,
+# a biased sample) this is meant to answer "where does price actually spend
+# its time" so SIGNAL_COMBINER_MIN/MAX_YES_PRICE can be set from real data.
+PRICE_HISTORY_LOG = "data/price_history.jsonl"
 QUANT_MODEL_PATH = "data/quant_model.pkl"
 # KELLY_FRACTION_CAP stays defined here: core/kelly_criterion.py (a separate,
 # still-valid standalone utility module with its own tests) uses it
