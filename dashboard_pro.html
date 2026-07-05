@@ -158,6 +158,19 @@
   .pace-hero { font-size: 20px; font-weight: 800; }
   .pace-sub { font-size: 9.5px; color: var(--text-muted); margin-top: 2px; }
 
+  /* ---- session reset ---- */
+  .reset-session-btn {
+    font-family: inherit; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-secondary); background: transparent; border: 1px solid var(--border-hi);
+    border-radius: 3px; padding: 3px 7px; cursor: pointer;
+  }
+  .reset-session-btn:hover { color: var(--text-primary); border-color: var(--cyan); }
+  .reset-session-btn:disabled { opacity: 0.5; cursor: default; }
+  .session-tag {
+    font-size: 8.5px; letter-spacing: 0.08em; color: var(--cyan);
+    border: 1px solid rgba(0,229,255,0.4); border-radius: 3px; padding: 1px 5px;
+  }
+
   /* ---- AI signal panel ---- */
   .warmup-track { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 10px; overflow: hidden; }
   .warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); transition: width 0.6s ease; }
@@ -326,11 +339,15 @@
   <!-- ================= ROW 1 (HERO): PORTFOLIO | CENTER STACK | RIGHT STACK ================= -->
   <div class="panel" style="grid-column:1; grid-row:1;">
     <div class="panel-head">
-      <div class="panel-title">Portfolio</div>
-      <span class="real-tag">REAL</span>
+      <div class="panel-title" id="pf-panel-title">Portfolio</div>
+      <span style="display:flex; align-items:center; gap:8px;">
+        <button id="reset-session-btn" class="reset-session-btn" title="Zero out visible stats without touching paper_trades.jsonl">Reset Session</button>
+        <span class="real-tag">REAL</span>
+      </span>
     </div>
     <div class="panel-body">
       <div class="hero num" id="pf-total-pnl">--</div>
+      <div id="pf-session-sub" class="pace-sub" style="margin-bottom:6px;"></div>
       <div id="pf-metrics" class="metric-list"></div>
       <div class="section-divider">Risk (Daily Loss Cap Used)</div>
       <div id="risk-gauge-body"></div>
@@ -498,13 +515,28 @@
                                    Robustness grid, PnL Growth, Live Feed,
                                    Live Trades table, Monte Carlo inputs.
    data/state.json                daily_loss_usd, loss_streak, system_stopped,
-                                   last_signal_ts per asset, session_start.
+                                   last_signal_ts per asset, session_start,
+                                   session_start_clean.
                                    Backs header STATUS, Risk Gauge, Decision
                                    Timeline. Pace intentionally does NOT use
                                    session_start/hours_running here -- that
                                    resets on every bot restart and inflates
                                    pace. It uses the earliest open_ts across
-                                   paper_trades.jsonl instead.
+                                   paper_trades.jsonl instead (or
+                                   session_start_clean, see below).
+   session_start_clean            NOT written by the bot. Written by
+                                   scripts/dashboard_server.py's
+                                   POST /api/reset-session, called by the
+                                   "Reset Session" button in the Portfolio
+                                   panel. When set, Portfolio/Pace/Biggest
+                                   Win/Decision Tree all scope to trades with
+                                   open_ts >= session_start_clean ("SESSION
+                                   STATS (since reset)" label) -- purely a
+                                   display cutoff, paper_trades.jsonl is never
+                                   modified. Requires the dashboard to be
+                                   served via scripts/dashboard_server.py
+                                   (plain `python -m http.server` can't accept
+                                   the POST).
    data/online_model_status.json  NEW small export written by
                                    core/online_model.py (OnlineQuantModel.save()
                                    / _load()) every time the model updates or
@@ -797,14 +829,30 @@ function computePortfolio(trades) {
     weeklyPnl, monthlyPnl, historyDays,
   };
 }
-function renderPortfolio(trades) {
+function renderPortfolio(trades, state) {
   const heroEl = document.getElementById('pf-total-pnl');
+  const titleEl = document.getElementById('pf-panel-title');
+  const subEl = document.getElementById('pf-session-sub');
   if (!trades) {
     heroEl.innerHTML = noData();
     document.getElementById('pf-metrics').innerHTML = '';
     return null;
   }
-  const m = computePortfolio(trades);
+  // session_start_clean is written by the dashboard server's "Reset Session"
+  // button (POST /api/reset-session) -- it never touches paper_trades.jsonl,
+  // it just moves the cutoff that "visible" stats are computed from.
+  const sessionStartClean = state && state.session_start_clean;
+  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
+  const scoped = (cutMs && !isNaN(cutMs))
+    ? trades.filter(t => t.open_ts && new Date(t.open_ts).getTime() >= cutMs)
+    : trades;
+  if (titleEl) titleEl.textContent = cutMs ? 'SESSION STATS (since reset)' : 'Portfolio';
+  if (subEl) {
+    subEl.innerHTML = cutMs
+      ? `reset at ${fmtClock(sessionStartClean)} &middot; ${trades.length - scoped.length} earlier trade(s) hidden, still in paper_trades.jsonl`
+      : '';
+  }
+  const m = computePortfolio(scoped);
   animateNumber(heroEl, m.totalPnl, v => fmtUsd(v));
   heroEl.classList.toggle('up', m.totalPnl >= 0);
   heroEl.classList.toggle('down', m.totalPnl < 0);
@@ -855,31 +903,43 @@ function renderPace(portfolio, state, trades) {
     wrap.innerHTML = noData();
     return;
   }
-  // Pace is measured from the FIRST trade ever opened, not session_start --
-  // session_start resets to ~now on every bot restart, which made pace spike
-  // absurdly high (e.g. $2,218/hr) right after a restart divided all-time PnL
-  // by a tiny number of hours.
-  const openTimes = trades.map(t => new Date(t.open_ts).getTime()).filter(ms => !isNaN(ms));
-  if (!openTimes.length) {
-    wrap.innerHTML = noData();
-    return;
+  // Pace's basis is the earliest point that could have produced portfolio.totalPnl:
+  //  - after a "Reset Session" click, portfolio is scoped to trades opened after
+  //    session_start_clean, so pace must use that same cutoff as its start time.
+  //  - otherwise it's the FIRST trade ever opened, not session_start -- session_start
+  //    resets to ~now on every bot restart, which made pace spike absurdly high
+  //    (e.g. $2,218/hr) right after a restart divided all-time PnL by a tiny hours count.
+  const sessionStartClean = state && state.session_start_clean;
+  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
+  let startMs, basisLabel;
+  if (cutMs && !isNaN(cutMs)) {
+    startMs = cutMs;
+    basisLabel = 'since reset';
+  } else {
+    const openTimes = trades.map(t => new Date(t.open_ts).getTime()).filter(ms => !isNaN(ms));
+    if (!openTimes.length) {
+      wrap.innerHTML = noData();
+      return;
+    }
+    startMs = Math.min(...openTimes);
+    basisLabel = 'since first trade ever';
   }
-  const firstTradeMs = Math.min(...openTimes);
-  const hoursRunning = (Date.now() - firstTradeMs) / 3600000;
+  const hoursRunning = (Date.now() - startMs) / 3600000;
   if (!(hoursRunning > 0)) {
     wrap.innerHTML = noData('SESSION JUST STARTED');
     return;
   }
   const pace = portfolio.totalPnl / hoursRunning;
   const daily = pace * 24, weekly = pace * 24 * 7;
+  const startLabel = new Date(startMs).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   wrap.innerHTML = `
     <div class="pace-hero num ${pace >= 0 ? 'up' : 'down'}">${fmtUsd(pace)}/hr</div>
-    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h since first trade ever (${new Date(firstTradeMs).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })})</div>
+    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h ${basisLabel} (${startLabel})</div>
     <div class="metric-list">
       <div class="metric-row"><span class="label">Projected Daily</span><span class="value num ${daily >= 0 ? 'up' : 'down'}">${fmtUsd(daily)}</span></div>
       <div class="metric-row"><span class="label">Projected Weekly</span><span class="value num ${weekly >= 0 ? 'up' : 'down'}">${fmtUsd(weekly)}</span></div>
     </div>
-    <div class="pace-sub" style="margin-top:6px;">Linear extrapolation from all-time realized PnL over total calendar time since the first trade ever &mdash; stable across bot restarts (unlike a session-runtime basis).</div>
+    <div class="pace-sub" style="margin-top:6px;">Linear extrapolation from realized PnL ${basisLabel === 'since reset' ? 'since the last session reset' : 'over total calendar time since the first trade ever'} &mdash; stable across bot restarts (unlike a session-runtime basis).</div>
   `;
 }
 
@@ -1703,7 +1763,7 @@ async function refresh() {
   ]);
   renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
   renderTicker(marketBias);
-  const portfolio = renderPortfolio(trades);
+  const portfolio = renderPortfolio(trades, state);
   renderRiskGauge(state);
   renderPace(portfolio, state, trades);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
@@ -1724,6 +1784,24 @@ async function refresh() {
   renderTradeTable(trades);
   renderSignalCombiner(combinerStatus);
 }
+
+document.getElementById('reset-session-btn').addEventListener('click', async () => {
+  if (!confirm('Reset visible session stats?\n\nThis only moves the display cutoff -- paper_trades.jsonl and all historical data are untouched.')) return;
+  const btn = document.getElementById('reset-session-btn');
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = 'Resetting...';
+  try {
+    const res = await fetch('/api/reset-session', { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    await refresh();
+  } catch (e) {
+    alert('Reset failed: ' + e.message + '\n\nMake sure the dashboard is served by scripts/dashboard_server.py (not plain `python -m http.server`), which is what implements POST /api/reset-session.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+});
 
 new ResizeObserver(() => refresh()).observe(document.getElementById('candle-wrap'));
 new ResizeObserver(() => refresh()).observe(document.getElementById('equity-wrap'));

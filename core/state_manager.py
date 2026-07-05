@@ -69,9 +69,21 @@ class StateManager:
 
     def _save(self):
         try:
+            # Merge with whatever is currently on disk before overwriting, so a
+            # key written by another process (e.g. the dashboard server's
+            # session_start_clean reset) isn't wiped out by our next save of
+            # this process's in-memory state.
+            on_disk = {}
+            if os.path.exists(self.state_file):
+                try:
+                    with open(self.state_file) as f:
+                        on_disk = json.load(f)
+                except Exception:
+                    on_disk = {}
+            merged = {**on_disk, **self.state}
             tmp_path = self.state_file + ".tmp"
             with open(tmp_path, "w") as f:
-                json.dump(self.state, f, indent=2)
+                json.dump(merged, f, indent=2)
             os.replace(tmp_path, self.state_file)
         except Exception as e:
             logger.error(f"StateManager save error: {e}")
