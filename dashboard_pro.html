@@ -179,14 +179,14 @@
     position: relative; z-index: 1;
   }
   .exec-step .dot {
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 32px; height: 32px; border-radius: 50%;
     border: 2px solid var(--border-hi); background: var(--panel);
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px; color: var(--text-muted); font-weight: 800;
+    font-size: 13px; color: var(--text-muted); font-weight: 800;
     transition: all 0.3s ease;
   }
-  .exec-step .label { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
-  .exec-step .detail { font-size: 8.5px; color: var(--text-muted); max-width: 120px; text-align: center; min-height: 11px; }
+  .exec-step .label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+  .exec-step .detail { font-size: 10px; color: var(--text-muted); max-width: 130px; text-align: center; min-height: 13px; }
   .exec-step.done .dot { border-color: rgba(0,255,65,0.4); color: var(--green); background: rgba(0,255,65,0.06); }
   .exec-step.done .label { color: var(--text-secondary); }
   .exec-step.current .dot {
@@ -206,8 +206,8 @@
   #tree-edge-line b { color: var(--text-primary); }
   .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
   .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
-  .tree-node-label { font-size: 9.5px; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
-  .tree-node-sub { font-size: 8.5px; fill: var(--text-muted); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-node-label { font-size: 12.5px; font-weight: 700; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-node-sub { font-size: 10px; fill: var(--text-muted); font-family: ui-monospace, monospace; text-anchor: middle; }
   .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
   .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
 
@@ -356,16 +356,19 @@
       <div class="panel-body" id="top-callout-body"></div>
     </div>
 
-    <div class="panel" style="height:140px;">
+    <div class="panel" style="height:152px;">
       <div class="panel-head">
         <div class="panel-title">Execution Cycle</div>
-        <span id="next-tick-countdown"></span>
+        <span style="display:flex;align-items:center;gap:10px;">
+          <span id="next-signal-countdown" style="font-size:9.5px;color:var(--text-muted);"></span>
+          <span id="next-tick-countdown"></span>
+        </span>
         <span class="real-tag">REAL</span>
       </div>
       <div class="panel-body" id="exec-cycle-body"></div>
     </div>
 
-    <div class="panel" style="height:280px;">
+    <div class="panel" style="height:300px;">
       <div class="panel-head">
         <div class="panel-title">Strategy Decision Tree</div>
         <span class="real-tag">REAL</span>
@@ -827,15 +830,18 @@ function renderPortfolio(trades) {
 function renderRiskGauge(state) {
   const wrap = document.getElementById('risk-gauge-body');
   if (!state || !has(state.daily_loss_usd)) { wrap.innerHTML = noData(); return; }
-  const pct = Math.min(100, (state.daily_loss_usd / MAX_DAILY_LOSS_USD) * 100);
+  const used = state.daily_loss_usd;
+  const remaining = Math.max(0, MAX_DAILY_LOSS_USD - used);
+  const pct = Math.min(100, (used / MAX_DAILY_LOSS_USD) * 100);
   const color = pct >= 80 ? 'var(--red)' : (pct >= 50 ? 'var(--yellow)' : 'var(--green)');
   const streak = state.loss_streak || 0;
   const streakPct = Math.min(100, (streak / MAX_LOSS_STREAK) * 100);
   const streakColor = streakPct >= 80 ? 'var(--red)' : (streakPct >= 50 ? 'var(--yellow)' : 'var(--green)');
+  const fmtPlain = n => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   wrap.innerHTML = `
     <div class="risk-gauge-track"><div class="risk-gauge-fill" style="width:${pct.toFixed(1)}%;background:${color};box-shadow:0 0 8px ${color};"></div></div>
-    <div style="font-size:11px;font-weight:700;color:${color};">${pct.toFixed(1)}% &mdash; ${fmtUsd(-state.daily_loss_usd)} / ${fmtUsd(-MAX_DAILY_LOSS_USD)}</div>
-    <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">This project has no leverage/margin, so there's no real liquidation-risk gauge to show &mdash; this is the real equivalent: today's realized loss vs. the hard daily-loss cap that auto-stops trading.</div>
+    <div style="font-size:11px;font-weight:700;color:${color};">${fmtPlain(remaining)} remaining <span style="color:var(--text-muted);font-weight:400;font-size:9.5px;">of ${fmtPlain(MAX_DAILY_LOSS_USD)} cap &middot; ${fmtPlain(used)} used (${pct.toFixed(1)}%)</span></div>
+    <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">This project has no leverage/margin, so there's no real liquidation-risk gauge to show &mdash; this is the real equivalent: remaining budget before today's hard daily-loss cap auto-stops trading.</div>
     <div class="metric-row" style="margin-top:8px;"><span class="label">Loss Streak</span><span class="value num" style="color:${streakColor};">${streak} / ${MAX_LOSS_STREAK}</span></div>
   `;
 }
@@ -1012,19 +1018,38 @@ function renderNextTick() {
   const remain = Math.max(0, MARKET_POLL_INTERVAL_SEC - (elapsedSec % MARKET_POLL_INTERVAL_SEC));
   el.textContent = `next tick ~${remain.toFixed(0)}s`;
 }
+let _lastKnownState = null;
+function renderNextSignalCountdown() {
+  const el = document.getElementById('next-signal-countdown');
+  if (!el) return;
+  if (!_lastKnownState || !_lastKnownState.last_signal_ts) { el.innerHTML = ''; return; }
+  let soonestAsset = null, soonestRemain = Infinity, anyReady = false;
+  TRACKED_ASSETS.forEach(asset => {
+    const cd = assetCooldown(_lastKnownState, asset);
+    if (cd.ready) anyReady = true;
+    else if (cd.remain < soonestRemain) { soonestRemain = cd.remain; soonestAsset = asset; }
+  });
+  if (anyReady) {
+    el.innerHTML = `<span style="color:var(--green);">signal ready now</span>`;
+  } else if (soonestAsset) {
+    el.innerHTML = `next signal ~${soonestRemain}s (${soonestAsset})`;
+  } else {
+    el.innerHTML = '';
+  }
+}
 
 /* ---------------- 6. STRATEGY DECISION TREE (animated SVG) ---------------- */
 const TREE_NODES = {
-  tick:       { x: 50,  y: 110, label: 'TICK' },
-  scan:       { x: 170, y: 110, label: 'SCAN' },
-  classify:   { x: 290, y: 110, label: 'CLASSIFY' },
-  repricing:  { x: 440, y: 15,  label: 'REPRICING' },
-  order_book: { x: 440, y: 70,  label: 'ORDER BOOK' },
-  momentum:   { x: 440, y: 150, label: 'MOMENTUM' },
-  volume:     { x: 440, y: 205, label: 'VOLUME' },
-  size:       { x: 600, y: 110, label: 'SIZE' },
-  fill:       { x: 720, y: 110, label: 'FILL' },
-  pnl:        { x: 870, y: 110, label: 'P&L' },
+  tick:       { x: 55,  y: 168, label: 'TICK' },
+  scan:       { x: 200, y: 168, label: 'SCAN' },
+  classify:   { x: 350, y: 168, label: 'CLASSIFY' },
+  repricing:  { x: 540, y: 35,  label: 'REPRICING' },
+  order_book: { x: 540, y: 130, label: 'ORDER BOOK' },
+  momentum:   { x: 540, y: 215, label: 'MOMENTUM' },
+  volume:     { x: 540, y: 300, label: 'VOLUME' },
+  size:       { x: 710, y: 168, label: 'SIZE' },
+  fill:       { x: 860, y: 168, label: 'FILL' },
+  pnl:        { x: 980, y: 168, label: 'P&L' },
 };
 const TREE_EDGES = [
   ['tick', 'scan'], ['scan', 'classify'],
@@ -1033,6 +1058,21 @@ const TREE_EDGES = [
   ['size', 'fill'], ['fill', 'pnl'],
 ];
 let _lastSeenTreeFillTs = undefined;
+const _lastSeenBranchFireTs = { order_book: undefined, momentum: undefined, volume: undefined };
+function buildFlowPath(...nodeKeys) {
+  return 'M ' + nodeKeys.map(k => `${TREE_NODES[k].x} ${TREE_NODES[k].y}`).join(' L ');
+}
+function triggerFlowDot(pathStr, durSec) {
+  const motion = document.getElementById('tree-flow-motion');
+  const opacityAnim = document.getElementById('tree-flow-opacity');
+  if (!motion || !opacityAnim) return;
+  const dur = (durSec || 1.8) + 's';
+  motion.setAttribute('path', pathStr);
+  motion.setAttribute('dur', dur);
+  opacityAnim.setAttribute('dur', dur);
+  motion.beginElement();
+  opacityAnim.beginElement();
+}
 function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus) {
   const wrap = document.getElementById('tree-svg-wrap');
   const edgeLine = document.getElementById('tree-edge-line');
@@ -1066,7 +1106,7 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     pnl: !!(portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length > 0),
   };
 
-  let svg = `<svg viewBox="0 0 940 225" preserveAspectRatio="xMidYMid meet">`;
+  let svg = `<svg viewBox="0 0 1050 360" preserveAspectRatio="xMidYMid meet">`;
   TREE_EDGES.forEach(([a, b]) => {
     const n1 = TREE_NODES[a], n2 = TREE_NODES[b];
     const isRepricingEdge = a === 'repricing' || b === 'repricing';
@@ -1078,25 +1118,25 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     const isActive = active[key];
     const isPnl = key === 'pnl';
     const isRepricing = key === 'repricing';
-    const r = isPnl ? 30 : 18;
+    const r = isPnl ? 36 : 24;
     const fill = isActive ? 'rgba(0,255,65,0.15)' : '#10161D';
     const stroke = isActive ? '#00FF41' : 'rgba(255,255,255,0.18)';
     const dash = isRepricing ? ' stroke-dasharray="3,3"' : '';
-    svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2"${dash}/>`;
+    svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"${dash}/>`;
     if (isPnl) {
       const last = (portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length)
         ? portfolio.sortedClosed[portfolio.sortedClosed.length - 1] : null;
       const pnlText = last ? fmtUsd(last.pnl_usd) : 'NO DATA';
       const pnlColor = last ? (last.pnl_usd >= 0 ? '#00FF41' : '#FF3B3B') : '#4E5A66';
-      svg += `<text x="${n.x}" y="${n.y - 3}" text-anchor="middle" fill="${pnlColor}" font-size="12" font-weight="800" font-family="ui-monospace, monospace">${pnlText}</text>`;
-      svg += `<text x="${n.x}" y="${n.y + 11}" class="tree-node-sub">last trade</text>`;
+      svg += `<text x="${n.x}" y="${n.y - 4}" text-anchor="middle" fill="${pnlColor}" font-size="15" font-weight="800" font-family="ui-monospace, monospace">${pnlText}</text>`;
+      svg += `<text x="${n.x}" y="${n.y + 14}" class="tree-node-sub">last trade</text>`;
     } else {
-      svg += `<text x="${n.x}" y="${n.y + r + 12}" class="tree-node-label">${n.label}</text>`;
-      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 23}" class="tree-node-sub" style="fill:var(--yellow);">(disabled, shadow only)</text>`;
+      svg += `<text x="${n.x}" y="${n.y + r + 16}" class="tree-node-label">${n.label}</text>`;
+      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 29}" class="tree-node-sub" style="fill:var(--yellow);">(disabled, shadow only)</text>`;
     }
   });
-  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="5" fill="#00FF41" opacity="0">`
-       + `<animateMotion id="tree-flow-motion" path="M 50 110 L 870 110" dur="1.8s" begin="indefinite" fill="freeze"/>`
+  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="6.5" fill="#00FF41" opacity="0">`
+       + `<animateMotion id="tree-flow-motion" path="${buildFlowPath('tick', 'pnl')}" dur="1.8s" begin="indefinite" fill="freeze"/>`
        + `<animate id="tree-flow-opacity" attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.9;1" dur="1.8s" begin="indefinite" fill="freeze"/>`
        + `</circle>`;
   svg += `</svg>`;
@@ -1110,11 +1150,23 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     const isFirstPaint = _lastSeenTreeFillTs === undefined;
     _lastSeenTreeFillTs = lastFillTs;
     if (!isFirstPaint) {
-      const motion = document.getElementById('tree-flow-motion');
-      const opacityAnim = document.getElementById('tree-flow-opacity');
-      if (motion && opacityAnim) { motion.beginElement(); opacityAnim.beginElement(); }
+      triggerFlowDot(buildFlowPath('tick', 'pnl'), 1.8);
     }
   }
+
+  // Also animate the dot along the specific branch the instant a real signal
+  // fires (per core/signal_combiner.py's signal_stats.*.last_fired_at), so
+  // the dot visibly travels tick -> scan -> classify -> that branch -> size
+  // rather than only lighting up on an eventual fill.
+  const signalStats = combinerStatus && combinerStatus.signal_stats;
+  ['order_book', 'momentum', 'volume'].forEach(branch => {
+    const lastFired = signalStats && signalStats[branch] ? signalStats[branch].last_fired_at : null;
+    const prevSeen = _lastSeenBranchFireTs[branch];
+    if (prevSeen !== undefined && lastFired && lastFired !== prevSeen) {
+      triggerFlowDot(buildFlowPath('tick', 'scan', 'classify', branch, 'size'), 2.2);
+    }
+    _lastSeenBranchFireTs[branch] = lastFired;
+  });
 }
 
 /* ---------------- 7. CANDLESTICK / EQUITY CANVAS HELPERS ---------------- */
@@ -1303,12 +1355,12 @@ function renderCorrelation(liveStatus, biasHistory) {
   wrap.innerHTML = html;
 }
 
-/* ---------------- 9. ROBUSTNESS GRID (win rate by day x asset, last 7 UTC days) ---------------- */
+/* ---------------- 9. ROBUSTNESS GRID (win rate by day x asset, last 14 UTC days) ---------------- */
 function computeRobustnessGrid(trades) {
   if (!trades) return null;
   const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null && t.close_ts);
   const days = [];
-  for (let i = 6; i >= 0; i--) {
+  for (let i = 13; i >= 0; i--) {
     const d = new Date();
     d.setUTCHours(0, 0, 0, 0);
     d.setUTCDate(d.getUTCDate() - i);
@@ -1349,7 +1401,7 @@ function renderRobustnessGrid(trades) {
     }).join('');
     return `<div class="rb-row"><div class="rb-cell rb-label">${dLabel}</div>${cells}</div>`;
   }).join('');
-  wrap.innerHTML = header + rows + `<div class="chart-caption" style="border-top:none;padding-left:0;">Win rate by day &times; asset, last 7 UTC days. Cells with no closed trades that day show &mdash; (never fabricated as 0%). Trade history currently spans only a few days, so most cells here are genuinely empty until more real time passes.</div>`;
+  wrap.innerHTML = header + rows + `<div class="chart-caption" style="border-top:none;padding-left:0;">Win rate by day &times; asset, last 14 UTC days. Cells with no closed trades that day show &mdash; (never fabricated as 0%). Trade history currently spans only a few days, so most cells here are genuinely empty until more real time passes.</div>`;
 }
 
 /* ---------------- 10. MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ---------------- */
@@ -1645,6 +1697,8 @@ async function refresh() {
   renderTopCallout(portfolio);
   renderExecutionCycle(executionCycle);
   renderNextTick();
+  _lastKnownState = state;
+  renderNextSignalCountdown();
   renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus);
   renderCandlestick(btcSignals);
   renderCorrelation(liveStatus, biasHistory);
@@ -1667,6 +1721,7 @@ setInterval(refresh, REFRESH_MS);
 setInterval(() => {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
   renderNextTick();
+  renderNextSignalCountdown();
 }, 1000);
 </script>
 </body>
