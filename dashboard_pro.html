@@ -496,14 +496,15 @@
    exception, added 2026-07-06 on explicit request.
    ============================================================================= */
 
-// 500ms (2x/sec, 2026-07-06 explicit request) -- drives the whole refresh()
-// loop: stats/portfolio, live trades, live feed, decision tree, AND the
-// candlestick chart (updateChart() is the last call inside refresh()), all
-// on the same cadence. Monte Carlo stays on its own separate, slower
-// MC_TICK_MS timer (see below) since it's a real simulation batch, not a
-// cheap re-render -- no need to run that 10x more often just because the
-// rest of the dashboard does.
-const REFRESH_MS = 500;
+// Main refresh cadence is hard-coded to 500ms directly on the
+// setInterval(refresh, 500) call below (2026-07-06 explicit request -- no
+// REFRESH_MS variable anymore, so there's no indirection left to check).
+// Drives the whole refresh() loop: stats/portfolio, live trades,
+// live feed, decision tree, AND the candlestick chart (updateChart() is the
+// last call inside refresh()), all on the same cadence. Monte Carlo stays on
+// its own separate, slower MC_TICK_MS timer (see below) since it's a real
+// simulation batch, not a cheap re-render -- no need to run that 10x more
+// often just because the rest of the dashboard does.
 const MAX_DAILY_LOSS_USD = 1000.0;
 const STALE_AFTER_MS = 15000;
 // One candle = one real 5-minute window (matches the "5-MIN" chart label and
@@ -1322,9 +1323,9 @@ function renderLiveTrades(trades) {
 /* ---------------- MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ----------------
    Runs on its own MC_TICK_MS timer, independent of the main data-refresh loop
    (see mcTick() / setInterval below) -- deliberately kept at 5000ms even
-   though REFRESH_MS dropped to 500ms (2026-07-06): this is a real simulation
-   batch (heavy-ish), not a cheap re-render, so there's no benefit to running
-   it 10x more often. Each tick draws MC_BATCH_SIZE more
+   though the main refresh() loop runs at 500ms (2026-07-06): this is a real
+   simulation batch (heavy-ish), not a cheap re-render, so there's no benefit
+   to running it 10x more often. Each tick draws MC_BATCH_SIZE more
    genuine random paths using the live win_rate/avg_win/avg_loss and appends
    them to a running pool (seeded with MC_INITIAL_PATHS on the first tick),
    so the displayed path count is a real, monotonically growing count of
@@ -1541,7 +1542,7 @@ setInterval(() => {
   _currentChartAsset = CHART_ASSETS[_chartAssetIdx];
   updateChart();
 }, CHART_ROTATE_MS);
-setInterval(refresh, REFRESH_MS);
+setInterval(refresh, 500);
 setInterval(() => {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
   renderNextTick();
