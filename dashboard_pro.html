@@ -186,7 +186,7 @@
      (Portfolio/Biggest Win), and clips anything that would still overflow
      it. #equity-wrap (PnL Growth, bottom row) also uses .chart-wrap and is
      deliberately untouched -- this id-specific rule only applies to #candle-wrap. */
-  #candle-wrap { flex: 0 0 120px; height: 120px; min-height: 0; overflow: hidden; }
+  #candle-wrap { flex: 0 0 150px; height: 150px; min-height: 0; overflow: hidden; }
 
   /* ---- SECTION 4: execution cycle ---- */
   .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 18px; }
@@ -1199,9 +1199,15 @@ function renderCandlestick(candles, marketBias, assetKey) {
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
   const n = candles.length;
   const slot = plotW / n;
-  // Fixed 4px body width (2026-07-06, was dynamic slot*0.6 clamped 2-22) --
-  // at 120px chart height a wider body reads as blocky/overflowing.
-  const bodyW = 4;
+  // Body width = full slot width minus a 2px gap (2026-07-06, replaces the
+  // fixed 4px used before) -- ties body width to how many candles actually
+  // exist so they always span the chart's real width edge-to-edge with even
+  // gaps, instead of a constant looking too-thin whenever n is small (a wide
+  // slot) or overlapping whenever n is large (a narrow slot). x below already
+  // centers each candle within its own [i*slot, (i+1)*slot) slot, so with
+  // bodyW now also derived from that same slot there's no drift toward
+  // either edge as n changes.
+  const bodyW = Math.max(1, slot - 2);
   const y = v => pad.t + (1 - (v - min) / span) * plotH;
 
   ctx.strokeStyle = 'rgba(90,86,70,0.10)';
@@ -1220,7 +1226,7 @@ function renderCandlestick(candles, marketBias, assetKey) {
     ctx.strokeStyle = '#8A8570'; ctx.lineWidth = 1; // 1px wick, explicit request
     ctx.beginPath(); ctx.moveTo(x, y(c.high)); ctx.lineTo(x, y(c.low)); ctx.stroke();
     const bodyTop = y(Math.max(c.open, c.close)), bodyBot = y(Math.min(c.open, c.close));
-    const bodyH = Math.max(1.5, bodyBot - bodyTop);
+    const bodyH = Math.max(2, bodyBot - bodyTop); // 2px floor so a flat/near-flat candle is still visible
     ctx.fillStyle = color;
     ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyH);
   });
@@ -1359,7 +1365,10 @@ const MC_MAX_POOL = 20000;
 let _mcFinals = [];
 let _mcTotalCount = 0;
 let _mcPrevBarFracs = null;
-function mcResetAccumulator() { _mcFinals = []; _mcTotalCount = 0; _mcPrevBarFracs = null; }
+// Last real simulation result (2026-07-06 500ms-display split, see mcTick /
+// renderMonteCarloDisplay below) -- null until the first heavy calc runs.
+let _mcLastResult = null;
+function mcResetAccumulator() { _mcFinals = []; _mcTotalCount = 0; _mcPrevBarFracs = null; _mcLastResult = null; }
 function mcAccumulate(portfolio) {
   if (!portfolio || !portfolio.wins.length || !portfolio.losses.length) return null;
   const n = Math.min(portfolio.closed.length, 5000);
@@ -1418,20 +1427,32 @@ function animateMcHistogram(canvas, finals, targetFracs) {
   requestAnimationFrame(step);
   _mcPrevBarFracs = targetFracs;
 }
-function renderMonteCarlo(portfolio) {
+// mcTick() is the HEAVY path (2026-07-06 500ms-display split): runs the
+// actual random-path simulation via mcAccumulate() and caches the result in
+// _mcLastResult. Called only every MC_TICK_MS (5000ms, see setInterval
+// below) -- never from the main 500ms refresh() loop, since re-simulating
+// thousands of paths 10x more often than before would be real, unnecessary
+// CPU cost for a number that's only meant to update every 5s anyway.
+function mcTick(portfolio) {
+  const mc = mcAccumulate(portfolio);
+  // A transient portfolio read (e.g. paper_trades.jsonl caught mid-write by
+  // the live bot) can briefly look like "no wins" or "no losses" even though
+  // real accumulated simulation history exists -- if that happens, keep
+  // _mcLastResult as whatever it already was rather than clobbering it with
+  // null, so the display doesn't blank over a one-tick data hiccup.
+  if (mc) _mcLastResult = mc;
+  renderMonteCarloDisplay(portfolio);
+}
+// renderMonteCarloDisplay() is the CHEAP path: draws whatever _mcLastResult
+// currently holds -- no new random paths, just a redraw. Safe to call every
+// 500ms from refresh() (and on resize) since it does no simulation work.
+function renderMonteCarloDisplay(portfolio) {
   const statsEl = document.getElementById('mc-stats');
   const canvas = document.getElementById('mc-canvas');
   const p01TagEl = document.getElementById('mc-p01-tag');
   const pathCountEl = document.getElementById('mc-path-count');
-  const mc = mcAccumulate(portfolio);
+  const mc = _mcLastResult;
   if (!mc) {
-    // A transient portfolio read (e.g. paper_trades.jsonl caught mid-write by
-    // the live bot) can briefly look like "no wins" or "no losses" even
-    // though real accumulated simulation history exists. Once we have real
-    // history (_mcTotalCount > 0), don't blank the panel over a one-tick
-    // data hiccup -- just skip this render pass and keep showing the last
-    // known-good state. Only show "no data" for a genuinely fresh session.
-    if (_mcTotalCount > 0) { return; }
     statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
     if (p01TagEl) p01TagEl.innerHTML = '';
     if (pathCountEl) pathCountEl.textContent = '0';
@@ -1517,6 +1538,7 @@ async function refresh() {
   renderLiveTrades(trades);
   renderEquityCurve(portfolio);
   renderLiveFeed(trades);
+  renderMonteCarloDisplay(portfolio); // cheap redraw of the last mcTick() result -- see its own 5s timer below
   await updateChart(); // uses the current rotating asset + freshly cached _lastMarketBias
 }
 
@@ -1541,12 +1563,16 @@ document.getElementById('reset-session-btn').addEventListener('click', async () 
 
 new ResizeObserver(() => updateChart()).observe(document.getElementById('candle-wrap'));
 new ResizeObserver(() => renderEquityCurve(_lastPortfolio)).observe(document.getElementById('equity-wrap'));
-new ResizeObserver(() => { _mcPrevBarFracs = null; renderMonteCarlo(_lastPortfolio); }).observe(document.getElementById('mc-chart-wrap'));
+// Redraw only (renderMonteCarloDisplay), not a resimulation -- a resize
+// doesn't need new random paths, just the existing ones redrawn to the new
+// canvas size.
+new ResizeObserver(() => { _mcPrevBarFracs = null; renderMonteCarloDisplay(_lastPortfolio); }).observe(document.getElementById('mc-chart-wrap'));
 
-refresh().then(() => renderMonteCarlo(_lastPortfolio)); // seed it immediately so the panel isn't blank until the first tick
-// Monte Carlo runs on its own clock, independent of the main data refresh --
-// see the comment above MC_INITIAL_PATHS.
-setInterval(() => renderMonteCarlo(_lastPortfolio), MC_TICK_MS);
+refresh().then(() => mcTick(_lastPortfolio)); // seed the first real simulation immediately so the panel isn't blank until the first 5s tick
+// Monte Carlo's heavy simulation runs on its own clock, independent of the
+// main 500ms data refresh -- see the comment above MC_INITIAL_PATHS and on
+// mcTick() itself.
+setInterval(() => mcTick(_lastPortfolio), MC_TICK_MS);
 // Rotates the BTC/USD chart panel through BTC -> ETH -> SOL every 10s.
 setInterval(() => {
   _chartAssetIdx = (_chartAssetIdx + 1) % CHART_ASSETS.length;
