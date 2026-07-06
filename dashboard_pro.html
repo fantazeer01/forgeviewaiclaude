@@ -180,6 +180,13 @@
   .chart-hdr-chg { font-size: 11px; font-weight: 700; margin-left: 6px; }
   .chart-wrap { position: relative; flex: 1; min-height: 200px; }
   .chart-wrap canvas { display: block; width: 100%; height: 100%; }
+  /* Candlestick container only (2026-07-06 explicit request) -- overrides
+     the shared .chart-wrap flex:1/min-height:200px above with a fixed,
+     smaller size so it can't grow to match its taller row-siblings
+     (Portfolio/Biggest Win), and clips anything that would still overflow
+     it. #equity-wrap (PnL Growth, bottom row) also uses .chart-wrap and is
+     deliberately untouched -- this id-specific rule only applies to #candle-wrap. */
+  #candle-wrap { flex: 0 0 120px; height: 120px; min-height: 0; overflow: hidden; }
 
   /* ---- SECTION 4: execution cycle ---- */
   .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 18px; }
@@ -1178,24 +1185,28 @@ function renderCandlestick(candles, marketBias, assetKey) {
 
   const pad = { t: 14, r: 52, b: 20, l: 4 };
   const allPrices = candles.flatMap(c => [c.high, c.low]);
-  // 10% padding above/below the real high/low range -- without it, the
-  // tallest wick's high and the lowest wick's low map exactly to the plot's
-  // top/bottom pixel with zero margin, so candles visually touch/clip the
-  // grid lines and header text instead of sitting inside the chart.
+  // 15% padding above/below the real high/low range (2026-07-06, raised from
+  // 10%) -- without it, the tallest wick's high and the lowest wick's low map
+  // exactly to the plot's top/bottom pixel with zero margin, so candles
+  // visually touch/clip the grid lines and header text instead of sitting
+  // inside the chart. Extra margin matters more now that the container itself
+  // is only 120px tall (see #candle-wrap).
   const rawMin = Math.min(...allPrices), rawMax = Math.max(...allPrices);
   const rawSpan = (rawMax - rawMin) || 0.01;
-  const rangePad = rawSpan * 0.10;
+  const rangePad = rawSpan * 0.15;
   const min = rawMin - rangePad, max = rawMax + rangePad;
   const span = max - min;
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
   const n = candles.length;
   const slot = plotW / n;
-  const bodyW = Math.max(2, Math.min(22, slot * 0.6));
+  // Fixed 4px body width (2026-07-06, was dynamic slot*0.6 clamped 2-22) --
+  // at 120px chart height a wider body reads as blocky/overflowing.
+  const bodyW = 4;
   const y = v => pad.t + (1 - (v - min) / span) * plotH;
 
   ctx.strokeStyle = 'rgba(90,86,70,0.10)';
   ctx.fillStyle = 'rgba(90,86,70,0.5)';
-  ctx.font = '10px monospace';
+  ctx.font = '9px monospace';
   for (let i = 0; i <= 3; i++) {
     const gy = pad.t + (i / 3) * plotH;
     ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy); ctx.stroke();
@@ -1206,7 +1217,7 @@ function renderCandlestick(candles, marketBias, assetKey) {
     const x = pad.l + i * slot + slot / 2;
     const up = c.close >= c.open;
     const color = up ? '#1a7f37' : '#cf222e';
-    ctx.strokeStyle = '#8A8570'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#8A8570'; ctx.lineWidth = 1; // 1px wick, explicit request
     ctx.beginPath(); ctx.moveTo(x, y(c.high)); ctx.lineTo(x, y(c.low)); ctx.stroke();
     const bodyTop = y(Math.max(c.open, c.close)), bodyBot = y(Math.min(c.open, c.close));
     const bodyH = Math.max(1.5, bodyBot - bodyTop);
