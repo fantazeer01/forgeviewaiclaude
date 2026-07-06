@@ -269,3 +269,47 @@ def test_live_mode_boundary_combiner_exactly_at_threshold_does_not_fire(model, m
     combiner_signal = make_repricing_signal(confidence=0.60)  # exactly at threshold, not >
     should_trade, _, _, _ = model.decide(make_features(), combiner_signal)
     assert should_trade is False
+
+
+# ---------------- NO-direction signals (extreme mean-reversion, 2026-07-06) ----------------
+# predict_proba_one() always returns P(YES wins); a NO-direction combiner
+# signal must be gated on P(NO wins) = 1-p instead, or it'd be checked
+# against the wrong side of the model's belief.
+
+def test_live_mode_fires_for_no_direction_when_model_agrees(model, mocker):
+    model._n_updates = model.warmup_trades
+    # p=0.1 -> P(YES)=0.1, P(NO)=0.9, comfortably above threshold
+    mocker.patch.object(model, "predict_proba_one", return_value=0.1)
+    no_signal = make_repricing_signal(direction="NO", confidence=0.9)
+    should_trade, direction, prob, reason = model.decide(make_features(), no_signal)
+    assert should_trade is True
+    assert direction == "NO"
+    assert prob == 0.1  # raw P(YES) is still what's returned, not P(NO)
+    assert "NO" in reason
+
+
+def test_live_mode_skips_for_no_direction_when_model_disagrees(model, mocker):
+    model._n_updates = model.warmup_trades
+    # p=0.9 -> P(YES)=0.9, P(NO)=0.1 -- model thinks YES wins, should block a NO bet
+    mocker.patch.object(model, "predict_proba_one", return_value=0.9)
+    no_signal = make_repricing_signal(direction="NO", confidence=0.9)
+    should_trade, direction, prob, reason = model.decide(make_features(), no_signal)
+    assert should_trade is False
+
+
+def test_live_mode_no_direction_fires_just_above_threshold(model, mocker):
+    model._n_updates = model.warmup_trades
+    p = 1.0 - ONLINE_MODEL_OWN_THRESHOLD - 0.01  # P(NO) = threshold + 0.01
+    mocker.patch.object(model, "predict_proba_one", return_value=p)
+    no_signal = make_repricing_signal(direction="NO", confidence=0.9)
+    should_trade, _, _, _ = model.decide(make_features(), no_signal)
+    assert should_trade is True
+
+
+def test_live_mode_no_direction_does_not_fire_just_below_threshold(model, mocker):
+    model._n_updates = model.warmup_trades
+    p = 1.0 - ONLINE_MODEL_OWN_THRESHOLD + 0.01  # P(NO) = threshold - 0.01
+    mocker.patch.object(model, "predict_proba_one", return_value=p)
+    no_signal = make_repricing_signal(direction="NO", confidence=0.9)
+    should_trade, _, _, _ = model.decide(make_features(), no_signal)
+    assert should_trade is False

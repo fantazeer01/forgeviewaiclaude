@@ -170,6 +170,24 @@ SIGNAL_COMBINER_THRESHOLD = 0.60
 SIGNAL_COMBINER_MIN_YES_PRICE = 0.35
 SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 
+# EXTREME MEAN-REVERSION ZONE (2026-07-06): outside [MIN_YES_PRICE,
+# MAX_YES_PRICE] the strategy has so far just been "no trade" (dead zone).
+# At the far tails the thesis flips from "follow momentum" to "fade the
+# extreme": the market is heavily one-sided, so bet against whichever side
+# it's overconfident in --
+#   yes_price < SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE  -> buy YES (market is
+#     overconfident in NO)
+#   yes_price > SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE -> buy NO (market is
+#     overconfident in YES)
+# Named by which price threshold they are, not by a "_FOR_NO"/"_FOR_YES"
+# suffix -- the low-price threshold triggers a YES trade and the high-price
+# threshold triggers a NO trade, so a "_FOR_NO" suffix on the low one would
+# say the opposite of what it does. Unbacktested: there is no historical
+# data yet for trades in these zones (no NO-direction trade has ever been
+# placed), so these are a starting point, not a proven edge.
+SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE = 0.20
+SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE = 0.80
+
 # Quant-only mode: the repricing detector is fully disabled as a live trading
 # input. Trades require BOTH online_model's own calibrated p > 0.5 AND
 # signal_combiner's order_book+momentum+volume confidence > 0.60 (see

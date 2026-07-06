@@ -174,6 +174,66 @@ def test_price_at_band_edges_is_not_filtered(combiner):
     assert result_high is not None
 
 
+def test_extreme_low_price_fires_yes_reversion(combiner):
+    # yes_price=0.10 is below SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE (0.20) --
+    # should fire a YES reversion bet ("market overconfident in NO"), with no
+    # order book set up at all (top=None), proving this path doesn't depend
+    # on order_book/momentum/volume.
+    result = combiner.combine(make_market(yes_price=0.10, no_price=0.90), FakeFetcher(top=None), btc_eth_correlation=None)
+    assert result is not None
+    assert result.direction == "YES"
+    assert result.confidence > 0.60
+
+
+def test_extreme_high_price_fires_no_reversion(combiner):
+    # yes_price=0.90 is above SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE (0.80) --
+    # should fire a NO reversion bet ("market overconfident in YES").
+    result = combiner.combine(make_market(yes_price=0.90, no_price=0.10), FakeFetcher(top=None), btc_eth_correlation=None)
+    assert result is not None
+    assert result.direction == "NO"
+    assert result.confidence > 0.60
+
+
+def test_extreme_reversion_confidence_grows_with_extremity(combiner):
+    near = combiner.combine(make_market(yes_price=0.19, no_price=0.81), FakeFetcher(top=None), btc_eth_correlation=None)
+    far = combiner.combine(make_market(yes_price=0.02, no_price=0.98), FakeFetcher(top=None), btc_eth_correlation=None)
+    assert far.confidence > near.confidence
+
+
+def test_extreme_zone_boundaries_are_exclusive(combiner):
+    # exactly at the threshold (not past it) should NOT be extreme --
+    # 0.20/0.80 fall in the dead zone between the normal band and the
+    # extreme zone and should just be blocked like any other dead-zone price.
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+    result_low = combiner.combine(make_market(yes_price=0.20, no_price=0.80), FakeFetcher(top), btc_eth_correlation=None)
+    assert result_low is None
+    result_high = combiner.combine(make_market(yes_price=0.80, no_price=0.20), FakeFetcher(top), btc_eth_correlation=None)
+    assert result_high is None
+
+
+def test_extreme_reversion_does_not_evaluate_order_book_momentum_volume(combiner):
+    import json
+    combiner.combine(make_market(yes_price=0.10, no_price=0.90), FakeFetcher(top=None), btc_eth_correlation=None)
+    with open(combiner.status_path) as f:
+        data = json.load(f)
+    assert data["BTC"]["order_book"]["fired"] is False
+    assert data["BTC"]["momentum"]["fired"] is False
+    assert data["BTC"]["volume"]["fired"] is False
+    assert data["BTC"]["price_out_of_band"] is False  # actionable zone, not a block
+    assert data["BTC"]["extreme_reversion"]["fired"] is True
+    assert data["BTC"]["extreme_reversion"]["direction"] == "YES"
+
+
+def test_correlation_filter_still_blocks_before_extreme_reversion_check(combiner):
+    combiner.correlation_filter.update_btc_price(0.50)
+    combiner.correlation_filter.update_btc_price(0.40)  # BTC dropped hard
+    result = combiner.combine(
+        make_market(asset="ETH", yes_price=0.05, no_price=0.95), FakeFetcher(top=None),
+        btc_eth_correlation=0.9,
+    )
+    assert result is None
+
+
 def test_signal_stats_persists_across_new_combiner_instance_same_day(tmp_path):
     import json
     from core.signals.volume_signal import VolumeSignalGenerator

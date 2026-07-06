@@ -223,6 +223,15 @@ class OnlineQuantModel:
         own bar is ONLINE_MODEL_OWN_THRESHOLD (see config/settings.py for the
         current value and whether it's been temporarily lowered from its 0.5
         spec value).
+
+        predict_proba_one() always returns the calibrated P(YES wins |
+        features) -- the model has no direction feature, so it cannot ask
+        "does this specific proposed bet win," only "does YES win." For a
+        YES-direction repricing_signal that's directly usable; for a
+        NO-direction one (see core/signal_combiner.py's extreme-reversion
+        zone, added 2026-07-06) the model's own bar must be checked against
+        P(NO wins) = 1 - p instead, or a NO signal would be gated by the
+        wrong side of the model's belief.
         """
         if not self.is_warmed_up():
             if repricing_signal is None:
@@ -232,15 +241,19 @@ class OnlineQuantModel:
         p = self.predict_proba_one(features)
         if p is None:
             return False, None, None, "model not fitted"
-        if p <= ONLINE_MODEL_OWN_THRESHOLD:
-            return False, None, p, f"online model p={p:.3f} <= {ONLINE_MODEL_OWN_THRESHOLD}"
         if repricing_signal is None or repricing_signal.confidence <= ONLINE_MODEL_COMBINER_THRESHOLD:
             return False, None, p, (
-                f"online model p={p:.3f} > {ONLINE_MODEL_OWN_THRESHOLD} but signal combiner "
-                f"did not agree (confidence <= {ONLINE_MODEL_COMBINER_THRESHOLD})"
+                f"signal combiner did not agree (confidence <= {ONLINE_MODEL_COMBINER_THRESHOLD})"
             )
-        return True, "YES", p, (
-            f"online model p={p:.3f} AND combiner confidence={repricing_signal.confidence:.3f} agree"
+        direction = repricing_signal.direction
+        own_side_p = p if direction == "YES" else (1.0 - p)
+        if own_side_p <= ONLINE_MODEL_OWN_THRESHOLD:
+            return False, None, p, (
+                f"online model P({direction})={own_side_p:.3f} <= {ONLINE_MODEL_OWN_THRESHOLD}"
+            )
+        return True, direction, p, (
+            f"online model P({direction})={own_side_p:.3f} AND combiner "
+            f"confidence={repricing_signal.confidence:.3f} agree"
         )
 
     def kelly_size(self, combiner_confidence: float) -> float:

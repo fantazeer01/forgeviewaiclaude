@@ -7,6 +7,7 @@ from typing import Optional
 from config.settings import (
     SIGNAL_COMBINER_WEIGHTS, SIGNAL_COMBINER_THRESHOLD, SIGNAL_COMBINER_STATUS_FILE,
     SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE,
+    SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE, SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE,
 )
 from core.repricing_detector import RepricingSignal
 from core.signals.order_book_signal import OrderBookSignalGenerator
@@ -48,6 +49,17 @@ class SignalCombiner:
     the 3 signals above look at price at all, so without this gate combine()
     would happily fire on a market at yes_price=0.165 with the same confidence
     as one at 0.50.
+
+    EXTREME MEAN-REVERSION (2026-07-06): outside that band, past
+    SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE (0.20) or
+    SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE (0.80), combine() takes a THIRD,
+    completely separate path -- it does not run order_book/momentum/volume at
+    all (they're momentum-continuation signals with no concept of "this is
+    too extreme," so they don't apply here). Instead it fires directly on
+    price extremity alone: yes_price < 0.20 fires YES (betting the market's
+    apparent certainty in NO is overdone), yes_price > 0.80 fires NO (betting
+    the market's apparent certainty in YES is overdone). This is a brand new,
+    unbacktested strategy leg -- see _extreme_reversion_confidence().
     """
 
     SIGNAL_NAMES = ("order_book", "momentum", "volume")
@@ -113,6 +125,38 @@ class SignalCombiner:
             return {"fired": False, "confidence": None, "reason": None}
         return {"fired": True, "confidence": signal.confidence, "reason": signal.reason}
 
+    @staticmethod
+    def _extreme_reversion_confidence(extremity: float) -> float:
+        """extremity is how far past the extreme-zone threshold price already
+        is (always >= 0 by construction at the call site). Starts just above
+        SIGNAL_COMBINER_THRESHOLD (0.60) right at the boundary so the zone is
+        actionable throughout, not just at its very tail, and grows toward
+        the same 0.95 cap the other 3 signal generators use. Unbacktested --
+        a starting heuristic, not a fitted/proven formula."""
+        return min(0.95, 0.65 + extremity * 1.5)
+
+    def _maybe_extreme_reversion_signal(self, market: dict, yes_price: float) -> Optional[RepricingSignal]:
+        """Returns a mean-reversion RepricingSignal if yes_price is past
+        either extreme-zone threshold, else None (meaning: not in the
+        extreme zone at all -- the caller still needs to check the normal
+        band separately, this does not mean "blocked")."""
+        if yes_price < SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE:
+            confidence = self._extreme_reversion_confidence(SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE - yes_price)
+            direction = "YES"
+            reason = f"extreme reversion: yes_price={yes_price:.3f} < {SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE} (fade market's NO-overconfidence)"
+        elif yes_price > SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE:
+            confidence = self._extreme_reversion_confidence(yes_price - SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE)
+            direction = "NO"
+            reason = f"extreme reversion: yes_price={yes_price:.3f} > {SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE} (fade market's YES-overconfidence)"
+        else:
+            return None
+        return RepricingSignal(
+            asset=market["asset"], market_id=market["market_id"], direction=direction,
+            yes_price=market["yes_price"], no_price=market["no_price"],
+            confidence=round(confidence, 3), reason=reason,
+            minutes_remaining=market.get("minutes_remaining", 5.0),
+        )
+
     def combine(self, market: dict, fetcher,
                 btc_eth_correlation: Optional[float]) -> Optional[RepricingSignal]:
         asset = market["asset"]
@@ -140,6 +184,31 @@ class SignalCombiner:
             logger.info(f"Signal combiner blocked by correlation filter: {asset} {market_id}")
             return None
 
+        yes_price = market["yes_price"]
+
+        # EXTREME MEAN-REVERSION (2026-07-06): checked before the normal-band
+        # filter below, since the extreme zone is a subset of "out of
+        # [MIN,MAX] band" and needs to be routed to this different strategy
+        # instead of falling through to the plain block-and-return-None path.
+        extreme_signal = self._maybe_extreme_reversion_signal(market, yes_price)
+        if extreme_signal is not None:
+            self._status[asset] = {
+                "order_book": self._signal_summary(None),
+                "momentum": self._signal_summary(None),
+                "volume": self._signal_summary(None),
+                "correlation_filter_blocked": False,
+                "price_out_of_band": False,
+                "combined_confidence": extreme_signal.confidence,
+                "fired": True,
+                "extreme_reversion": {
+                    "fired": True, "direction": extreme_signal.direction,
+                    "confidence": extreme_signal.confidence, "reason": extreme_signal.reason,
+                },
+            }
+            self._export_status()
+            logger.info(f"Signal combiner extreme reversion fire: {asset} {market_id} {extreme_signal.reason}")
+            return extreme_signal
+
         # PRICE BAND FILTER (bug fix 2026-07-04): none of order_book/momentum/
         # volume signals below look at yes_price at all, so without this
         # check trades were firing at prices like 0.165/0.345 that
@@ -148,7 +217,6 @@ class SignalCombiner:
         # equivalent of the old repricing_detector's min_yes_price/
         # max_yes_price, which stopped applying to real trades once
         # QUANT_ONLY_MODE removed repricing from the trading path entirely.
-        yes_price = market["yes_price"]
         price_out_of_band = not (SIGNAL_COMBINER_MIN_YES_PRICE <= yes_price <= SIGNAL_COMBINER_MAX_YES_PRICE)
         if price_out_of_band:
             self._status[asset] = {

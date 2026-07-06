@@ -163,7 +163,13 @@ def _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep, online_model
             _export_execution_cycle("settle", asset=closed.asset, market_id=closed.market_id,
                                      trade_id=closed.trade_id, pnl_usd=closed.pnl_usd,
                                      detail=f"{closed.result} pnl={closed.pnl_usd:+.2f}")
-            online_model.resolve(closed.market_id, 1 if closed.result == "WIN" else 0)
+            # online_model.predict_proba_one() always estimates P(YES wins),
+            # never "did our specific bet win" -- with NO-direction trades now
+            # possible (see core/signal_combiner.py's extreme-reversion zone),
+            # the training label must stay "did YES actually win" regardless
+            # of which direction we happened to bet, or the model's target
+            # would silently flip meaning depending on trade.direction.
+            online_model.resolve(closed.market_id, 1 if outcome == "YES" else 0)
             tg.send_close(closed, tracker.compute_stats())
             logger.info(stats_rep.generate_report())
 
