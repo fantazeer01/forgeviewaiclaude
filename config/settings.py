@@ -140,7 +140,17 @@ MACRO_EVENTS_LOG = "data/macro_events.json"
 MACRO_EVENTS_REFRESH_SEC = 3600
 
 # ---- order book signal ----
-ORDER_BOOK_RATIO_THRESHOLD = 2.0
+# LOWERED (2026-07-06): order_book fired only 4 times today vs momentum's
+# 1520 -- live polling (18 samples across BTC/ETH/SOL over 20s) found real
+# bid/ask depth ratios ranging 0.639-1.111 (avg 0.849), with BTC/ETH
+# consistently ask-heavy (ratio <1). The old 2.0 threshold was essentially
+# unreachable under normal book conditions, not a deliberately selective
+# bar. 1.3 is comfortably above the observed range so it still requires a
+# real imbalance, not noise, but low enough to actually fire. Unbacktested
+# -- no real trade has ever fired this signal, so there's no win-rate data
+# to justify a specific number; revisit once order_book-sourced trades
+# accumulate.
+ORDER_BOOK_RATIO_THRESHOLD = 1.3
 
 # ---- momentum (bounce/reversal) signal ----
 MOMENTUM_WINDOW_SEC = 45

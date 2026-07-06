@@ -1,5 +1,6 @@
 import pytest
 
+from config.settings import ORDER_BOOK_RATIO_THRESHOLD
 from core.signals.order_book_signal import OrderBookSignalGenerator
 
 
@@ -29,9 +30,21 @@ def test_fires_when_bid_ask_ratio_exceeds_threshold():
 
 
 def test_no_signal_when_ratio_at_or_below_threshold():
-    top = {"total_bid_depth": 200.0, "total_ask_depth": 100.0}  # ratio 2.0, not > 2.0
+    top = {"total_bid_depth": ORDER_BOOK_RATIO_THRESHOLD * 100.0, "total_ask_depth": 100.0}  # exactly at threshold, not >
     gen = OrderBookSignalGenerator()
     assert gen.generate(make_market(), FakeFetcher(top)) is None
+
+
+def test_fires_on_a_realistic_live_ratio_that_the_old_2_0_threshold_would_have_missed():
+    # 2026-07-06: live polling found real BTC/ETH/SOL depth ratios in the
+    # 0.6-1.1 range, never near the old 2.0 threshold. 1.5 is representative
+    # of a real-but-modest imbalance that should now fire under the new
+    # ORDER_BOOK_RATIO_THRESHOLD (1.3) but would not have under the old one.
+    top = {"total_bid_depth": 150.0, "total_ask_depth": 100.0}  # ratio 1.5
+    gen = OrderBookSignalGenerator()
+    signal = gen.generate(make_market(), FakeFetcher(top))
+    assert signal is not None
+    assert ORDER_BOOK_RATIO_THRESHOLD < 1.5 < 2.0
 
 
 def test_confidence_capped_at_095():

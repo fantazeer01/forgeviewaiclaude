@@ -150,3 +150,78 @@ asset show no signal. Day-of-week and Fear & Greed cannot be evaluated yet
 for lack of real-world variation in the observation window (more calendar
 days, and an actual shift in market sentiment, respectively) — not for lack
 of trade volume.
+
+## D-003 (2026-07-06): NO-direction trading REJECTED; YES 0.35-0.65 shows an early positive result; SOL re-added
+
+**Context:** an "extreme mean-reversion" strategy was added (buy YES below
+yes_price=0.20, buy NO above 0.80 — see `core/signal_combiner.py` git
+history) to accumulate fresh session data faster once the proven 0.45-0.60
+band was found to be in-band only ~23-25% of the time. This entry records
+the real-money and shadow-learning results that followed, and the
+resulting decisions.
+
+**1. NO-direction trading — REJECTED and disabled.**
+
+19 resolved NO-direction trades (all real money, paper-traded): **2 wins,
+10.5% win rate, net -$139.67.** Sizing was tried at three different
+schemes over the course of the day (kelly-matched to YES, a flat $5 cap,
+then a graduated cap by price extremity) — none of that mattered, the
+directional bet itself wasn't working. NO-direction trading was fully
+removed from `core/signal_combiner.py` (not just disabled by a flag);
+trading is YES-only again, exclusively within
+`[SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]`.
+
+**2. Shadow-NO learning — REJECTED, no edge found.**
+
+To keep learning about the >0.80 zone without risking money, a shadow
+tracker (`core/no_shadow_tracker.py`) records the feature snapshot and
+model prediction whenever yes_price > 0.80, then feeds the real outcome
+into the same online model once the market resolves — no trade opens.
+First evaluation at n=58 resolved shadow examples:
+
+| Metric | Model | Naive baseline (raw market `no_price`) |
+|---|---|---|
+| Brier score (lower is better) | 0.1786 | **0.1326** |
+
+- Raw NO win rate across the 58 shadow examples: **15.5%** (9/58).
+- The model's own predictions cluster almost entirely at two saturated
+  values (~0.21 and ~0.79 P(NO)) rather than varying per-market — a
+  symptom of the calibration-saturation issue already known in this
+  project (`_calibrate_proba`'s tanh transform squashing a saturated raw
+  SGDClassifier sigmoid toward its asymptotes).
+- In its "confident NO" bucket (predicted P(NO)≈0.79, n=8), actual NO win
+  rate was **25.0%** — badly overconfident, not just noisy.
+- Correlation between the model's edge over the market price and the
+  actual outcome: **0.084** (~zero). Where the model diverged >0.05 from
+  the market price (26/58 cases), its divergence direction matched the
+  actual outcome only **19.2%** of the time — worse than a coin flip.
+
+**Verdict:** the model is currently *less* accurate than simply trusting
+the market's own price in this zone. This supports keeping real
+NO-direction trading disabled; shadow collection continues (cheap, zero
+risk) since the confident-NO bucket is still only n=8.
+
+**3. YES 0.35-0.65 (the proven band) — early positive result, sample far
+too small to act on.**
+
+Since the most recent session reset (`session_start_clean` =
+2026-07-06T10:41:10Z): **6/7 resolved wins = 85.7% win rate, net +$53.00**,
+1 trade still open. This is the best short window seen since NO-direction
+trading was disabled, but n=7 is not remotely enough to update on —
+recorded here as a data point, not a result.
+
+**4. SOL added back to trading.**
+
+`MarketFetcher.ASSET_SLUG_PREFIX` (the actual gate on which assets get
+fetched from Polymarket — `REPRICING_FROZEN["assets"]` is documentation
+only and has no functional effect) now includes `"SOL": "sol"`. SOL flows
+through the identical asset-agnostic pipeline BTC/ETH already used, so it
+trains the online model from scratch as its own trades resolve. 1 active
+SOL market confirmed at time of change; `price_history.jsonl` and the
+shadow-NO tracker were extended to cover it too.
+
+**What would change any of this:** NO-direction and shadow-NO both need
+far more resolved examples before the rejection is statistically solid
+(n=19 and n=58 are both small); the YES 0.35-0.65 result needs dozens more
+trades, not 7, before "85.7%" means anything. Re-evaluate all three once
+volume accumulates.
