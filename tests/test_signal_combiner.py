@@ -183,6 +183,14 @@ def test_extreme_low_price_fires_yes_reversion(combiner):
     assert result is not None
     assert result.direction == "YES"
     assert result.confidence > 0.60
+    assert result.is_extreme_reversion is True
+
+
+def test_normal_band_signal_is_not_flagged_extreme_reversion(combiner):
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+    result = combiner.combine(make_market(yes_price=0.5, no_price=0.5), FakeFetcher(top), btc_eth_correlation=None)
+    assert result is not None
+    assert result.is_extreme_reversion is False
 
 
 def test_extreme_high_price_fires_no_reversion(combiner):

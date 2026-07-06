@@ -12,7 +12,7 @@ from config.settings import (
     MARKET_POLL_INTERVAL_SEC,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
-    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG,
+    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG, EXTREME_REVERSION_SIZE_USD,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -119,8 +119,18 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             yes_price=market["yes_price"], no_price=market["no_price"],
             confidence=round(win_probability, 3), reason=reason,
             minutes_remaining=market.get("minutes_remaining", 5.0),
+            is_extreme_reversion=combined_signal.is_extreme_reversion,
         )
-        size_usd = online_model.kelly_size(combined_signal.confidence)
+        # Extreme-reversion trades are a brand new, unbacktested strategy --
+        # do NOT let them inherit kelly_size()'s aggressive $5-$25 BET_SIZES
+        # scale, which was calibrated for the proven continuation signal.
+        # Flat, small size instead, independent of confidence. See
+        # EXTREME_REVERSION_SIZE_USD in config/settings.py for the numbers
+        # that prompted this (0/4 wins, -$55 on these trades specifically).
+        if combined_signal.is_extreme_reversion:
+            size_usd = EXTREME_REVERSION_SIZE_USD
+        else:
+            size_usd = online_model.kelly_size(combined_signal.confidence)
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
                                  size_usd=size_usd, detail=f"sized at ${size_usd:.2f}")
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)

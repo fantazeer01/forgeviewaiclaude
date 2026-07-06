@@ -155,6 +155,7 @@ class SignalCombiner:
             yes_price=market["yes_price"], no_price=market["no_price"],
             confidence=round(confidence, 3), reason=reason,
             minutes_remaining=market.get("minutes_remaining", 5.0),
+            is_extreme_reversion=True,
         )
 
     def combine(self, market: dict, fetcher,

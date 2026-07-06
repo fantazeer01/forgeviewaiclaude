@@ -188,6 +188,24 @@ SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE = 0.20
 SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE = 0.80
 
+# RISK CUT (2026-07-06, hours after the extreme-reversion zone above shipped):
+# these trades were sizing off online_model.kelly_size()'s BET_SIZES table --
+# the SAME aggressive $5-$25 scale calibrated for the proven
+# order_book/momentum/volume continuation signal -- which is wrong for a
+# strategy with zero trading history. First real results: 0/4 wins (net
+# -$55) on the new extreme-reversion trades, and only 1/14 wins all-time
+# across every NO-direction trade this bot has ever placed (net -$130.31).
+# n=4 and n=14 are both too small to call the mean-reversion thesis
+# disproven (all of these are long-shot prices where even a real edge loses
+# most individual bets), but sizing a completely unvalidated, high-variance
+# strategy at up to $25/trade while it's unproven is not a risk we should be
+# taking. Extreme-reversion trades now always size at this flat, small
+# amount instead of kelly_size() -- see run.py._decide_and_open() and
+# RepricingSignal.is_extreme_reversion. Revisit upward only once this
+# strategy has enough of its own resolved trades to evaluate on its own
+# merits, separately from the proven band.
+EXTREME_REVERSION_SIZE_USD = 5.0
+
 # Quant-only mode: the repricing detector is fully disabled as a live trading
 # input. Trades require BOTH online_model's own calibrated p > 0.5 AND
 # signal_combiner's order_book+momentum+volume confidence > 0.60 (see

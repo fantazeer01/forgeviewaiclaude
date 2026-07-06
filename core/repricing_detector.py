@@ -17,6 +17,13 @@ class RepricingSignal:
     reason: str
     timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     minutes_remaining: float = 5.0
+    # Set True only by SignalCombiner._maybe_extreme_reversion_signal() --
+    # lets run.py size these trades separately from the proven
+    # order_book/momentum/volume continuation signal (see
+    # EXTREME_REVERSION_SIZE_USD in config/settings.py): this is a brand new,
+    # unbacktested strategy and should not automatically inherit the
+    # aggressive BET_SIZES scale calibrated for a different, proven signal.
+    is_extreme_reversion: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -29,6 +36,7 @@ class RepricingSignal:
             "reason": self.reason,
             "timestamp": self.timestamp,
             "minutes_remaining": self.minutes_remaining,
+            "is_extreme_reversion": self.is_extreme_reversion,
         }
 
 class RepricingDetector:
