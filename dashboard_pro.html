@@ -42,6 +42,21 @@
   .num { font-variant-numeric: tabular-nums; }
   .up   { color: var(--green); }
   .down { color: var(--red); }
+  /* PnL numbers (2026-07-06 explicit request, paired with dropping REFRESH_MS
+     to 500ms): smooth color fade when a value flips between up/down
+     (green/red) instead of an instant snap, now that it can happen twice a
+     second. Only visible on elements whose DOM node persists across
+     refreshes -- #pf-total-pnl and #pnl-growth-pct both update
+     textContent/className in place and are never destroyed. Elements inside
+     a fully innerHTML-rebuilt list (Live Trades rows, Live Feed, Biggest
+     Win) get a brand-new node every render, so there's no prior state for a
+     transition to interpolate from there regardless of this rule -- a
+     rendering-pattern limit, not something a selector can work around.
+     Status badges (.lt-badge) and the canvas-drawn candlestick chart are
+     deliberately excluded below: badges flip state instantly, and canvas
+     isn't a CSS-transitionable target at all (redrawn pixels, not a DOM
+     node) -- both per explicit request. */
+  .pnl-num { transition: all 0.3s ease; }
 
   .no-data {
     display: inline-block;
@@ -239,6 +254,7 @@
     display: inline-block; min-width: 40px; text-align: center;
     font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
     padding: 2px 6px; border-radius: 3px; color: #fff;
+    transition: none; /* status flips (OPEN->WIN/LOSS) are instant, explicit request */
   }
   .lt-badge-open { background: var(--gold); }
   .lt-badge-win  { background: var(--green); }
@@ -312,7 +328,7 @@
           <span>FORGEVIEWAI &middot; QUANT</span>
           <span class="wallet-tag">PAPER TRADING</span>
         </div>
-        <div class="hero num" id="pf-total-pnl">--</div>
+        <div class="hero num pnl-num" id="pf-total-pnl">--</div>
         <div id="pf-hero-sub" class="hero-sub"></div>
         <div id="pf-triple-stat"></div>
         <div id="liq-risk-body"></div>
@@ -403,7 +419,7 @@
     <div class="panel" style="height:320px;">
       <div class="panel-head">
         <div class="panel-title"><span class="glyph">&#9642;</span>PnL Growth &middot; All-Time</div>
-        <span id="pnl-growth-pct" class="pnl-hdr-pct num"></span>
+        <span id="pnl-growth-pct" class="pnl-hdr-pct num pnl-num"></span>
       </div>
       <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
     </div>
@@ -480,7 +496,14 @@
    exception, added 2026-07-06 on explicit request.
    ============================================================================= */
 
-const REFRESH_MS = 5000;
+// 500ms (2x/sec, 2026-07-06 explicit request) -- drives the whole refresh()
+// loop: stats/portfolio, live trades, live feed, decision tree, AND the
+// candlestick chart (updateChart() is the last call inside refresh()), all
+// on the same cadence. Monte Carlo stays on its own separate, slower
+// MC_TICK_MS timer (see below) since it's a real simulation batch, not a
+// cheap re-render -- no need to run that 10x more often just because the
+// rest of the dashboard does.
+const REFRESH_MS = 500;
 const MAX_DAILY_LOSS_USD = 1000.0;
 const STALE_AFTER_MS = 15000;
 // One candle = one real 5-minute window (matches the "5-MIN" chart label and
@@ -1298,7 +1321,10 @@ function renderLiveTrades(trades) {
 
 /* ---------------- MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ----------------
    Runs on its own MC_TICK_MS timer, independent of the main data-refresh loop
-   (see mcTick() / setInterval below) -- each tick draws MC_BATCH_SIZE more
+   (see mcTick() / setInterval below) -- deliberately kept at 5000ms even
+   though REFRESH_MS dropped to 500ms (2026-07-06): this is a real simulation
+   batch (heavy-ish), not a cheap re-render, so there's no benefit to running
+   it 10x more often. Each tick draws MC_BATCH_SIZE more
    genuine random paths using the live win_rate/avg_win/avg_loss and appends
    them to a running pool (seeded with MC_INITIAL_PATHS on the first tick),
    so the displayed path count is a real, monotonically growing count of
