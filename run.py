@@ -81,7 +81,7 @@ def main():
             for market in markets:
                 _export_execution_cycle("scan", asset=market["asset"], market_id=market["market_id"],
                                          detail="scanning market for signals")
-                if market["asset"] in ("BTC", "ETH"):
+                if market["asset"] in ("BTC", "ETH", "SOL"):
                     _log_price_history(market["asset"], market["yes_price"])
                 live_features.update(market["market_id"], market["asset"], market["yes_price"], market["no_price"])
                 # kept only for its shadow-logging side effect (data/quant_features.jsonl via the
@@ -90,7 +90,7 @@ def main():
                 signal_gen.process_market(market)
                 snapshot = live_features.extract(market, fetcher)
                 _export_live_status(snapshot)
-                if market["asset"] in ("BTC", "ETH"):
+                if market["asset"] in ("BTC", "ETH", "SOL"):
                     no_shadow.maybe_record(market, snapshot, online_model.predict_proba_one(snapshot))
                 combined_signal = signal_combiner.combine(
                     market, fetcher, snapshot.get("btc_eth_correlation"),

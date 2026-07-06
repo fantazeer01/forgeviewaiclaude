@@ -28,17 +28,19 @@ DEDUP_STATE_FILE = "data/dedup_state.json"
 TRADES_LOG = "data/paper_trades.jsonl"
 SIGNALS_LOG = "data/signals_log.jsonl"
 QUANT_FEATURES_LOG = "data/quant_features.jsonl"
-# Raw, unconditioned yes_price sample for BTC/ETH, written every poll tick
-# regardless of whether any signal fires or any filter blocks -- unlike
-# quant_features.jsonl (which only logs when the old repricing rule fires,
-# a biased sample) this is meant to answer "where does price actually spend
-# its time" so SIGNAL_COMBINER_MIN/MAX_YES_PRICE can be set from real data.
+# Raw, unconditioned yes_price sample for BTC/ETH/SOL, written every poll
+# tick regardless of whether any signal fires or any filter blocks --
+# unlike quant_features.jsonl (which only logs when the old repricing rule
+# fires, a biased sample) this is meant to answer "where does price
+# actually spend its time" so SIGNAL_COMBINER_MIN/MAX_YES_PRICE can be set
+# from real data.
 PRICE_HISTORY_LOG = "data/price_history.jsonl"
 # Shadow NO learning (2026-07-06): real NO-direction trading was tried and
 # disabled (10.5% win rate over 19 trades, net -$139.67 -- see
 # SignalCombiner's docstring). This still lets the online model learn from
 # what a NO bet would have seen, with zero money at risk: whenever
-# yes_price > NO_SHADOW_YES_PRICE_THRESHOLD, core/no_shadow_tracker.py
+# yes_price > NO_SHADOW_YES_PRICE_THRESHOLD (for BTC, ETH, or SOL),
+# core/no_shadow_tracker.py
 # records the feature snapshot (no trade opens), and once the market
 # resolves, feeds (features, 1 if outcome=="YES" else 0) into the SAME
 # online model via update() -- the model's target is always "did YES win,"
