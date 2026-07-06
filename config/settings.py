@@ -170,45 +170,13 @@ SIGNAL_COMBINER_THRESHOLD = 0.60
 SIGNAL_COMBINER_MIN_YES_PRICE = 0.35
 SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 
-# EXTREME MEAN-REVERSION ZONE (2026-07-06): outside [MIN_YES_PRICE,
-# MAX_YES_PRICE] the strategy has so far just been "no trade" (dead zone).
-# At the far tails the thesis flips from "follow momentum" to "fade the
-# extreme": the market is heavily one-sided, so bet against whichever side
-# it's overconfident in --
-#   yes_price < SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE  -> buy YES (market is
-#     overconfident in NO)
-#   yes_price > SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE -> buy NO (market is
-#     overconfident in YES)
-# Named by which price threshold they are, not by a "_FOR_NO"/"_FOR_YES"
-# suffix -- the low-price threshold triggers a YES trade and the high-price
-# threshold triggers a NO trade, so a "_FOR_NO" suffix on the low one would
-# say the opposite of what it does. Unbacktested: there is no historical
-# data yet for trades in these zones (no NO-direction trade has ever been
-# placed), so these are a starting point, not a proven edge.
-SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE = 0.20
-SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE = 0.80
-
-# GRADUATED SIZE CAP BY PRICE EXTREMITY (2026-07-06): a flat
-# EXTREME_REVERSION_SIZE_USD ($5 regardless of confidence) briefly capped all
-# extreme-reversion trades, then was reverted so NO/YES sized identically off
-# kelly_size() -- which let a BTC NO trade at yes_price=0.985 (about as
-# extreme a long-shot as this market offers) size at the full $25. That is
-# specifically the case this cap targets: the deeper into the tail a price
-# is, the smaller the bet should be, regardless of how confident the
-# combiner/model happen to be, since confidence isn't validated at all in
-# this range yet (see SIGNAL_COMBINER_EXTREME_LOW/HIGH_YES_PRICE's own
-# "unbacktested" note above). Applied as a cap (min() with kelly_size()'s
-# result) in online_model.price_extremity_size_cap(), not a replacement for
-# it -- the proven 0.35-0.65 band is untouched and still gets full $5-$25
-# Kelly sizing:
-#   yes_price < 0.10 or > 0.90                    -> cap at $5
-#   yes_price in [0.10, 0.20) or (0.80, 0.90]      -> cap at $10
-#     (0.20/0.80 here are SIGNAL_COMBINER_EXTREME_LOW/HIGH_YES_PRICE above)
-#   yes_price in [0.35, 0.65] (the proven band)    -> no cap, full Kelly
-SIZE_CAP_VERY_EXTREME_LOW_YES_PRICE = 0.10
-SIZE_CAP_VERY_EXTREME_HIGH_YES_PRICE = 0.90
-SIZE_CAP_VERY_EXTREME_USD = 5.0
-SIZE_CAP_MODERATE_EXTREME_USD = 10.0
+# DISABLED (2026-07-06): an "extreme mean-reversion" strategy briefly traded
+# NO above yes_price=0.80 and YES below 0.20 (SIGNAL_COMBINER_EXTREME_LOW/
+# HIGH_YES_PRICE), with a graduated size cap (SIZE_CAP_*) layered on top.
+# Removed after real results: 10.5% win rate over 19 resolved NO-direction
+# trades, net -$139.67 -- not a viable strategy. Everything outside
+# [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE] is simply
+# not traded again, same as before this was ever added.
 
 # Quant-only mode: the repricing detector is fully disabled as a live trading
 # input. Trades require BOTH online_model's own calibrated p > 0.5 AND

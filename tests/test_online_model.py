@@ -132,6 +132,23 @@ def test_resolve_returns_false_for_unknown_market(model):
     assert model.resolve("unknown", 1) is False
 
 
+def test_record_features_persists_immediately_to_disk(tmp_path):
+    # 2026-07-06 fix: record_features() used to only update the in-memory
+    # dict -- _pending was only ever written to disk from within update()'s
+    # save() call. A trade opened, then a bot restart before any OTHER
+    # trade resolved, silently lost that trade's pending features. Now
+    # record_features() saves immediately, so a fresh instance pointed at
+    # the same state file (simulating a restart) must see the pending entry
+    # without needing any other trade to resolve first.
+    state_path = str(tmp_path / "online_model.pkl")
+    model = OnlineQuantModel(state_path=state_path, warmup_trades=5)
+    model.record_features("m1", make_features())
+
+    restarted = OnlineQuantModel(state_path=state_path, warmup_trades=5)
+    assert restarted.resolve("m1", 1) is True
+    assert restarted.n_updates == 1
+
+
 def test_kelly_size_below_lowest_bucket_returns_zero(model):
     size = model.kelly_size(0.59)
     assert size == pytest.approx(0.0, abs=1e-6)
@@ -163,42 +180,6 @@ def test_kelly_size_top_bucket(model):
     assert size == pytest.approx(25.0)
     size = model.kelly_size(1.0)
     assert size == pytest.approx(25.0)
-
-
-# ---------------- price_extremity_size_cap (2026-07-06) ----------------
-
-def test_price_extremity_cap_very_extreme_low(model):
-    assert model.price_extremity_size_cap(0.015) == pytest.approx(5.0)
-    assert model.price_extremity_size_cap(0.099) == pytest.approx(5.0)
-
-
-def test_price_extremity_cap_very_extreme_high(model):
-    assert model.price_extremity_size_cap(0.985) == pytest.approx(5.0)
-    assert model.price_extremity_size_cap(0.901) == pytest.approx(5.0)
-
-
-def test_price_extremity_cap_moderate_extreme_low(model):
-    assert model.price_extremity_size_cap(0.10) == pytest.approx(10.0)
-    assert model.price_extremity_size_cap(0.199) == pytest.approx(10.0)
-
-
-def test_price_extremity_cap_moderate_extreme_high(model):
-    assert model.price_extremity_size_cap(0.90) == pytest.approx(10.0)
-    assert model.price_extremity_size_cap(0.801) == pytest.approx(10.0)
-
-
-def test_price_extremity_cap_none_in_proven_band(model):
-    assert model.price_extremity_size_cap(0.35) is None
-    assert model.price_extremity_size_cap(0.5) is None
-    assert model.price_extremity_size_cap(0.65) is None
-
-
-def test_price_extremity_cap_none_in_dead_zone(model):
-    # 0.20-0.35 and 0.65-0.80 never fire a trade at all, so the cap is moot
-    # there, but it should still return None rather than accidentally
-    # capping a trade that can't exist.
-    assert model.price_extremity_size_cap(0.25) is None
-    assert model.price_extremity_size_cap(0.75) is None
 
 
 def test_warmup_trades_not_restored_from_persisted_state(tmp_path):

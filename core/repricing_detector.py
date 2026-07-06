@@ -17,11 +17,6 @@ class RepricingSignal:
     reason: str
     timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     minutes_remaining: float = 5.0
-    # Set True only by SignalCombiner._maybe_extreme_reversion_signal().
-    # No longer affects sizing (both zones use kelly_size() identically as
-    # of 2026-07-06, see config/settings.py) -- kept for reporting/monitoring
-    # so trades can still be split out by which zone/strategy fired them.
-    is_extreme_reversion: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -34,7 +29,6 @@ class RepricingSignal:
             "reason": self.reason,
             "timestamp": self.timestamp,
             "minutes_remaining": self.minutes_remaining,
-            "is_extreme_reversion": self.is_extreme_reversion,
         }
 
 class RepricingDetector:

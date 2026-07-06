@@ -16,9 +16,6 @@ from config.settings import (
     ONLINE_MODEL_PRIOR_INTERCEPT, ONLINE_MODEL_OWN_THRESHOLD,
     ONLINE_MODEL_COMBINER_THRESHOLD, ONLINE_MODEL_CALIBRATION_UPPER,
     ONLINE_MODEL_CALIBRATION_STEEPNESS, BET_SIZES,
-    SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE, SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE,
-    SIZE_CAP_VERY_EXTREME_LOW_YES_PRICE, SIZE_CAP_VERY_EXTREME_HIGH_YES_PRICE,
-    SIZE_CAP_VERY_EXTREME_USD, SIZE_CAP_MODERATE_EXTREME_USD,
 )
 # ONLINE_MODEL_CALIBRATION_LOWER (0.20) is not imported separately: the
 # tanh-based transform below is symmetric around 0.5 by construction
@@ -273,31 +270,18 @@ class OnlineQuantModel:
                 return float(BET_SIZES[threshold])
         return 0.0
 
-    @staticmethod
-    def price_extremity_size_cap(yes_price: float) -> Optional[float]:
-        """Graduated size cap by how extreme yes_price is, meant to be
-        combined with kelly_size() via min() -- a cap, not a replacement.
-        Confidence isn't validated in the extreme-reversion zone yet (no
-        real track record), so a high combiner/model confidence there
-        shouldn't buy the same $25 the proven band earns. Returns None for
-        the proven 0.35-0.65 band (no cap) and for the dead zone between it
-        and the extreme zone (no trade ever fires there, so the return value
-        is moot either way).
-
-            yes_price < 0.10 or > 0.90                -> $5
-            yes_price in [0.10,0.20) or (0.80,0.90]   -> $10
-            otherwise (includes the proven band)      -> None (no cap)
-        """
-        if yes_price < SIZE_CAP_VERY_EXTREME_LOW_YES_PRICE or yes_price > SIZE_CAP_VERY_EXTREME_HIGH_YES_PRICE:
-            return SIZE_CAP_VERY_EXTREME_USD
-        if yes_price < SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE or yes_price > SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE:
-            return SIZE_CAP_MODERATE_EXTREME_USD
-        return None
-
     def record_features(self, market_id: str, features: dict):
         """Stash the feature snapshot a decision was made from, keyed by
-        market_id, so resolve() can pair it with the eventual outcome."""
+        market_id, so resolve() can pair it with the eventual outcome.
+        Calls save() immediately (2026-07-06 fix): previously this only
+        updated the in-memory dict, and _pending was only ever persisted to
+        disk from within update()'s save() call -- so a trade opened, then a
+        bot restart before any OTHER trade resolved, would silently lose
+        that trade's pending features (resolve() would find nothing there
+        and return False, with no error, no visible symptom). Saving here
+        closes that window."""
         self._pending[market_id] = features
+        self.save()
 
     def resolve(self, market_id: str, outcome: int) -> bool:
         """Feed the resolved outcome (1=win, 0=loss) for a previously
