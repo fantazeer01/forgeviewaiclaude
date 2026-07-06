@@ -26,6 +26,17 @@
     --cyan:   #00E5FF;
     --purple: #A855F7;
     --yellow: #FFC94D;
+
+    /* on-cream (warm card) accent variants -- the neon dark-surface hues above
+       fall below 3:1 on a light background, so the cream card gets its own
+       darker steps of the same hues rather than reusing the neon ones. */
+    --cream-bg:     #F5F0E8;
+    --cream-border: rgba(26,26,22,0.12);
+    --cream-grid:   rgba(26,26,22,0.08);
+    --cream-text:   #1A1A16;
+    --cream-muted:  #6B6459;
+    --cream-green:  #1F7A3D;
+    --cream-red:    #B4232A;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -65,15 +76,16 @@
   }
   @keyframes scanPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-  /* ---- header bar ---- */
+  /* ---- header / top strip ---- */
   #header-bar {
     display: flex; align-items: center; gap: 16px;
-    height: 34px; padding: 0 14px;
+    height: 36px; padding: 0 14px;
     background: #05070A;
     border-bottom: 1px solid var(--border);
     font-size: 11px;
   }
-  #header-bar .brand { font-weight: 700; letter-spacing: 0.05em; color: var(--cyan); flex-shrink: 0; }
+  #header-bar .brand { font-weight: 800; letter-spacing: 0.06em; color: var(--cyan); flex-shrink: 0; }
+  #header-bar .brand .wallet-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); margin-right:7px; }
   #header-bar .sep { color: var(--text-muted); flex-shrink: 0; }
   #header-bar b { color: var(--text-primary); }
   #header-bar .hdr-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; flex-wrap: nowrap; }
@@ -90,7 +102,6 @@
     flex-shrink: 0;
   }
 
-  /* ---- header ticker ---- */
   #ticker-wrap { flex: 1; overflow: hidden; white-space: nowrap; height: 100%; display: flex; align-items: center; min-width: 40px; }
   #ticker-track { display: inline-block; animation: tickerScroll 24s linear infinite; }
   @keyframes tickerScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -108,18 +119,22 @@
   .spot-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: 11px; }
   .spot-row .price { font-weight: 700; }
 
-  /* ---- layout ---- */
-  .terminal {
-    max-width: 1900px; margin: 0 auto; padding: 12px;
-    display: grid;
-    grid-template-columns: 3fr 6fr 3fr;
-    grid-template-rows: auto 300px 260px 220px 280px;
-    gap: 12px;
-  }
-  @media (max-width: 1200px) {
-    .terminal { grid-template-columns: 1fr; grid-template-rows: none; }
-  }
+  /* ---- overall layout: vertical stack of full-bleed rows ---- */
+  .terminal { max-width: 1900px; margin: 0 auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .row1 { display: grid; grid-template-columns: 2fr 3fr; gap: 12px; align-items: stretch; }
+  .row1-right { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .row4 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .row-extra-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .col-stack { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  @media (max-width: 1100px) {
+    .row1, .row4, .row-extra-2col { grid-template-columns: 1fr; }
+  }
+
+  .section-label {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
+    padding: 2px 2px 0; display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--grid); }
 
   .panel {
     background: var(--panel);
@@ -139,8 +154,28 @@
   .panel-body { padding: 10px 12px; flex: 1; min-height: 0; overflow: auto; }
   .panel-body.nopad { padding: 0; }
 
-  /* ---- portfolio ---- */
-  .hero { font-size: 26px; font-weight: 800; }
+  /* ---- portfolio (warm cream card) ---- */
+  #portfolio-panel.panel-cream {
+    background: var(--cream-bg); border-color: var(--cream-border);
+  }
+  #portfolio-panel.panel-cream .panel-head { border-bottom-color: var(--cream-border); }
+  #portfolio-panel.panel-cream .panel-title { color: var(--cream-muted); }
+  #portfolio-panel.panel-cream .panel-body { color: var(--cream-text); }
+  #portfolio-panel.panel-cream .up   { color: var(--cream-green); }
+  #portfolio-panel.panel-cream .down { color: var(--cream-red); }
+  #portfolio-panel.panel-cream .metric-row { border-top-color: var(--cream-grid); }
+  #portfolio-panel.panel-cream .metric-row .label { color: var(--cream-muted); }
+  #portfolio-panel.panel-cream .metric-row .value { color: var(--cream-text); }
+  #portfolio-panel.panel-cream .section-divider { color: var(--cream-muted); border-top-color: var(--cream-grid); }
+  #portfolio-panel.panel-cream .no-data { color: var(--cream-muted); border-color: rgba(26,26,22,0.25); }
+  #portfolio-panel.panel-cream .pace-sub { color: var(--cream-muted); }
+  #portfolio-panel.panel-cream .risk-gauge-track { background: rgba(26,26,22,0.10); }
+  #portfolio-panel.panel-cream .reset-session-btn { color: var(--cream-muted); border-color: rgba(26,26,22,0.3); }
+  #portfolio-panel.panel-cream .reset-session-btn:hover { color: var(--cream-text); border-color: var(--cream-green); }
+  #portfolio-panel.panel-cream .session-tag { color: #0E6E7C; border-color: rgba(14,110,124,0.4); }
+  #portfolio-panel.panel-cream .real-tag { color: var(--cream-green); border-color: rgba(31,122,61,0.4); }
+
+  .hero { font-size: 30px; font-weight: 800; }
   .metric-list { margin-top: 10px; display: flex; flex-direction: column; }
   .metric-row {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -182,8 +217,8 @@
   /* ---- top callout (biggest win / sharpe) ---- */
   .callout-row { display: flex; gap: 26px; flex-wrap: wrap; }
   .callout-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .callout-value { font-size: 19px; font-weight: 800; margin-top: 2px; }
-  .callout-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; max-width: 220px; }
+  .callout-value { font-size: 22px; font-weight: 800; margin-top: 2px; }
+  .callout-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; max-width: 260px; }
 
   /* ---- execution cycle ---- */
   .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 14px; }
@@ -215,11 +250,11 @@
   #next-tick-countdown { font-size: 9.5px; color: var(--text-muted); }
 
   /* ---- strategy decision tree ---- */
-  #tree-edge-line { font-size: 10px; color: var(--text-secondary); padding: 6px 12px; border-bottom: 1px solid var(--grid); }
+  #tree-edge-line { font-size: 10.5px; color: var(--text-secondary); padding: 7px 14px; border-bottom: 1px solid var(--grid); }
   #tree-edge-line b { color: var(--text-primary); }
   .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
   .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
-  .tree-node-label { font-size: 12.5px; font-weight: 700; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-node-label { font-size: 13px; font-weight: 700; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
   .tree-node-sub { font-size: 10px; fill: var(--text-muted); font-family: ui-monospace, monospace; text-anchor: middle; }
   .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
   .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
@@ -246,8 +281,16 @@
   .feed-track { animation: feedScroll 34s linear infinite; }
   .feed-wrap:hover .feed-track { animation-play-state: paused; }
   @keyframes feedScroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
-  .feed-row { display: flex; gap: 8px; padding: 3px 12px; font-size: 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .feed-row { display: flex; gap: 10px; align-items: center; padding: 5px 14px; font-size: 10.5px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   .feed-time { color: var(--text-muted); flex-shrink: 0; }
+  .feed-badge {
+    flex-shrink: 0; display: inline-block; min-width: 42px; text-align: center;
+    font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
+    padding: 2px 7px; border-radius: 3px;
+  }
+  .feed-badge.badge-open { color: #05070A; background: var(--cyan); }
+  .feed-badge.badge-win  { color: #05070A; background: var(--green); }
+  .feed-badge.badge-loss { color: #05070A; background: var(--red); }
 
   /* ---- decision timeline ---- */
   .timeline { display: flex; flex-direction: column; gap: 2px; }
@@ -320,7 +363,7 @@
 <body>
 
 <div id="header-bar">
-  <span class="brand">FORGEVIEWAI // QUANT TERMINAL</span>
+  <span class="brand"><span class="wallet-dot"></span>FORGEVIEWAI // QUANT TERMINAL</span>
   <span id="hdr-quant-mode-wrap"></span>
   <div id="ticker-wrap"><div id="ticker-track"></div></div>
   <div class="hdr-right">
@@ -336,140 +379,153 @@
 
 <div class="terminal">
 
-  <!-- ================= ROW 1 (HERO): PORTFOLIO | CENTER STACK | RIGHT STACK ================= -->
-  <div class="panel" style="grid-column:1; grid-row:1;">
+  <!-- ================= ROW 1: PORTFOLIO (40%, cream) | BIGGEST WIN + BTC CHART (60%) ================= -->
+  <div class="row1">
+    <div class="panel panel-cream" id="portfolio-panel">
+      <div class="panel-head">
+        <div class="panel-title" id="pf-panel-title">Portfolio</div>
+        <span style="display:flex; align-items:center; gap:8px;">
+          <button id="reset-session-btn" class="reset-session-btn" title="Zero out visible stats without touching paper_trades.jsonl">Reset Session</button>
+          <span class="real-tag">REAL</span>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div class="hero num" id="pf-total-pnl">--</div>
+        <div id="pf-session-sub" class="pace-sub" style="margin-bottom:6px;"></div>
+        <div id="pf-metrics" class="metric-list"></div>
+        <div class="section-divider">Risk (Daily Loss Cap Used)</div>
+        <div id="risk-gauge-body"></div>
+        <div class="section-divider">Pace</div>
+        <div id="pace-body"></div>
+        <div class="section-divider">Advanced Stats <span style="text-transform:none;letter-spacing:0;">(data/stats.json, all-time)</span></div>
+        <div id="advanced-stats-body"></div>
+      </div>
+    </div>
+
+    <div class="row1-right">
+      <div class="panel" style="flex:0 0 auto;">
+        <div class="panel-head">
+          <div class="panel-title">Biggest Win &middot; Sharpe</div>
+          <span class="real-tag">REAL</span>
+        </div>
+        <div class="panel-body" id="top-callout-body"></div>
+      </div>
+
+      <div class="panel" style="flex:1; min-height:280px;">
+        <div class="panel-head">
+          <div class="panel-title">BTC 5-Min Chart</div>
+          <span class="real-tag">REAL</span>
+        </div>
+        <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
+        <div class="chart-caption" id="candle-caption"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ROW 2: EXECUTION CYCLE (full width) ================= -->
+  <div class="panel" style="height:150px;">
     <div class="panel-head">
-      <div class="panel-title" id="pf-panel-title">Portfolio</div>
-      <span style="display:flex; align-items:center; gap:8px;">
-        <button id="reset-session-btn" class="reset-session-btn" title="Zero out visible stats without touching paper_trades.jsonl">Reset Session</button>
+      <div class="panel-title">Execution Cycle</div>
+      <span style="display:flex;align-items:center;gap:10px;">
+        <span id="next-signal-countdown" style="font-size:9.5px;color:var(--text-muted);"></span>
+        <span id="next-tick-countdown"></span>
         <span class="real-tag">REAL</span>
       </span>
     </div>
-    <div class="panel-body">
-      <div class="hero num" id="pf-total-pnl">--</div>
-      <div id="pf-session-sub" class="pace-sub" style="margin-bottom:6px;"></div>
-      <div id="pf-metrics" class="metric-list"></div>
-      <div class="section-divider">Risk (Daily Loss Cap Used)</div>
-      <div id="risk-gauge-body"></div>
-      <div class="section-divider">Pace</div>
-      <div id="pace-body"></div>
-      <div class="section-divider">Advanced Stats <span style="text-transform:none;letter-spacing:0;">(data/stats.json, all-time)</span></div>
-      <div id="advanced-stats-body"></div>
-    </div>
+    <div class="panel-body" id="exec-cycle-body"></div>
   </div>
 
-  <div class="col-stack" style="grid-column:2; grid-row:1;">
-    <div class="panel" style="height:230px;">
-      <div class="panel-head">
-        <div class="panel-title">AI Signal Panel</div>
-        <span class="real-tag">REAL</span>
-      </div>
-      <div class="panel-body" id="ai-signal-body"></div>
-    </div>
-
-    <div class="panel" style="height:100px;">
-      <div class="panel-head">
-        <div class="panel-title">Biggest Win &middot; Sharpe</div>
-        <span class="real-tag">REAL</span>
-      </div>
-      <div class="panel-body" id="top-callout-body"></div>
-    </div>
-
-    <div class="panel" style="height:152px;">
-      <div class="panel-head">
-        <div class="panel-title">Execution Cycle</div>
-        <span style="display:flex;align-items:center;gap:10px;">
-          <span id="next-signal-countdown" style="font-size:9.5px;color:var(--text-muted);"></span>
-          <span id="next-tick-countdown"></span>
-        </span>
-        <span class="real-tag">REAL</span>
-      </div>
-      <div class="panel-body" id="exec-cycle-body"></div>
-    </div>
-
-    <div class="panel" style="height:300px;">
-      <div class="panel-head">
-        <div class="panel-title">Strategy Decision Tree</div>
-        <span class="real-tag">REAL</span>
-      </div>
-      <div id="tree-edge-line"></div>
-      <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
-    </div>
-  </div>
-
-  <div class="col-stack" style="grid-column:3; grid-row:1;">
-    <div class="panel" style="height:350px;">
-      <div class="panel-head">
-        <div class="panel-title">BTC YES Price &middot; Last 20 Signals</div>
-        <span class="real-tag">REAL</span>
-      </div>
-      <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
-      <div class="chart-caption">source: data/quant_features.jsonl (BTC, stage=signal). Each bar is ONE recorded price sample per signal, not an intra-period OHLC bar &mdash; open=high=low=close by construction, colored by change vs. the previous signal.</div>
-    </div>
-
-    <div class="panel" style="height:340px;">
-      <div class="panel-head">
-        <div class="panel-title">Correlation Map</div>
-        <span class="real-tag">REAL</span>
-      </div>
-      <div class="panel-body" id="corr-body"></div>
-    </div>
-  </div>
-
-  <!-- ================= ROW 2: ROBUSTNESS | MONTE CARLO | PNL GROWTH + LIVE FEED ================= -->
-  <div class="panel" style="grid-column:1; grid-row:2;">
+  <!-- ================= ROW 3: STRATEGY DECISION TREE (full width, large) ================= -->
+  <div class="panel" style="height:420px;">
     <div class="panel-head">
-      <div class="panel-title">Robustness &middot; Win Rate by Day &times; Asset</div>
+      <div class="panel-title">Strategy Decision Tree</div>
       <span class="real-tag">REAL</span>
     </div>
-    <div class="panel-body" id="robustness-body"></div>
+    <div id="tree-edge-line"></div>
+    <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
   </div>
 
-  <div class="panel" style="grid-column:2; grid-row:2;">
-    <div class="panel-head">
-      <div class="panel-title">Monte Carlo &middot; 7000 Simulated Paths (Real Win Rate / Avg Win / Avg Loss)</div>
-      <span class="real-tag">REAL</span>
+  <!-- ================= ROW 4: ROBUSTNESS | MONTE CARLO | PNL GROWTH ================= -->
+  <div class="row4">
+    <div class="panel" style="height:280px;">
+      <div class="panel-head">
+        <div class="panel-title">Robustness &middot; Win Rate by Day &times; Asset</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="panel-body" id="robustness-body"></div>
     </div>
-    <div class="mc-stats" id="mc-stats"></div>
-    <div class="chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
-  </div>
 
-  <div class="col-stack" style="grid-column:3; grid-row:2;">
-    <div class="panel" style="height:150px;">
+    <div class="panel" style="height:280px;">
+      <div class="panel-head">
+        <div class="panel-title">Monte Carlo &middot; 7000 Paths (Real Win Rate / Avg Win / Avg Loss)</div>
+        <span class="real-tag">REAL</span>
+      </div>
+      <div class="mc-stats" id="mc-stats"></div>
+      <div class="chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
+    </div>
+
+    <div class="panel" style="height:280px;">
       <div class="panel-head">
         <div class="panel-title">PnL Growth</div>
         <span class="real-tag">REAL</span>
       </div>
       <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
     </div>
-    <div class="panel" style="height:134px;">
-      <div class="panel-head">
-        <div class="panel-title">Polymarket Bot Live Feed</div>
-        <span class="real-tag">REAL</span>
+  </div>
+
+  <!-- ================= BOTTOM: POLYMARKET BOT LIVE FEED (full width) ================= -->
+  <div class="panel" style="height:190px;">
+    <div class="panel-head">
+      <div class="panel-title">Polymarket Bot Live Feed</div>
+      <span class="real-tag">REAL</span>
+    </div>
+    <div class="feed-wrap"><div class="feed-track" id="feed-track"></div></div>
+  </div>
+
+  <!-- ================= ADDITIONAL DETAIL (beyond the reference layout) -------
+       Everything above matches the requested COINMAN2-style layout exactly.
+       The panels below are extra real-data detail built up over the project's
+       life (AI signal reasoning, correlation, decision timeline, live trade
+       tables, per-signal breakdown) -- kept so no existing functionality is
+       lost, just placed after the primary reference rows. ================= -->
+  <div class="section-label">Additional Detail</div>
+
+  <div class="row-extra-2col">
+    <div class="col-stack">
+      <div class="panel" style="height:260px;">
+        <div class="panel-head">
+          <div class="panel-title">AI Signal Panel</div>
+          <span class="real-tag">REAL</span>
+        </div>
+        <div class="panel-body" id="ai-signal-body"></div>
       </div>
-      <div class="feed-wrap"><div class="feed-track" id="feed-track"></div></div>
+      <div class="panel" style="height:300px;">
+        <div class="panel-head">
+          <div class="panel-title">Correlation Map</div>
+          <span class="real-tag">REAL</span>
+        </div>
+        <div class="panel-body" id="corr-body"></div>
+      </div>
+    </div>
+    <div class="col-stack">
+      <div class="panel" style="height:280px;">
+        <div class="panel-head">
+          <div class="panel-title">Decision Timeline</div>
+          <span class="real-tag">REAL</span>
+        </div>
+        <div class="panel-body" id="timeline-body"></div>
+      </div>
+      <div class="panel" style="height:280px;">
+        <div class="panel-head">
+          <div class="panel-title">AI Reasoning</div>
+          <span class="real-tag">REAL</span>
+        </div>
+        <div class="panel-body" id="reasoning-body"></div>
+      </div>
     </div>
   </div>
 
-  <!-- ================= ROW 3: DECISION TIMELINE | AI REASONING ================= -->
-  <div class="panel" style="grid-column:1; grid-row:3;">
-    <div class="panel-head">
-      <div class="panel-title">Decision Timeline</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div class="panel-body" id="timeline-body"></div>
-  </div>
-
-  <div class="panel" style="grid-column: 2 / span 2; grid-row:3;">
-    <div class="panel-head">
-      <div class="panel-title">AI Reasoning</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div class="panel-body" id="reasoning-body"></div>
-  </div>
-
-  <!-- ================= ROW 4: LIVE TRADES ================= -->
-  <div class="panel" style="grid-column: 1 / span 3; grid-row:4;">
+  <div class="panel">
     <div class="panel-head">
       <div class="panel-title">Live Trades</div>
       <span class="real-tag">REAL</span>
@@ -479,19 +535,18 @@
       <table class="dense"><tbody id="positions-body"></tbody></table>
     </div>
     <div class="sub-panel-title">Last 20 Trades</div>
-    <div class="panel-body nopad" style="overflow:auto;">
+    <div class="panel-body nopad" style="max-height:260px; overflow:auto;">
       <table class="dense"><tbody id="trades-body"></tbody></table>
     </div>
   </div>
 
-  <!-- ================= ROW 5: SIGNAL COMBINER BREAKDOWN ================= -->
-  <div class="panel" style="grid-column: 1 / span 3; grid-row:5;">
+  <div class="panel">
     <div class="panel-head">
       <div class="panel-title">Signal Combiner &middot; Per-Signal Breakdown</div>
       <span class="real-tag">REAL</span>
     </div>
     <div id="signal-stats-strip"></div>
-    <div class="panel-body nopad" style="overflow:auto;">
+    <div class="panel-body nopad" style="max-height:260px; overflow:auto;">
       <table class="dense" id="signal-combiner-table">
         <thead><tr>
           <th>Asset</th><th>Order Book (0.25)</th><th>Momentum (0.25)</th>
@@ -539,7 +594,7 @@
                                    served via scripts/dashboard_server.py
                                    (plain `python -m http.server` can't accept
                                    the POST).
-   data/online_model_status.json  NEW small export written by
+   data/online_model_status.json  small export written by
                                    core/online_model.py (OnlineQuantModel.save()
                                    / _load()) every time the model updates or
                                    loads. The trained model itself lives in
@@ -558,7 +613,7 @@
                                    rate-of-return figure relative to a
                                    notional $100 capital base, NOT tied to
                                    any real tracked balance.
-   data/live_status.json          NEW small export written by run.py every
+   data/live_status.json          small export written by run.py every
                                    poll tick (right after computing
                                    LiveFeatureCollector.extract()) with the
                                    current btc_eth_correlation value. That
@@ -570,13 +625,16 @@
                                    quant_only_mode (mirrors
                                    config.settings.QUANT_ONLY_MODE) -- feeds
                                    the header's QUANT MODE badge.
-   data/quant_features.jsonl      used for (a) "last signal confidence": the
+   data/quant_features.jsonl      used for "last signal confidence": the
                                    most recent entry's model_probability (the
                                    older shadow quant model's logged
-                                   confidence at signal time), and (b) the BTC
-                                   candlestick panel: the last 20 asset=BTC,
-                                   stage=signal entries' features.yes_price.
-   data/market_bias.jsonl         NEW: written by run.py every 60s via
+                                   confidence at signal time).
+   data/price_history.jsonl       real per-tick yes_price samples for BTC/ETH/
+                                   SOL, ~5s cadence, logged by run.py every poll.
+                                   Bucketed client-side into real OHLC candles
+                                   (open/high/low/close per time bucket) for
+                                   the BTC 5-Min Chart -- see computeOhlcCandles.
+   data/market_bias.jsonl         written by run.py every 60s via
                                    core/market_bias.py (CoinGecko's free,
                                    no-key API -- a real, independent external
                                    source, not Polymarket's own prices).
@@ -586,18 +644,18 @@
                                    ticker and the AI Signal Panel. The SAME
                                    bias value gates YES signals in
                                    signals/repricing_signal.py when BEARISH.
-   data/exchange_status.json      NEW: written by run.py every 60s from
+   data/exchange_status.json      written by run.py every 60s from
                                    MarketFetcher.ping() (a lightweight real
                                    GET against Polymarket's Gamma API) --
                                    feeds the header bar's EXCHANGE field.
-   data/latency.json              NEW: written by core/market_fetcher.py
+   data/latency.json              written by core/market_fetcher.py
                                    after EVERY real Polymarket HTTP call
                                    (MarketFetcher._timed_get wraps every
                                    session.get in the class) -- avg_ms/
                                    p99_ms/last_ms over a rolling 200-call
                                    window. Feeds the header bar's LATENCY
                                    field. Not used by any trading decision.
-   data/api_stats.json            NEW: written by core/market_fetcher.py
+   data/api_stats.json            written by core/market_fetcher.py
                                    every API_STATS_EXPORT_INTERVAL_SEC (60s)
                                    from the same _timed_get call-counter as
                                    latency.json above -- calls_last_minute is
@@ -605,12 +663,12 @@
                                    Polymarket HTTP calls, calls_total is the
                                    lifetime counter since this process
                                    started. Feeds the header bar's API field.
-   data/fear_greed.json           NEW: written by run.py every 15 min from
+   data/fear_greed.json           written by run.py every 15 min from
                                    alternative.me's free Fear & Greed Index
                                    API (core/market_bias.py
                                    FearGreedFetcher) -- feeds AI Signal
                                    Panel's Macro Sentiment field.
-   data/macro_events.json         NEW: written by run.py every hour from
+   data/macro_events.json         written by run.py every hour from
                                    ForexFactory's free weekly economic
                                    calendar (core/macro_events.py) --
                                    next/latest 3 high-impact USD events.
@@ -624,7 +682,7 @@
                                    Polymarket contract-price correlation
                                    above it (different underlying series,
                                    not directly comparable).
-   data/execution_cycle.json      NEW: written by run.py at each real stage
+   data/execution_cycle.json      written by run.py at each real stage
                                    of the scan->detect->validate->size->fill
                                    pipeline (_export_execution_cycle), plus a
                                    separate settle event when a trade closes.
@@ -658,6 +716,8 @@ const MAX_DAILY_LOSS_USD = 1000.0; // mirrors config/settings.py -- keep in sync
 const MAX_LOSS_STREAK = 50;
 const MARKET_POLL_INTERVAL_SEC = 3; // mirrors config/settings.py MARKET_POLL_INTERVAL_SEC
 const STALE_AFTER_MS = 15000; // how old a telemetry file's timestamp can be before we call it stale, not "active"
+const CANDLE_BUCKET_SEC = 60; // 1-minute OHLC buckets built from ~5s-cadence price_history.jsonl ticks
+const CANDLE_COUNT = 60; // last 60 buckets = last hour
 
 async function fetchNoCache(path) {
   const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
@@ -672,6 +732,21 @@ async function fetchJsonl(path) {
       const t = line.trim();
       if (!t) continue;
       try { out.push(JSON.parse(t)); } catch (e) { /* skip malformed line */ }
+    }
+    return out;
+  } catch (e) { return null; }
+}
+// Same as fetchJsonl, but only parses the LAST `maxLines` non-empty lines --
+// price_history.jsonl grows forever at ~3 ticks/5s across 3 assets, so parsing
+// the whole file client-side on every 5s refresh would get slower over time.
+async function fetchJsonlTail(path, maxLines) {
+  try {
+    const text = await (await fetchNoCache(path)).text();
+    const lines = text.split('\n').filter(l => l.trim());
+    const tail = lines.slice(-maxLines);
+    const out = [];
+    for (const line of tail) {
+      try { out.push(JSON.parse(line)); } catch (e) { /* skip malformed line */ }
     }
     return out;
   } catch (e) { return null; }
@@ -747,12 +822,26 @@ async function loadLastQuantFeature() {
   }
   return null;
 }
-async function loadLastBtcSignals(n) {
-  const rows = await fetchJsonl('data/quant_features.jsonl');
+// Last CANDLE_COUNT*CANDLE_BUCKET_SEC/5 ticks is plenty of raw samples to build
+// CANDLE_COUNT real 1-min OHLC buckets from ~5s-cadence ticks; padded generously.
+async function loadPriceHistoryTicks(asset) {
+  const rows = await fetchJsonlTail('data/price_history.jsonl', 6000);
   if (!rows) return null;
-  const btcSignals = rows.filter(r => r.asset === 'BTC' && r.stage === 'signal'
-    && r.features && r.features.yes_price != null);
-  return btcSignals.slice(-n);
+  return rows.filter(r => r.asset === asset && has(r.yes_price) && r.timestamp);
+}
+function computeOhlcCandles(ticks, bucketSec, count) {
+  if (!ticks || ticks.length < 2) return null;
+  const buckets = new Map();
+  for (const t of ticks) {
+    const ms = new Date(t.timestamp).getTime();
+    if (isNaN(ms)) continue;
+    const bucketMs = Math.floor(ms / (bucketSec * 1000)) * (bucketSec * 1000);
+    let b = buckets.get(bucketMs);
+    if (!b) { b = { ts: bucketMs, open: t.yes_price, high: t.yes_price, low: t.yes_price, close: t.yes_price }; buckets.set(bucketMs, b); }
+    else { b.high = Math.max(b.high, t.yes_price); b.low = Math.min(b.low, t.yes_price); b.close = t.yes_price; }
+  }
+  const sorted = Array.from(buckets.values()).sort((a, b) => a.ts - b.ts);
+  return sorted.slice(-count);
 }
 async function loadLastMarketBias() {
   const rows = await fetchJsonl('data/market_bias.jsonl');
@@ -893,7 +982,7 @@ function renderPortfolio(trades, state) {
       <span class="value num">${val != null ? val : noData()}</span>
     </div>
   `).join('') + (m.historyDays != null && m.historyDays < 30
-    ? `<div style="font-size:9.5px;color:var(--text-muted);margin-top:6px;">trade history spans only ${m.historyDays.toFixed(1)} days, so weekly/monthly figures may equal (or nearly equal) the all-time total</div>` : '');
+    ? `<div style="font-size:9.5px;color:var(--cream-muted);margin-top:6px;">trade history spans only ${m.historyDays.toFixed(1)} days, so weekly/monthly figures may equal (or nearly equal) the all-time total</div>` : '');
   return m;
 }
 function renderRiskGauge(state) {
@@ -902,15 +991,15 @@ function renderRiskGauge(state) {
   const used = state.daily_loss_usd;
   const remaining = Math.max(0, MAX_DAILY_LOSS_USD - used);
   const pct = Math.min(100, (used / MAX_DAILY_LOSS_USD) * 100);
-  const color = pct >= 80 ? 'var(--red)' : (pct >= 50 ? 'var(--yellow)' : 'var(--green)');
+  const color = pct >= 80 ? 'var(--cream-red)' : (pct >= 50 ? '#8A6D1E' : 'var(--cream-green)');
   const streak = state.loss_streak || 0;
   const streakPct = Math.min(100, (streak / MAX_LOSS_STREAK) * 100);
-  const streakColor = streakPct >= 80 ? 'var(--red)' : (streakPct >= 50 ? 'var(--yellow)' : 'var(--green)');
+  const streakColor = streakPct >= 80 ? 'var(--cream-red)' : (streakPct >= 50 ? '#8A6D1E' : 'var(--cream-green)');
   const fmtPlain = n => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   wrap.innerHTML = `
-    <div class="risk-gauge-track"><div class="risk-gauge-fill" style="width:${pct.toFixed(1)}%;background:${color};box-shadow:0 0 8px ${color};"></div></div>
-    <div style="font-size:11px;font-weight:700;color:${color};">${fmtPlain(remaining)} remaining <span style="color:var(--text-muted);font-weight:400;font-size:9.5px;">of ${fmtPlain(MAX_DAILY_LOSS_USD)} cap &middot; ${fmtPlain(used)} used (${pct.toFixed(1)}%)</span></div>
-    <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">This project has no leverage/margin, so there's no real liquidation-risk gauge to show &mdash; this is the real equivalent: remaining budget before today's hard daily-loss cap auto-stops trading.</div>
+    <div class="risk-gauge-track"><div class="risk-gauge-fill" style="width:${pct.toFixed(1)}%;background:${color};"></div></div>
+    <div style="font-size:11px;font-weight:700;color:${color};">${fmtPlain(remaining)} remaining <span style="color:var(--cream-muted);font-weight:400;font-size:9.5px;">of ${fmtPlain(MAX_DAILY_LOSS_USD)} cap &middot; ${fmtPlain(used)} used (${pct.toFixed(1)}%)</span></div>
+    <div style="font-size:9px;color:var(--cream-muted);margin-top:2px;">This project has no leverage/margin, so there's no real liquidation-risk gauge to show &mdash; this is the real equivalent: remaining budget before today's hard daily-loss cap auto-stops trading.</div>
     <div class="metric-row" style="margin-top:8px;"><span class="label">Loss Streak</span><span class="value num" style="color:${streakColor};">${streak} / ${MAX_LOSS_STREAK}</span></div>
   `;
 }
@@ -1298,25 +1387,36 @@ function resizeCanvasToParent(canvas) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { ctx, w, h };
 }
-function renderCandlestick(signals) {
+// Real OHLC candlesticks bucketed from data/price_history.jsonl ticks (see
+// computeOhlcCandles) -- each bar has a genuine open/high/low/close, not one
+// price sample per bar.
+function renderCandlestick(candles) {
   const canvas = document.getElementById('candle-canvas');
+  const captionEl = document.getElementById('candle-caption');
   const { ctx, w, h } = resizeCanvasToParent(canvas);
   ctx.clearRect(0, 0, w, h);
 
-  if (!signals || signals.length < 2) {
+  if (captionEl) {
+    captionEl.textContent = candles
+      ? `source: data/price_history.jsonl (BTC yes_price ticks), bucketed into real ${CANDLE_BUCKET_SEC}s OHLC candles client-side. Wick = high/low, body = open/close within the bucket.`
+      : 'source: data/price_history.jsonl -- NO DATA yet.';
+  }
+
+  if (!candles || candles.length < 2) {
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.font = '11px ui-monospace, monospace';
-    ctx.fillText(signals ? 'Not enough BTC signals yet' : 'NO DATA', 12, h / 2);
+    ctx.fillText(candles ? 'Not enough BTC ticks yet for a candle' : 'NO DATA', 12, h / 2);
     return;
   }
 
   const pad = { t: 10, r: 46, b: 20, l: 4 };
-  const prices = signals.map(s => s.features.yes_price);
-  const min = Math.min(...prices), max = Math.max(...prices);
+  const allPrices = candles.flatMap(c => [c.high, c.low]);
+  const min = Math.min(...allPrices), max = Math.max(...allPrices);
   const span = (max - min) || 0.01;
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
-  const n = signals.length;
+  const n = candles.length;
   const slot = plotW / n;
+  const bodyW = Math.max(2, Math.min(24, slot * 0.6));
   const y = v => pad.t + (1 - (v - min) / span) * plotH;
 
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
@@ -1328,31 +1428,23 @@ function renderCandlestick(signals) {
     ctx.fillText((max - (i / 3) * span).toFixed(3), pad.l + plotW + 4, gy + 3);
   }
 
-  signals.forEach((s, i) => {
+  candles.forEach((c, i) => {
     const x = pad.l + i * slot + slot / 2;
-    const price = s.features.yes_price;
-    const prevPrice = i > 0 ? signals[i - 1].features.yes_price : price;
-    const up = price >= prevPrice;
-    ctx.strokeStyle = up ? '#00FF41' : '#FF3B3B';
-    ctx.lineWidth = Math.max(2, slot * 0.5);
-    ctx.beginPath();
-    ctx.moveTo(x, y(price) - 1.2);
-    ctx.lineTo(x, y(price) + 1.2);
-    ctx.stroke();
+    const up = c.close >= c.open;
+    const color = up ? '#00FF41' : '#FF3B3B';
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y(c.high)); ctx.lineTo(x, y(c.low)); ctx.stroke();
+    const bodyTop = y(Math.max(c.open, c.close)), bodyBot = y(Math.min(c.open, c.close));
+    const bodyH = Math.max(1.5, bodyBot - bodyTop);
+    ctx.fillStyle = color;
+    ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyH);
   });
 
-  ctx.beginPath();
-  signals.forEach((s, i) => {
-    const x = pad.l + i * slot + slot / 2;
-    i === 0 ? ctx.moveTo(x, y(s.features.yes_price)) : ctx.lineTo(x, y(s.features.yes_price));
-  });
-  ctx.strokeStyle = 'rgba(0,229,255,0.5)'; ctx.lineWidth = 1; ctx.stroke();
-
-  const last = signals[signals.length - 1];
-  const lastUp = signals.length > 1 && last.features.yes_price >= signals[signals.length - 2].features.yes_price;
+  const last = candles[candles.length - 1];
+  const lastUp = last.close >= last.open;
   ctx.fillStyle = lastUp ? '#00FF41' : '#FF3B3B';
   ctx.font = 'bold 11px ui-monospace, monospace';
-  ctx.fillText(last.features.yes_price.toFixed(3), pad.l + plotW + 4, y(last.features.yes_price) + 3);
+  ctx.fillText(last.close.toFixed(3), pad.l + plotW + 4, y(last.close) + 3);
 }
 function renderEquityCurve(m) {
   const canvas = document.getElementById('equity-canvas');
@@ -1591,14 +1683,14 @@ function renderMonteCarlo(portfolio) {
   ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
 }
 
-/* ---------------- 11. LIVE FEED (scrolling) ---------------- */
+/* ---------------- 11. LIVE FEED (scrolling, BUY/SELL-style badges) ---------------- */
 function buildLiveFeedEvents(trades) {
   if (!trades) return null;
   const events = [];
   trades.forEach(t => {
-    events.push({ ts: t.open_ts, text: `${t.asset} ${t.direction} OPENED @ ${t.entry_price.toFixed(3)} ($${t.size_usd.toFixed(2)})`, cls: '' });
+    events.push({ ts: t.open_ts, badge: 'open', badgeText: t.direction, text: `${t.asset} ${t.direction} OPENED @ ${t.entry_price.toFixed(3)} ($${t.size_usd.toFixed(2)})`, cls: '' });
     if (t.status !== 'open' && t.close_ts && t.pnl_usd != null) {
-      events.push({ ts: t.close_ts, text: `${t.asset} ${t.result} ${fmtUsd(t.pnl_usd)}`, cls: t.result === 'WIN' ? 'up' : 'down' });
+      events.push({ ts: t.close_ts, badge: t.result === 'WIN' ? 'win' : 'loss', badgeText: t.result, text: `${t.asset} ${t.result} ${fmtUsd(t.pnl_usd)}`, cls: t.result === 'WIN' ? 'up' : 'down' });
     }
   });
   events.sort((a, b) => new Date(b.ts) - new Date(a.ts));
@@ -1608,7 +1700,7 @@ function renderLiveFeed(trades) {
   const track = document.getElementById('feed-track');
   const events = buildLiveFeedEvents(trades);
   if (!events || !events.length) { track.innerHTML = noData(); return; }
-  const rowsHtml = events.map(e => `<div class="feed-row"><span class="feed-time">${fmtClock(e.ts)}</span><span class="${e.cls}">${e.text}</span></div>`).join('');
+  const rowsHtml = events.map(e => `<div class="feed-row"><span class="feed-time">${fmtClock(e.ts)}</span><span class="feed-badge badge-${e.badge}">${e.badgeText}</span><span class="${e.cls}">${e.text}</span></div>`).join('');
   track.innerHTML = rowsHtml + rowsHtml; // duplicated once for a seamless vertical scroll loop
 }
 
@@ -1801,13 +1893,14 @@ function renderSignalCombiner(status) {
    REFRESH LOOP
    ============================================================================= */
 async function refresh() {
-  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus,
+  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcTicks, marketBias, exchangeStatus,
          latency, fearGreed, macroEvents, biasHistory, combinerStatus, apiStats, executionCycle, stats] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
-    loadLastBtcSignals(20), loadLastMarketBias(), loadExchangeStatus(),
+    loadPriceHistoryTicks('BTC'), loadLastMarketBias(), loadExchangeStatus(),
     loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
     loadSignalCombinerStatus(), loadApiStats(), loadExecutionCycle(), loadStats(),
   ]);
+  const candles = computeOhlcCandles(btcTicks, CANDLE_BUCKET_SEC, CANDLE_COUNT);
   renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
   renderTicker(marketBias);
   const portfolio = renderPortfolio(trades, state);
@@ -1821,7 +1914,7 @@ async function refresh() {
   _lastKnownState = state;
   renderNextSignalCountdown();
   renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus);
-  renderCandlestick(btcSignals);
+  renderCandlestick(candles);
   renderCorrelation(liveStatus, biasHistory);
   renderRobustnessGrid(trades);
   renderMonteCarlo(portfolio);
