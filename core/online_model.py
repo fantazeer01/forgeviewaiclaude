@@ -26,6 +26,14 @@ from core.live_features import FEATURE_NAMES
 logger = logging.getLogger(__name__)
 
 Z_SCORE_CLIP = 8.0
+# Hard safety net against runaway coefficient growth (2026-07-06 divergence:
+# intercept reached -80, yes_price coef +65 after 509 updates, saturating
+# predict_proba_one() into a ~0.21/~0.79 binary step function no matter the
+# input -- see OnlineQuantModel._clip_coefficients()). L2 alone (alpha, set on
+# the SGDClassifier below) didn't stop it at the previous strength, so this
+# clips coef_/intercept_ back into range after every partial_fit() call,
+# independent of whatever the regularization strength is.
+COEF_CLIP = 10.0
 
 
 class OnlineQuantModel:
@@ -76,7 +84,12 @@ class OnlineQuantModel:
         self.feature_names = list(feature_names)
         self.state_path = state_path
         self.warmup_trades = warmup_trades
-        self.clf = SGDClassifier(loss="log_loss", penalty="l2", alpha=1e-4,
+        # alpha RAISED 1e-4 -> 1e-2 (2026-07-06): the previous strength did not
+        # keep coefficients bounded over hundreds of updates (see COEF_CLIP
+        # above for the actual divergence this caused) -- stronger L2 pulls
+        # weights toward zero every step instead of relying on clipping alone
+        # to undo growth after the fact.
+        self.clf = SGDClassifier(loss="log_loss", penalty="l2", alpha=1e-2,
                                   learning_rate="optimal", random_state=20260704)
         self._fitted = False
         self._n_updates = 0
@@ -184,8 +197,18 @@ class OnlineQuantModel:
             self._fitted = True
         else:
             self.clf.partial_fit(x_std, [outcome])
+        self._clip_coefficients()
         self._n_updates += 1
         self.save()
+
+    def _clip_coefficients(self):
+        """Clips coef_/intercept_ into [-COEF_CLIP, COEF_CLIP] after every
+        partial_fit() call -- a hard bound on top of L2, not a replacement for
+        it, so a repeat of the 2026-07-06 divergence can't saturate
+        predict_proba_one() into a binary step function again regardless of
+        how many updates accumulate."""
+        np.clip(self.clf.coef_, -COEF_CLIP, COEF_CLIP, out=self.clf.coef_)
+        np.clip(self.clf.intercept_, -COEF_CLIP, COEF_CLIP, out=self.clf.intercept_)
 
     def predict_proba_one(self, features: dict) -> Optional[float]:
         if not self._fitted:
