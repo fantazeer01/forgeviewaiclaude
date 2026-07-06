@@ -123,6 +123,13 @@ class OnlineQuantModel:
         self.clf.intercept_ = np.array([ONLINE_MODEL_PRIOR_INTERCEPT])
         self.clf.classes_ = np.array([0, 1])
         self.clf.t_ = 1.0
+        # sklearn only sets n_features_in_ itself on a partial_fit() call
+        # that passes classes= (a genuine "first fit") -- since seeding
+        # bypasses partial_fit entirely, it's otherwise left unset, which
+        # would silently skip sklearn's own feature-count validation on
+        # every later call (masking exactly the kind of shape mismatch
+        # _migrate_new_features() has to guard against by hand).
+        self.clf.n_features_in_ = n
         self._fitted = True
         logger.info(
             f"OnlineQuantModel: seeded yes_price prior (weight="
@@ -344,7 +351,8 @@ class OnlineQuantModel:
         try:
             with open(self.state_path, "rb") as f:
                 state = pickle.load(f)
-            self.feature_names = state["feature_names"]
+            persisted_features = state["feature_names"]
+            target_features = self.feature_names  # set in __init__ before _load()
             # warmup_trades is deliberately NOT restored from the persisted
             # state: it's a live policy knob (config), not trained model
             # state. Restoring it here would mean a raised
@@ -357,6 +365,53 @@ class OnlineQuantModel:
             self._m2 = state["m2"]
             self._count_vec = state["count_vec"]
             self._pending = state.get("pending", {})
+            if persisted_features == target_features:
+                self.feature_names = persisted_features
+            elif (len(target_features) > len(persisted_features)
+                  and target_features[:len(persisted_features)] == persisted_features):
+                self._migrate_new_features(persisted_features, target_features)
+            else:
+                # Not a clean append (a feature was removed, renamed, or
+                # reordered) -- no safe automatic migration exists, since
+                # the learned coefficients are positional. Keep training on
+                # whatever was actually persisted rather than silently
+                # mismapping weights to the wrong features.
+                logger.error(
+                    f"OnlineQuantModel feature_names changed incompatibly "
+                    f"(persisted={persisted_features}, target={target_features}) "
+                    f"-- keeping the persisted feature set; a real migration or "
+                    f"reset is needed to pick up the new one."
+                )
+                self.feature_names = persisted_features
         except Exception as e:
             logger.error(f"OnlineQuantModel load error: {e}")
         self._export_status()
+
+    def _migrate_new_features(self, persisted_features: list[str], target_features: list[str]):
+        """New features were purely APPENDED to FEATURE_NAMES (the only
+        migration this supports -- inserting/reordering/removing would
+        silently mismap the existing positional coefficients to the wrong
+        features). Preserves every real learned weight and all training
+        progress: pads the standardizer accumulators and the classifier's
+        own coef_ with zeros for the new dimensions, so the new features
+        start at exactly zero influence -- neutral, not a guess -- and get
+        trained up from there by ordinary partial_fit() calls same as any
+        other feature. n_updates/fitted are untouched; nothing is reset."""
+        n_new = len(target_features) - len(persisted_features)
+        self._mean = np.concatenate([self._mean, np.zeros(n_new)])
+        self._m2 = np.concatenate([self._m2, np.zeros(n_new)])
+        self._count_vec = np.concatenate([self._count_vec, np.zeros(n_new)])
+        if self._fitted and hasattr(self.clf, "coef_"):
+            self.clf.coef_ = np.hstack([self.clf.coef_, np.zeros((1, n_new))])
+            # sklearn validates future predict()/partial_fit() calls against
+            # n_features_in_, tracked separately from coef_'s own shape --
+            # padding coef_ alone still raises "X has N features, but
+            # SGDClassifier is expecting <old N> features" without this.
+            if hasattr(self.clf, "n_features_in_"):
+                self.clf.n_features_in_ = len(target_features)
+        self.feature_names = target_features
+        logger.info(
+            f"OnlineQuantModel: extended feature set with {n_new} new feature(s) "
+            f"{target_features[len(persisted_features):]}, zero-initialized -- "
+            f"n_updates={self._n_updates} and all existing weights preserved."
+        )

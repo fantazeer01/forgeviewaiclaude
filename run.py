@@ -13,6 +13,7 @@ from config.settings import (
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
     QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG, SIGNALS_LOG,
+    STATS_EXPORT_INTERVAL_SEC,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -27,6 +28,7 @@ from core.live_features import LiveFeatureCollector
 from core.online_model import OnlineQuantModel
 from core.signal_combiner import SignalCombiner
 from core.no_shadow_tracker import NoShadowTracker
+from core.stats_calculator import StatsCalculator
 from reporting.stats_reporter import StatsReporter
 from reporting.telegram_reporter import TelegramReporter
 
@@ -35,6 +37,7 @@ from reporting.telegram_reporter import TelegramReporter
 _external_status = {"bias": None, "last_check_ts": None}
 _fear_greed_status = {"last_check_ts": None}
 _macro_events_status = {"last_check_ts": None}
+_stats_status = {"last_export_ts": None}
 
 def main():
     logger.info("=== ForgeViewAI starting ===")
@@ -54,6 +57,7 @@ def main():
     signal_combiner = SignalCombiner()
     no_shadow = NoShadowTracker()
     stats_rep = StatsReporter(tracker, state)
+    stats_calc = StatsCalculator()
     tg = TelegramReporter()
     logger.info(f"Online model: {online_model.n_updates}/{online_model.warmup_trades} warm-up trades "
                 f"({'LIVE (model-driven)' if online_model.is_warmed_up() else 'WARMUP (repricing rule)'})")
@@ -74,6 +78,7 @@ def main():
             _maybe_refresh_external_status(bias_fetcher, fetcher)
             _maybe_refresh_fear_greed(fear_greed_fetcher)
             _maybe_refresh_macro_events(macro_events_fetcher)
+            _maybe_export_stats(stats_calc)
             _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep, online_model)
             no_shadow.resolve_pending(fetcher, online_model)
             signal_gen.resolve_pending()
@@ -298,6 +303,17 @@ def _maybe_refresh_macro_events(macro_events_fetcher: MacroEventsFetcher):
         os.replace(tmp_path, MACRO_EVENTS_LOG)
     except Exception as e:
         logger.error(f"macro events export error: {e}")
+
+def _maybe_export_stats(stats_calc: StatsCalculator):
+    """Runs at most once every STATS_EXPORT_INTERVAL_SEC (60s) -- re-reads
+    and re-aggregates every resolved trade each time, cheap at current
+    volume but no reason to redo it every 3s poll tick."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    last = _stats_status["last_export_ts"]
+    if last and (now - last).total_seconds() < STATS_EXPORT_INTERVAL_SEC:
+        return
+    _stats_status["last_export_ts"] = now
+    stats_calc.export()
 
 def _export_live_status(snapshot):
     """Mirrors the live BTC/ETH correlation (and a fresh timestamp the

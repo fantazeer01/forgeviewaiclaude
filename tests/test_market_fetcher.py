@@ -326,7 +326,8 @@ def test_get_order_book_top_returns_best_bid_and_ask(mocker):
     top = fetcher.get_order_book_top("token-1")
     assert top == {"best_bid_price": 0.44, "best_bid_size": 50.0,
                     "best_ask_price": 0.46, "best_ask_size": 30.0,
-                    "total_bid_depth": 150.0, "total_ask_depth": 110.0}
+                    "total_bid_depth": 150.0, "total_ask_depth": 110.0,
+                    "bid_depth_top5": 150.0, "ask_depth_top5": 110.0}
 
 
 def test_get_order_book_top_handles_empty_book(mocker):
@@ -335,7 +336,8 @@ def test_get_order_book_top_handles_empty_book(mocker):
     top = fetcher.get_order_book_top("token-1")
     assert top == {"best_bid_price": None, "best_bid_size": None,
                     "best_ask_price": None, "best_ask_size": None,
-                    "total_bid_depth": 0.0, "total_ask_depth": 0.0}
+                    "total_bid_depth": 0.0, "total_ask_depth": 0.0,
+                    "bid_depth_top5": 0.0, "ask_depth_top5": 0.0}
 
 
 def test_get_order_book_top_total_depth_sums_all_levels(mocker):
@@ -346,6 +348,23 @@ def test_get_order_book_top_total_depth_sums_all_levels(mocker):
     top = fetcher.get_order_book_top("token-1")
     assert top["total_bid_depth"] == 175.0
     assert top["total_ask_depth"] == 120.0
+
+
+def test_get_order_book_top_depth5_only_sums_the_nearest_5_levels(mocker):
+    # 7 bid levels, 6 ask levels -- top5 must exclude the 2 farthest bids
+    # and the 1 farthest ask, and must sort by price first (best_level-style
+    # generators aren't guaranteed to hand back pre-sorted levels).
+    fetcher = MarketFetcher()
+    bids = [(0.30, 1), (0.44, 50), (0.40, 100), (0.20, 2), (0.42, 10), (0.10, 3), (0.05, 4)]
+    asks = [(0.60, 6), (0.46, 30), (0.50, 80), (0.48, 20), (0.55, 5), (0.70, 7)]
+    mocker.patch.object(fetcher, "_fetch_order_book", return_value=make_book_with_sizes(bids=bids, asks=asks))
+    top = fetcher.get_order_book_top("token-1")
+    # top 5 bids by price desc: 0.44,0.42,0.40,0.30,0.20 -> sizes 50+10+100+1+2 = 163
+    assert top["bid_depth_top5"] == 163.0
+    # top 5 asks by price asc: 0.46,0.48,0.50,0.55,0.60 -> sizes 30+20+80+5+6 = 141
+    assert top["ask_depth_top5"] == 141.0
+    assert top["total_bid_depth"] == 170.0  # sanity: all 7 levels
+    assert top["total_ask_depth"] == 148.0  # sanity: all 6 levels
 
 
 def test_get_order_book_top_returns_none_on_fetch_error(mocker):

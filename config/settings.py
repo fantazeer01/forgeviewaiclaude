@@ -139,6 +139,16 @@ MACRO_CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 MACRO_EVENTS_LOG = "data/macro_events.json"
 MACRO_EVENTS_REFRESH_SEC = 3600
 
+# ---- portfolio stats calculator (2026-07-06) ----
+STATS_FILE = "data/stats.json"
+STATS_EXPORT_INTERVAL_SEC = 60
+# apy_pct is expressed relative to this notional $100 capital base, not any
+# real tracked account balance (this project never had one -- trades are
+# flat $5-$25 stakes, not a percentage of a bankroll). "% return per $100
+# risked, annualized" is the honest reading of the number; treat it as a
+# rate-of-return indicator, not a claim about real capital growth.
+STATS_APY_NOTIONAL_CAPITAL_USD = 100.0
+
 # ---- order book signal ----
 # LOWERED (2026-07-06): order_book fired only 4 times today vs momentum's
 # 1520 -- live polling (18 samples across BTC/ETH/SOL over 20s) found real

@@ -255,6 +255,8 @@ class MarketFetcher:
             return None
         return max(prices) if highest else min(prices)
 
+    ORDER_BOOK_DEPTH_LEVELS = 5
+
     def get_order_book_top(self, token_id: str) -> Optional[dict]:
         try:
             book = self._fetch_order_book(token_id)
@@ -269,6 +271,8 @@ class MarketFetcher:
                 "best_ask_size": ask[1] if ask else None,
                 "total_bid_depth": self._total_size(bids),
                 "total_ask_depth": self._total_size(asks),
+                "bid_depth_top5": self._top_n_size(bids, self.ORDER_BOOK_DEPTH_LEVELS, highest=True),
+                "ask_depth_top5": self._top_n_size(asks, self.ORDER_BOOK_DEPTH_LEVELS, highest=False),
             }
         except Exception as e:
             logger.warning(f"get_order_book_top error token={token_id}: {e}")
@@ -294,3 +298,18 @@ class MarketFetcher:
             except (TypeError, ValueError, AttributeError):
                 continue
         return total
+
+    def _top_n_size(self, levels: Optional[list], n: int, highest: bool) -> float:
+        """Sum of the sizes of the best n price levels (highest n bid prices,
+        or lowest n ask prices) -- book responses aren't guaranteed
+        pre-sorted, so this sorts by price first rather than just slicing."""
+        parsed = []
+        for level in levels or []:
+            try:
+                price = float(level.get("price"))
+                size = float(level.get("size", 0))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            parsed.append((price, size))
+        parsed.sort(key=lambda ps: ps[0], reverse=highest)
+        return sum(size for _, size in parsed[:n])

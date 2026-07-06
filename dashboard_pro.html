@@ -353,6 +353,8 @@
       <div id="risk-gauge-body"></div>
       <div class="section-divider">Pace</div>
       <div id="pace-body"></div>
+      <div class="section-divider">Advanced Stats <span style="text-transform:none;letter-spacing:0;">(data/stats.json, all-time)</span></div>
+      <div id="advanced-stats-body"></div>
     </div>
   </div>
 
@@ -546,6 +548,16 @@
                                    just n_updates / warmup_trades / fitted /
                                    is_warmed_up as JSON so the dashboard can
                                    read real warmup progress without a backend.
+   data/stats.json                 Written by core/stats_calculator.py
+                                   (StatsCalculator.export(), called from
+                                   run.py every STATS_EXPORT_INTERVAL_SEC=60s)
+                                   from data/paper_trades.jsonl: sharpe_ratio,
+                                   avg_rr, apy_pct, best_day_pnl,
+                                   max/current_win_streak. Backs Portfolio's
+                                   "Advanced Stats" section. apy_pct is a
+                                   rate-of-return figure relative to a
+                                   notional $100 capital base, NOT tied to
+                                   any real tracked balance.
    data/live_status.json          NEW small export written by run.py every
                                    poll tick (right after computing
                                    LiveFeatureCollector.extract()) with the
@@ -724,6 +736,7 @@ async function loadTrades() {
   return Array.from(byId.values());
 }
 async function loadState() { return await fetchJson('data/state.json'); }
+async function loadStats() { return await fetchJson('data/stats.json'); }
 async function loadOnlineModelStatus() { return await fetchJson('data/online_model_status.json'); }
 async function loadLiveStatus() { return await fetchJson('data/live_status.json'); }
 async function loadLastQuantFeature() {
@@ -944,6 +957,35 @@ function renderPace(portfolio, state, trades) {
       <div class="metric-row"><span class="label">Projected Weekly</span><span class="value num ${weekly >= 0 ? 'up' : 'down'}">${fmtUsd(weekly)}</span></div>
     </div>
     <div class="pace-sub" style="margin-top:6px;">Linear extrapolation from realized PnL ${basisLabel === 'since reset' ? 'since the last session reset' : 'over total calendar time since the first trade ever'} &mdash; stable across bot restarts (unlike a session-runtime basis).</div>
+  `;
+}
+function renderAdvancedStats(stats) {
+  const wrap = document.getElementById('advanced-stats-body');
+  if (!stats || !stats.n_trades) {
+    wrap.innerHTML = noData();
+    return;
+  }
+  const rows = [
+    ['Sharpe Ratio', stats.sharpe_ratio == null ? null : stats.sharpe_ratio.toFixed(2)],
+    ['Avg R/R', stats.avg_rr == null ? null : stats.avg_rr.toFixed(2)],
+    ['APY', stats.apy_pct == null ? null :
+      `<span class="${stats.apy_pct >= 0 ? 'up' : 'down'}">${stats.apy_pct >= 0 ? '+' : ''}${stats.apy_pct.toFixed(1)}%</span>`],
+    ['Best Day', stats.best_day_pnl == null ? null :
+      `<span class="${stats.best_day_pnl >= 0 ? 'up' : 'down'}">${fmtUsd(stats.best_day_pnl)}</span>`],
+    ['Max Win Streak', String(stats.max_win_streak)],
+    ['Current Win Streak', stats.current_win_streak > 0
+      ? `<span class="up">${stats.current_win_streak}</span>` : String(stats.current_win_streak)],
+  ];
+  wrap.innerHTML = `
+    <div class="metric-list">
+      ${rows.map(([label, val]) => `
+        <div class="metric-row">
+          <span class="label">${label}</span>
+          <span class="value num">${val != null ? val : noData()}</span>
+        </div>
+      `).join('')}
+    </div>
+    <div class="pace-sub" style="margin-top:6px;">APY is % return per $100 notionally risked, annualized from ${stats.days_running != null ? stats.days_running.toFixed(2) : '?'}d running -- not tied to any real tracked capital balance (this bot doesn't have one; trades are flat $5-$25 stakes). n=${stats.n_trades} resolved trades. Updated ${fmtClock(stats.updated_at)}.</div>
   `;
 }
 
@@ -1760,17 +1802,18 @@ function renderSignalCombiner(status) {
    ============================================================================= */
 async function refresh() {
   const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcSignals, marketBias, exchangeStatus,
-         latency, fearGreed, macroEvents, biasHistory, combinerStatus, apiStats, executionCycle] = await Promise.all([
+         latency, fearGreed, macroEvents, biasHistory, combinerStatus, apiStats, executionCycle, stats] = await Promise.all([
     loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
     loadLastBtcSignals(20), loadLastMarketBias(), loadExchangeStatus(),
     loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
-    loadSignalCombinerStatus(), loadApiStats(), loadExecutionCycle(),
+    loadSignalCombinerStatus(), loadApiStats(), loadExecutionCycle(), loadStats(),
   ]);
   renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
   renderTicker(marketBias);
   const portfolio = renderPortfolio(trades, state);
   renderRiskGauge(state);
   renderPace(portfolio, state, trades);
+  renderAdvancedStats(stats);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
   renderTopCallout(portfolio);
   renderExecutionCycle(executionCycle);

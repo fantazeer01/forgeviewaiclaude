@@ -14,11 +14,22 @@ FEATURE_NAMES = [
     "yes_price", "no_price", "bid_ask_spread", "order_book_imbalance",
     "price_momentum_30s", "price_momentum_60s", "volume_24h",
     "time_remaining_pct", "btc_eth_correlation",
+    # Appended 2026-07-06 -- MUST stay appended, never inserted/reordered:
+    # OnlineQuantModel._migrate_new_features() only supports a clean append,
+    # since the classifier's learned coefficients are positional. Reordering
+    # these (or the 9 above) would silently mismap every existing weight to
+    # the wrong feature.
+    "ema_5", "ema_20", "price_vs_ema",
+    "ohlc_open", "ohlc_high", "ohlc_low", "ohlc_close",
+    "order_book_depth",
 ]
+
+EMA_SHORT_SPAN = 5
+EMA_LONG_SPAN = 20
 
 
 class LiveFeatureCollector:
-    """Collects the 9 live features the online model trains on, sampled every
+    """Collects the live features the online model trains on, sampled every
     poll tick (update() then extract()). Independent of QuantFeatureExtractor
     (core/quant_features.py, the older shadow-model feature set) so this
     online-learning feature set can evolve without touching that one.
@@ -33,12 +44,26 @@ class LiveFeatureCollector:
     window, since the new window's opening price is not a continuation of the
     previous window's price level and would otherwise inject a spurious
     return at the boundary.
+
+    ema_5 / ema_20 (2026-07-06): standard EMA (alpha=2/(n+1)) over the last
+    5 / 20 polls of this market_id -- fewer if the window hasn't run that
+    long yet. price_vs_ema: yes_price/ema_20 - 1, how far current price sits
+    from its own recent average.
+
+    ohlc_open/high/low/close (2026-07-06): tracked in a dedicated
+    per-market_id accumulator (_window_ohlc), NOT derived from
+    _price_history -- that list is pruned to HISTORY_RETENTION_SEC (240s),
+    shorter than a full 5-minute window, so it would lose the true opening
+    tick once a window has been running more than ~4 minutes. _window_ohlc
+    is never time-pruned; it's naturally bounded by market_id's own ~5-minute
+    lifetime and reset the moment a new market_id is first seen.
     """
 
     def __init__(self):
         self._price_history: dict[str, list[dict]] = {}
         self._asset_return_history: dict[str, list[dict]] = {"BTC": [], "ETH": []}
         self._asset_current_market: dict[str, str] = {}
+        self._window_ohlc: dict[str, dict] = {}
 
     def update(self, market_id: str, asset: str, yes_price: float, no_price: float):
         ts = datetime.datetime.now(datetime.timezone.utc)
@@ -46,6 +71,13 @@ class LiveFeatureCollector:
         history.append({"ts": ts, "yes": yes_price, "no": no_price})
         cutoff = ts - datetime.timedelta(seconds=HISTORY_RETENTION_SEC)
         self._price_history[market_id] = [p for p in history if p["ts"] > cutoff]
+
+        ohlc = self._window_ohlc.setdefault(market_id, {
+            "open": yes_price, "high": yes_price, "low": yes_price, "close": yes_price,
+        })
+        ohlc["high"] = max(ohlc["high"], yes_price)
+        ohlc["low"] = min(ohlc["low"], yes_price)
+        ohlc["close"] = yes_price
 
         if asset in self._asset_return_history:
             if self._asset_current_market.get(asset) != market_id:
@@ -70,6 +102,22 @@ class LiveFeatureCollector:
             return None
         return yes_price - ref["yes"]
 
+    def _ema(self, market_id: str, span: int) -> Optional[float]:
+        """Standard EMA (alpha=2/(n+1)) over the last `span` polls of this
+        market_id, seeded with the earliest of those prices as the initial
+        value -- n falls back to however many ticks are actually available
+        if the window hasn't run that long yet (never returns None once
+        there's at least 1 tick, same as a live price would show)."""
+        history = self._price_history.get(market_id, [])
+        if not history:
+            return None
+        prices = [p["yes"] for p in history[-span:]]
+        alpha = 2.0 / (len(prices) + 1)
+        ema = prices[0]
+        for p in prices[1:]:
+            ema = alpha * p + (1 - alpha) * ema
+        return ema
+
     @staticmethod
     def _imbalance_from_top(top: Optional[dict]) -> Optional[float]:
         if not top:
@@ -92,6 +140,21 @@ class LiveFeatureCollector:
         if bid is None or ask is None:
             return None
         return ask - bid
+
+    @staticmethod
+    def _depth_ratio_from_top(top: Optional[dict]) -> Optional[float]:
+        """sum of the top-5 bid sizes / sum of the top-5 ask sizes -- unlike
+        order_book_imbalance (which uses ALL levels' total depth and is
+        already a normalized (bid-ask)/(bid+ask) difference), this is a
+        raw ratio over just the nearest 5 levels on each side, a shallower
+        and more execution-relevant slice of the book."""
+        if not top:
+            return None
+        bid5 = top.get("bid_depth_top5")
+        ask5 = top.get("ask_depth_top5")
+        if bid5 is None or ask5 is None or ask5 == 0:
+            return None
+        return bid5 / ask5
 
     def btc_eth_correlation(self) -> Optional[float]:
         btc = self._asset_return_history.get("BTC", [])
@@ -124,6 +187,10 @@ class LiveFeatureCollector:
         top = fetcher.get_order_book_top(up_token_id) if up_token_id else None
         now = datetime.datetime.now(datetime.timezone.utc)
 
+        ema_5 = self._ema(market_id, EMA_SHORT_SPAN)
+        ema_20 = self._ema(market_id, EMA_LONG_SPAN)
+        ohlc = self._window_ohlc.get(market_id, {})
+
         return {
             "yes_price": yes_price,
             "no_price": no_price,
@@ -134,4 +201,12 @@ class LiveFeatureCollector:
             "volume_24h": market.get("volume_24h", 0.0),
             "time_remaining_pct": minutes_remaining / 5.0,
             "btc_eth_correlation": self.btc_eth_correlation(),
+            "ema_5": ema_5,
+            "ema_20": ema_20,
+            "price_vs_ema": (yes_price / ema_20 - 1) if ema_20 else None,
+            "ohlc_open": ohlc.get("open"),
+            "ohlc_high": ohlc.get("high"),
+            "ohlc_low": ohlc.get("low"),
+            "ohlc_close": ohlc.get("close"),
+            "order_book_depth": self._depth_ratio_from_top(top),
         }

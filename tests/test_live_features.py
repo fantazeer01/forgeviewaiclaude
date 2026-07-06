@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from core.live_features import LiveFeatureCollector
+from core.live_features import LiveFeatureCollector, FEATURE_NAMES
 
 
 class FakeFetcher:
@@ -26,20 +26,93 @@ def make_market(market_id="m1", asset="BTC", yes_price=0.4, no_price=0.6,
     }
 
 
-def test_extract_returns_all_nine_features():
+def test_extract_returns_every_feature_in_feature_names():
     collector = LiveFeatureCollector()
     market = make_market()
     features = collector.extract(market, FakeFetcher())
-    expected_keys = {
-        "yes_price", "no_price", "bid_ask_spread", "order_book_imbalance",
-        "price_momentum_30s", "price_momentum_60s", "volume_24h",
-        "time_remaining_pct", "btc_eth_correlation",
-    }
-    assert set(features.keys()) == expected_keys
+    assert set(features.keys()) == set(FEATURE_NAMES)
     assert features["yes_price"] == 0.4
     assert features["no_price"] == 0.6
     assert features["volume_24h"] == 1000.0
     assert features["time_remaining_pct"] == pytest.approx(3.0 / 5.0)
+
+
+def test_ema_equals_price_on_first_tick():
+    collector = LiveFeatureCollector()
+    collector.update("m1", "BTC", 0.40, 0.60)
+    features = collector.extract(make_market(yes_price=0.40, no_price=0.60), FakeFetcher())
+    assert features["ema_5"] == pytest.approx(0.40)
+    assert features["ema_20"] == pytest.approx(0.40)
+    assert features["price_vs_ema"] == pytest.approx(0.0)
+
+
+def test_ema_5_reacts_faster_than_ema_20_to_a_price_jump():
+    collector = LiveFeatureCollector()
+    for p in [0.40, 0.40, 0.40, 0.40, 0.40]:
+        collector.update("m1", "BTC", p, 1 - p)
+    collector.update("m1", "BTC", 0.60, 0.40)  # sudden jump
+    features = collector.extract(make_market(yes_price=0.60, no_price=0.40), FakeFetcher())
+    # both EMAs sit between 0.40 and 0.60, but the shorter span weighs the
+    # jump more heavily and should be closer to the new price
+    assert 0.40 < features["ema_20"] < features["ema_5"] < 0.60
+
+
+def test_price_vs_ema_reflects_distance_from_ema_20():
+    collector = LiveFeatureCollector()
+    for _ in range(20):
+        collector.update("m1", "BTC", 0.40, 0.60)
+    features = collector.extract(make_market(yes_price=0.44, no_price=0.56), FakeFetcher())
+    assert features["price_vs_ema"] == pytest.approx(0.44 / features["ema_20"] - 1)
+    assert features["price_vs_ema"] > 0  # price above its own recent average
+
+
+def test_ohlc_tracks_open_high_low_close_within_a_window():
+    collector = LiveFeatureCollector()
+    for p in [0.40, 0.55, 0.35, 0.45]:
+        collector.update("m1", "BTC", p, 1 - p)
+    features = collector.extract(make_market(yes_price=0.45, no_price=0.55), FakeFetcher())
+    assert features["ohlc_open"] == pytest.approx(0.40)
+    assert features["ohlc_high"] == pytest.approx(0.55)
+    assert features["ohlc_low"] == pytest.approx(0.35)
+    assert features["ohlc_close"] == pytest.approx(0.45)
+
+
+def test_ohlc_resets_for_a_new_market_id():
+    collector = LiveFeatureCollector()
+    collector.update("m1", "BTC", 0.90, 0.10)
+    collector.update("m2", "BTC", 0.20, 0.80)  # new 5-min window
+    features = collector.extract(make_market(market_id="m2", yes_price=0.20, no_price=0.80), FakeFetcher())
+    assert features["ohlc_open"] == pytest.approx(0.20)
+    assert features["ohlc_high"] == pytest.approx(0.20)
+    assert features["ohlc_low"] == pytest.approx(0.20)
+
+
+def test_ohlc_survives_beyond_history_retention_window():
+    # _price_history is pruned to HISTORY_RETENTION_SEC (240s), shorter than
+    # a full 5-min window -- OHLC must NOT lose the true opening tick once
+    # a window has run longer than that.
+    collector = LiveFeatureCollector()
+    collector.update("m1", "BTC", 0.90, 0.10)  # the true open, minutes ago
+    old_ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=280)
+    collector._price_history["m1"][0]["ts"] = old_ts
+    collector.update("m1", "BTC", 0.40, 0.60)  # this prunes the old tick from _price_history
+    assert len(collector._price_history["m1"]) == 1  # confirms the prune actually happened
+    features = collector.extract(make_market(yes_price=0.40, no_price=0.60), FakeFetcher())
+    assert features["ohlc_open"] == pytest.approx(0.90)  # survived despite the prune
+    assert features["ohlc_high"] == pytest.approx(0.90)
+
+
+def test_order_book_depth_uses_top5_sums():
+    collector = LiveFeatureCollector()
+    top = {"bid_depth_top5": 300.0, "ask_depth_top5": 100.0}
+    features = collector.extract(make_market(), FakeFetcher(top))
+    assert features["order_book_depth"] == pytest.approx(3.0)
+
+
+def test_order_book_depth_none_without_order_book():
+    collector = LiveFeatureCollector()
+    features = collector.extract(make_market(), FakeFetcher(top=None))
+    assert features["order_book_depth"] is None
 
 
 def test_momentum_none_without_enough_history():

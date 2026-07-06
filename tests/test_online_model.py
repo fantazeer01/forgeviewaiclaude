@@ -120,6 +120,65 @@ def test_real_progress_is_not_overwritten_by_prior_on_reload(tmp_path):
     assert (reloaded.clf.coef_ == coef_after_training).all()
 
 
+def test_migrates_appended_features_preserving_weights_and_progress(tmp_path):
+    # 2026-07-06: new features get appended to FEATURE_NAMES over time.
+    # Loading an older, shorter persisted feature set must extend it
+    # in-place -- not reset the model -- since a reset can never re-warm
+    # itself live under QUANT_ONLY_MODE (see core/online_model.py docstring).
+    state_path = str(tmp_path / "online_model.pkl")
+    old_features = ["yes_price", "no_price", "volume_24h"]
+    old_model = OnlineQuantModel(state_path=state_path, warmup_trades=5, feature_names=old_features)
+    old_model.update({"yes_price": 0.5, "no_price": 0.5, "volume_24h": 100.0}, 1)
+    old_model.update({"yes_price": 0.45, "no_price": 0.55, "volume_24h": 200.0}, 0)
+    coef_before = old_model.clf.coef_.copy()
+    n_updates_before = old_model.n_updates
+
+    new_features = old_features + ["ema_5", "order_book_depth"]
+    migrated = OnlineQuantModel(state_path=state_path, warmup_trades=5, feature_names=new_features)
+
+    assert migrated.feature_names == new_features
+    assert migrated.n_updates == n_updates_before
+    assert migrated._fitted is True
+    assert migrated.clf.coef_.shape == (1, len(new_features))
+    assert (migrated.clf.coef_[0][:len(old_features)] == coef_before[0]).all()  # preserved exactly
+    assert (migrated.clf.coef_[0][len(old_features):] == 0.0).all()  # new dims start neutral
+    assert migrated._mean.shape == (len(new_features),)
+    assert migrated._m2.shape == (len(new_features),)
+    assert migrated._count_vec.shape == (len(new_features),)
+
+    p = migrated.predict_proba_one({
+        "yes_price": 0.5, "no_price": 0.5, "volume_24h": 100.0,
+        "ema_5": 0.5, "order_book_depth": 1.2,
+    })
+    assert p is not None
+
+
+def test_migration_is_a_noop_when_feature_names_unchanged(tmp_path):
+    state_path = str(tmp_path / "online_model.pkl")
+    features = ["yes_price", "no_price"]
+    m1 = OnlineQuantModel(state_path=state_path, warmup_trades=5, feature_names=features)
+    m1.update({"yes_price": 0.5, "no_price": 0.5}, 1)
+
+    m2 = OnlineQuantModel(state_path=state_path, warmup_trades=5, feature_names=features)
+    assert m2.feature_names == features
+    assert m2.n_updates == 1
+
+
+def test_incompatible_feature_change_keeps_persisted_feature_set(tmp_path):
+    # Not a clean append (a feature was removed/reordered) -- no safe
+    # migration exists since coefficients are positional. Must keep
+    # training on the persisted set rather than silently mismap weights.
+    state_path = str(tmp_path / "online_model.pkl")
+    old_features = ["yes_price", "no_price", "volume_24h"]
+    m1 = OnlineQuantModel(state_path=state_path, warmup_trades=5, feature_names=old_features)
+    m1.update({"yes_price": 0.5, "no_price": 0.5, "volume_24h": 100.0}, 1)
+
+    incompatible = ["yes_price", "no_price", "ema_5"]  # "volume_24h" replaced, not appended
+    m2 = OnlineQuantModel(state_path=state_path, warmup_trades=5, feature_names=incompatible)
+    assert m2.feature_names == old_features
+    assert m2.n_updates == 1
+
+
 def test_record_and_resolve_round_trip(model):
     features = make_features()
     model.record_features("m1", features)
