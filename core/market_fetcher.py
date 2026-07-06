@@ -14,9 +14,14 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 
 class MarketFetcher:
+    # This is the real gate on which assets' markets get fetched from
+    # Polymarket at all (get_active_5min_markets() only ever builds slugs
+    # from this dict's values) -- config.settings.REPRICING_FROZEN["assets"]
+    # is documentation only and has no functional effect.
     ASSET_SLUG_PREFIX = {
         "BTC": "btc",
         "ETH": "eth",
+        "SOL": "sol",
     }
     WINDOW_SEC = 300
 

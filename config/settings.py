@@ -3,7 +3,13 @@ REPRICING_FROZEN = {
     "min_time_window_sec": 60,
     "max_time_window_sec": 240,
     "confidence_threshold": 0.55,
-    "assets": ["BTC", "ETH"],
+    # "assets" is documentation only -- RepricingDetector never actually
+    # reads self.params["assets"] anywhere (grep confirms it), so this list
+    # has zero effect on which assets get traded. The real gate is
+    # MarketFetcher.ASSET_SLUG_PREFIX in core/market_fetcher.py, which
+    # determines which assets' markets get fetched from Polymarket at all.
+    # Kept in sync here anyway so this doesn't read as stale/wrong.
+    "assets": ["BTC", "ETH", "SOL"],
     "market_duration_min": 5,
     "min_yes_price": 0.45,
     "max_yes_price": 0.60,

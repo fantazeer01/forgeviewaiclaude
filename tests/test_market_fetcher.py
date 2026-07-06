@@ -52,13 +52,14 @@ def test_asset_from_slug_matches_known_prefixes():
     fetcher = MarketFetcher()
     assert fetcher._asset_from_slug("btc-updown-5m-1782945000") == "BTC"
     assert fetcher._asset_from_slug("eth-updown-5m-1782945000") == "ETH"
+    assert fetcher._asset_from_slug("sol-updown-5m-1782945000") == "SOL"
     assert fetcher._asset_from_slug("some-unrelated-market") is None
 
 
-def test_asset_from_slug_does_not_match_sol_or_other_unlisted_assets():
+def test_asset_from_slug_does_not_match_other_unlisted_assets():
     fetcher = MarketFetcher()
-    assert fetcher._asset_from_slug("sol-updown-5m-1782945000") is None
     assert fetcher._asset_from_slug("xrp-updown-5m-1782945000") is None
+    assert fetcher._asset_from_slug("doge-updown-5m-1782945000") is None
 
 
 def test_fetch_markets_by_slug_sends_slug_params_and_handles_list_response(mocker):
@@ -200,14 +201,24 @@ def test_get_active_5min_markets_filters_and_parses(mocker):
     markets = [
         make_market("btc", boundary),
         make_market("eth", boundary),
+        make_market("sol", boundary),
         {"slug": "xrp-updown-5m-" + str(boundary), "closed": False},
     ]
     mocker.patch.object(fetcher, "_fetch_markets_by_slug", return_value=markets)
     mocker.patch.object(fetcher, "_fetch_order_book", return_value=make_book(bids=[0.5], asks=[0.52]))
     result = fetcher.get_active_5min_markets()
-    assert len(result) == 2
+    assert len(result) == 3
     assets = {m["asset"] for m in result}
-    assert assets == {"BTC", "ETH"}
+    assert assets == {"BTC", "ETH", "SOL"}
+
+
+def test_get_active_5min_markets_requests_all_three_asset_slugs(mocker):
+    fetcher = MarketFetcher()
+    spy = mocker.patch.object(fetcher, "_fetch_markets_by_slug", return_value=[])
+    fetcher.get_active_5min_markets()
+    requested_slugs = spy.call_args[0][0]
+    prefixes = {slug.split("-")[0] for slug in requested_slugs}
+    assert prefixes == {"btc", "eth", "sol"}
 
 
 def test_get_active_5min_markets_returns_empty_on_error(mocker):
