@@ -165,6 +165,42 @@ def test_kelly_size_top_bucket(model):
     assert size == pytest.approx(25.0)
 
 
+# ---------------- price_extremity_size_cap (2026-07-06) ----------------
+
+def test_price_extremity_cap_very_extreme_low(model):
+    assert model.price_extremity_size_cap(0.015) == pytest.approx(5.0)
+    assert model.price_extremity_size_cap(0.099) == pytest.approx(5.0)
+
+
+def test_price_extremity_cap_very_extreme_high(model):
+    assert model.price_extremity_size_cap(0.985) == pytest.approx(5.0)
+    assert model.price_extremity_size_cap(0.901) == pytest.approx(5.0)
+
+
+def test_price_extremity_cap_moderate_extreme_low(model):
+    assert model.price_extremity_size_cap(0.10) == pytest.approx(10.0)
+    assert model.price_extremity_size_cap(0.199) == pytest.approx(10.0)
+
+
+def test_price_extremity_cap_moderate_extreme_high(model):
+    assert model.price_extremity_size_cap(0.90) == pytest.approx(10.0)
+    assert model.price_extremity_size_cap(0.801) == pytest.approx(10.0)
+
+
+def test_price_extremity_cap_none_in_proven_band(model):
+    assert model.price_extremity_size_cap(0.35) is None
+    assert model.price_extremity_size_cap(0.5) is None
+    assert model.price_extremity_size_cap(0.65) is None
+
+
+def test_price_extremity_cap_none_in_dead_zone(model):
+    # 0.20-0.35 and 0.65-0.80 never fire a trade at all, so the cap is moot
+    # there, but it should still return None rather than accidentally
+    # capping a trade that can't exist.
+    assert model.price_extremity_size_cap(0.25) is None
+    assert model.price_extremity_size_cap(0.75) is None
+
+
 def test_warmup_trades_not_restored_from_persisted_state(tmp_path):
     # warmup_trades is a live config knob, not trained model state -- raising
     # ONLINE_MODEL_WARMUP_TRADES between runs must actually take effect for

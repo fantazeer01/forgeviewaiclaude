@@ -121,14 +121,19 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             minutes_remaining=market.get("minutes_remaining", 5.0),
             is_extreme_reversion=combined_signal.is_extreme_reversion,
         )
-        # REVERTED (2026-07-06): extreme-reversion trades briefly used a flat
-        # $5 size instead of kelly_size(), to cap risk on this brand-new
-        # strategy while it had zero track record. Reverted per request --
-        # NO and YES trades now both size off kelly_size()'s confidence
-        # tiers uniformly, regardless of zone. is_extreme_reversion is kept
-        # on the signal/trade for reporting (which zone a trade came from),
-        # just no longer used for sizing.
+        # NO and YES trades both size off kelly_size()'s confidence tiers
+        # uniformly (a prior flat-$5-for-extreme-reversion rule was tried
+        # and reverted). But confidence alone isn't enough of a brake in the
+        # extreme-reversion zone, which has no real track record yet --
+        # price_extremity_size_cap() caps the result the deeper into the
+        # tail yes_price is, regardless of how confident the signal was
+        # (e.g. a BTC NO trade at yes_price=0.985 sized the full $25 before
+        # this cap existed). Returns None (no cap) for the proven 0.35-0.65
+        # band.
         size_usd = online_model.kelly_size(combined_signal.confidence)
+        price_cap = online_model.price_extremity_size_cap(market["yes_price"])
+        if price_cap is not None:
+            size_usd = min(size_usd, price_cap)
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
                                  size_usd=size_usd, detail=f"sized at ${size_usd:.2f}")
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)

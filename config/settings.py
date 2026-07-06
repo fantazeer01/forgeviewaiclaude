@@ -187,12 +187,28 @@ SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 # placed), so these are a starting point, not a proven edge.
 SIGNAL_COMBINER_EXTREME_LOW_YES_PRICE = 0.20
 SIGNAL_COMBINER_EXTREME_HIGH_YES_PRICE = 0.80
-# A flat EXTREME_REVERSION_SIZE_USD ($5, independent of confidence) briefly
-# capped these trades' size after early losses. Reverted (2026-07-06) per
-# request -- extreme-reversion trades now size the same way as the proven
-# band, via online_model.kelly_size()'s confidence tiers. See
-# RepricingSignal.is_extreme_reversion (core/repricing_detector.py), still
-# set for reporting purposes even though it no longer affects sizing.
+
+# GRADUATED SIZE CAP BY PRICE EXTREMITY (2026-07-06): a flat
+# EXTREME_REVERSION_SIZE_USD ($5 regardless of confidence) briefly capped all
+# extreme-reversion trades, then was reverted so NO/YES sized identically off
+# kelly_size() -- which let a BTC NO trade at yes_price=0.985 (about as
+# extreme a long-shot as this market offers) size at the full $25. That is
+# specifically the case this cap targets: the deeper into the tail a price
+# is, the smaller the bet should be, regardless of how confident the
+# combiner/model happen to be, since confidence isn't validated at all in
+# this range yet (see SIGNAL_COMBINER_EXTREME_LOW/HIGH_YES_PRICE's own
+# "unbacktested" note above). Applied as a cap (min() with kelly_size()'s
+# result) in online_model.price_extremity_size_cap(), not a replacement for
+# it -- the proven 0.35-0.65 band is untouched and still gets full $5-$25
+# Kelly sizing:
+#   yes_price < 0.10 or > 0.90                    -> cap at $5
+#   yes_price in [0.10, 0.20) or (0.80, 0.90]      -> cap at $10
+#     (0.20/0.80 here are SIGNAL_COMBINER_EXTREME_LOW/HIGH_YES_PRICE above)
+#   yes_price in [0.35, 0.65] (the proven band)    -> no cap, full Kelly
+SIZE_CAP_VERY_EXTREME_LOW_YES_PRICE = 0.10
+SIZE_CAP_VERY_EXTREME_HIGH_YES_PRICE = 0.90
+SIZE_CAP_VERY_EXTREME_USD = 5.0
+SIZE_CAP_MODERATE_EXTREME_USD = 10.0
 
 # Quant-only mode: the repricing detector is fully disabled as a live trading
 # input. Trades require BOTH online_model's own calibrated p > 0.5 AND
