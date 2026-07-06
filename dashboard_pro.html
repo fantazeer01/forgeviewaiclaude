@@ -14,10 +14,6 @@
          strategy they describe was retired -- see docs/polymarket/DECISIONS.md
          D-003: 10.5% win rate over 19 trades, net -$139.67).
        - A literal on-chain wallet address (this is a paper-trading bot).
-       - Undefined "PERF/RISK/STAT" side columns on the Robustness grid.
-     HORIZON score is a real Wilson-score lower-bound confidence interval on
-     the all-time win rate (scaled to 0-100), not an invented number -- see
-     computeHorizonScore.
      ========================================================================== */
   :root {
     --bg:          #F3F0E4;
@@ -218,8 +214,11 @@
   .tree-node-sub { font-size: 9.5px; fill: var(--text-muted); font-family: 'IBM Plex Mono', monospace; text-anchor: middle; }
   .tree-edge { stroke: var(--border); stroke-width: 1.5; fill: none; }
   .tree-flow-dot { filter: drop-shadow(0 0 3px var(--green)); }
+  /* A normal flex row BELOW tree-svg-wrap (see the HTML comment above
+     #tree-fill-box-row) -- never absolutely positioned over the SVG, so it
+     cannot cover a node no matter how the panel is sized. */
+  .tree-fill-box-row { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; padding: 10px 16px; border-top: 1px solid var(--border); min-height: 64px; }
   .tree-fill-box {
-    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
     background: #1A1A16; border: 1.5px solid var(--gold); border-radius: 6px;
     padding: 8px 22px; text-align: center; white-space: nowrap;
     box-shadow: 0 0 16px rgba(154,103,0,0.35);
@@ -228,13 +227,25 @@
   .tree-fill-box .ff-main { font-size: 20px; font-weight: 800; color: var(--gold); margin-top: 2px; }
   .tree-fill-box .ff-sub { font-size: 10px; color: #C9D1D9; letter-spacing: 0.02em; margin-top: 4px; }
 
-  /* ---- SECTION 6: robustness / monte carlo / pnl growth ---- */
-  .rb-row { display: grid; grid-template-columns: 70px repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
-  .rb-cell { text-align: center; padding: 8px 5px; border-radius: 4px; font-size: 12px; font-weight: 700; }
-  .rb-label { color: var(--text-secondary); font-weight: 400; font-size: 11px; text-align: left; background: none !important; padding-left: 2px; display:flex; align-items:center; }
-  .rb-head .rb-cell { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
-  .rb-caption { font-size: 10.5px; color: var(--text-muted); margin-top: 10px; }
-  .horizon-tag { font-size: 10.5px; color: var(--text-secondary); }
+  /* ---- SECTION 6: live trades / monte carlo / pnl growth ---- */
+  .lt-row {
+    display: grid; grid-template-columns: 62px 46px 40px 66px 60px 74px;
+    gap: 6px; padding: 6px 14px; align-items: center;
+    border-bottom: 1px solid var(--border-soft); font-size: 11.5px;
+  }
+  .lt-head { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; border-bottom: 1px solid var(--border); }
+  .lt-time { color: var(--text-muted); }
+  .lt-badge {
+    display: inline-block; min-width: 40px; text-align: center;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
+    padding: 2px 6px; border-radius: 3px; color: #fff;
+  }
+  .lt-badge-open { background: var(--gold); }
+  .lt-badge-win  { background: var(--green); }
+  .lt-badge-loss { background: var(--red); }
+  .lt-row.lt-open { background: rgba(154,103,0,0.07); }
+  .lt-row.lt-win  { background: rgba(26,127,55,0.07); }
+  .lt-row.lt-loss { background: rgba(207,34,46,0.07); }
   .horizon-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-left:5px; }
 
   .mc-stats { display: flex; gap: 16px; padding-bottom: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border-soft); margin-bottom: 10px; }
@@ -264,6 +275,7 @@
 </style>
 </head>
 <body>
+<div id="debug-log" style="white-space:pre;font-size:9px;"></div>
 
 <!-- ================= SECTION 1: TOP HEADER ================= -->
 <div id="header-bar">
@@ -319,7 +331,7 @@
 
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-title"><span class="glyph">&#9632;</span>BTC / USD &middot; 5-Min</div>
+        <div class="panel-title"><span class="glyph">&#9632;</span><span id="chart-asset-name">BTC</span> / USD &middot; 5-Min</div>
         <span style="display:flex;align-items:center;gap:8px;">
           <span id="chart-hdr-price" class="chart-hdr-price num"></span>
           <span id="chart-hdr-chg" class="chart-hdr-chg num"></span>
@@ -339,7 +351,7 @@
   </div>
 
   <!-- ================= SECTION 5: STRATEGY DECISION TREE ================= -->
-  <div class="panel" style="height:400px;">
+  <div class="panel" style="height:460px;">
     <div class="panel-head">
       <div class="panel-title"><span class="glyph">&#9660;</span>Strategy Decision Tree &middot; Every Trade Traced</div>
       <span id="tree-inflight" style="font-size:10.5px;color:var(--text-muted);"></span>
@@ -357,22 +369,30 @@
         <div class="next-value" id="tree-next-value"></div>
       </div>
     </div>
+    <!-- tree-svg-wrap (flex:1) and tree-fill-box-row (fixed height) are
+         SIBLING flex children, never an absolute overlay on top of the SVG --
+         this guarantees the fill box can never cover a node regardless of
+         panel/container height, unlike the earlier absolute-positioned
+         overlay which depended on careful proportion-tuning and re-broke
+         whenever the container's real aspect ratio differed from what was
+         tested. -->
     <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
+    <div class="tree-fill-box-row" id="tree-fill-box-row"></div>
   </div>
 
   <!-- ================= SECTION 6: BOTTOM ROW ================= -->
   <div class="bottom-row">
     <div class="panel" style="height:320px;">
       <div class="panel-head">
-        <div class="panel-title"><span class="glyph">&#9632;</span>Robustness &middot; By Asset (1D / 3D / 7D)</div>
-        <span class="horizon-tag" id="horizon-tag"></span>
+        <div class="panel-title"><span class="glyph">&#9632;</span>Live Trades &middot; Last 20</div>
+        <span id="lt-open-count" style="font-size:10.5px;color:var(--text-muted);"></span>
       </div>
-      <div class="panel-body" id="robustness-body"></div>
+      <div class="panel-body" style="padding:0;" id="live-trades-body"></div>
     </div>
 
     <div class="panel" style="height:320px;">
       <div class="panel-head">
-        <div class="panel-title"><span class="glyph">~</span>Monte Carlo &middot; 7,000 Paths</div>
+        <div class="panel-title"><span class="glyph">~</span>Monte Carlo &middot; <span id="mc-path-count" class="num">7,000</span> Paths</div>
         <span id="mc-p01-tag" style="font-size:10.5px;color:var(--text-muted);"></span>
       </div>
       <div class="panel-body" style="display:flex;flex-direction:column;" id="mc-body">
@@ -410,7 +430,7 @@
    data/paper_trades.jsonl   real trades (asset, direction, entry, result, PnL,
                               open/close ts, size_usd), deduped by trade_id.
                               Backs Portfolio, Biggest Win, per-asset
-                              sparklines, Robustness, PnL Growth, Live Feed,
+                              sparklines, Live Trades, PnL Growth, Live Feed,
                               Monte Carlo inputs, and the client-computed
                               all-time %-return / avg hold time.
    data/state.json           daily_loss_usd, system_stopped, session_start_clean.
@@ -451,24 +471,35 @@
                               tick by core/signal_combiner.py. Feeds the
                               Decision Tree's EDGE CONF readout and branch nodes.
    -----------------------------------------------------------------------------
-   HORIZON score: a Wilson-score 95% lower confidence bound on the all-time
-   win rate (standard statistical formula, not invented), scaled to 0-100 --
-   a real measure of how confident we can be the win rate will hold up, given
-   the sample size so far. See computeHorizonScore.
    Panels kept minimal per an earlier explicit "ONLY these sections" request:
-   no AI signal panel, correlation map, decision timeline, AI reasoning, live
-   trades table, or signal combiner breakdown table -- that logic still lives
-   in core/*.py, it's just not surfaced in this view.
+   no AI signal panel, correlation map, decision timeline, AI reasoning, or
+   signal combiner breakdown table -- that logic still lives in core/*.py,
+   it's just not surfaced in this view. Live Trades (section 6) is the one
+   exception, added 2026-07-06 on explicit request.
    ============================================================================= */
 
 const REFRESH_MS = 5000;
 const MAX_DAILY_LOSS_USD = 1000.0;
 const STALE_AFTER_MS = 15000;
-const CANDLE_BUCKET_SEC = 60;
+// One candle = one real 5-minute window (matches the "5-MIN" chart label and
+// Polymarket's own 5-minute market cycle) -- was 60s before, which produced
+// far more, noisier candles than the label claimed.
+const CANDLE_BUCKET_SEC = 300;
 const CANDLE_COUNT = 60;
 const NOTIONAL_CAPITAL_USD = 100.0; // mirrors config.settings.STATS_APY_NOTIONAL_CAPITAL_USD
 const MARKET_POLL_INTERVAL_SEC = 3;
+const CHART_ROTATE_MS = 10000;
+const CHART_ASSETS = ['BTC', 'ETH', 'SOL'];
+const ASSET_PRICE_FIELDS = {
+  BTC: ['btc_price', 'btc_24h_change'],
+  ETH: ['eth_price', 'eth_24h_change'],
+  SOL: ['sol_price', 'sol_24h_change'],
+};
 const ASSET_COLORS = { BTC: '#9a6700', ETH: '#6639BA', SOL: '#0969DA' };
+let _chartAssetIdx = 0;
+let _currentChartAsset = CHART_ASSETS[0];
+let _lastMarketBias = null;
+let _lastPortfolio = null;
 
 async function fetchNoCache(path) {
   const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
@@ -531,15 +562,36 @@ function scopeTradesToSession(trades, state) {
 }
 
 const _countState = new WeakMap();
+// Tracks the current "animation token" per element. Without this, calling
+// animateNumber on the same element again before its previous rAF loop
+// finished left BOTH loops running and racing to write textContent -- each
+// stale loop's closure holds an old, smaller "prev"/"target" pair, so a
+// late-firing stale frame could stomp a newer, larger value back down. Only
+// the loop matching the element's current token is allowed to keep writing.
+const _animToken = new WeakMap();
 function animateNumber(el, target, formatter, duration) {
   duration = duration || 600;
   const prev = _countState.has(el) ? _countState.get(el) : target;
   _countState.set(el, target);
+  const myToken = (_animToken.get(el) || 0) + 1;
+  _animToken.set(el, myToken);
+  el.textContent = formatter(prev); // paint the first frame synchronously -- don't wait on the first rAF tick
   const start = performance.now();
   function step(now) {
-    const t = Math.min(1, (now - start) / duration);
+    if (_animToken.get(el) !== myToken) return; // superseded by a newer call -- stop
+    // Clamp both ends -- a negative t (now < start, seen under headless
+    // Chrome's --virtual-time-budget clock, and cheap insurance in real
+    // browsers too) blows up through the cubic ease into a huge negative
+    // "eased," driving the interpolated value far below zero.
+    const t = Math.max(0, Math.min(1, (now - start) / duration));
     const eased = 1 - Math.pow(1 - t, 3);
-    el.textContent = formatter(prev + (target - prev) * eased);
+    const val = prev + (target - prev) * eased;
+    if (el.id === 'mc-path-count') {
+      window.__pcLog = (window.__pcLog || []);
+      window.__pcLog.push(`tok=${myToken} now=${now.toFixed(1)} start=${start.toFixed(1)} t=${t.toFixed(3)} prev=${prev} target=${target} val=${val.toFixed(1)} out=${formatter(val)}`);
+      document.title = 'PCLOG:' + window.__pcLog.slice(-3).join(' | ');
+    }
+    el.textContent = formatter(val);
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -694,13 +746,19 @@ function renderPortfolio(trades, state) {
 
   const allTimePct = computeAllTimeReturnPct(m.totalPnl);
   const daysTxt = m.historyDays != null ? m.historyDays.toFixed(1) : '?';
+  // "SESSION PNL" (was mislabeled "ALL-TIME PNL" even though `m` is computed
+  // over `scoped`, the session-cutoff-filtered trades) -- and when nothing's
+  // closed yet, distinguish "no trades this session" from "trades are open,
+  // just not resolved yet" (a 5-min market can take several more minutes to
+  // settle after its nominal window closes), so $0.00 doesn't read as broken.
+  const openCount = scoped.length - m.closed.length;
   heroSubEl.innerHTML = m.closed.length
-    ? `ALL-TIME PNL &middot; ${daysTxt} DAYS &middot; <span class="${allTimePct >= 0 ? 'up' : 'down'}">${allTimePct >= 0 ? '+' : ''}${allTimePct.toFixed(0)}%</span>`
-    : noData('NO CLOSED TRADES YET');
+    ? `SESSION PNL &middot; ${daysTxt} DAYS &middot; <span class="${allTimePct >= 0 ? 'up' : 'down'}">${allTimePct >= 0 ? '+' : ''}${allTimePct.toFixed(0)}%</span>`
+    : (openCount > 0 ? noData(`${openCount} OPEN &middot; NONE RESOLVED YET`) : noData('NO TRADES THIS SESSION'));
 
   document.getElementById('pf-triple-stat').innerHTML = `
     <div class="triple-stat">
-      <div class="ts-cell"><div class="ts-label">Trades</div><div class="ts-value">${m.closed.length}</div></div>
+      <div class="ts-cell"><div class="ts-label">Closed</div><div class="ts-value">${m.closed.length}</div></div>
       <div class="ts-cell"><div class="ts-label">Win Rate</div><div class="ts-value">${m.closed.length ? (m.winRate * 100).toFixed(0) + '%' : '--'}</div></div>
       <div class="ts-cell"><div class="ts-label">Avg R/R</div><div class="ts-value">${m.avgRR == null ? '--' : m.avgRR.toFixed(2)}</div></div>
     </div>`;
@@ -747,7 +805,7 @@ function renderStatGrid(stats, portfolio) {
 function computeBiggestWin(m) {
   if (!m || !m.wins.length) return null;
   const bw = m.wins.reduce((a, b) => (b.pnl_usd > a.pnl_usd ? b : a));
-  const multiplier = m.avgWin > 0 ? bw.pnl_usd / m.avgWin : null;
+  const multiplier = bw.size_usd > 0 ? bw.pnl_usd / bw.size_usd : null;
   const pnls = m.closed.map(t => t.pnl_usd);
   const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
   const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
@@ -763,7 +821,7 @@ function renderBiggestWin(portfolio) {
   const progressPct = Math.min(100, has(c.multiplier) ? c.multiplier * 20 : 0);
   wrap.innerHTML = `
     <div class="bw-mult num">${c.multiplier != null ? 'X' + c.multiplier.toFixed(1) : noData()}</div>
-    <div class="bw-sub">Biggest win (${fmtUsd(bw.pnl_usd)}) &divide; avg win (${fmtUsd(portfolio.avgWin)})</div>
+    <div class="bw-sub">Biggest win PnL (${fmtUsd(bw.pnl_usd)}) &divide; stake ($${bw.size_usd.toFixed(2)})</div>
     <div class="bw-row"><span class="label">Stake</span><span class="value num">$${bw.size_usd.toFixed(2)}</span></div>
     <div class="bw-row"><span class="label">Entry Price</span><span class="value num">${bw.entry_price.toFixed(3)}</span></div>
     <div class="bw-row"><span class="label">Market</span><span class="value">${bw.asset} &middot; ${bw.direction}</span></div>
@@ -875,11 +933,13 @@ function renderTreeSparklines(trades) {
 }
 
 /* ---------------- SECTION 5: STRATEGY DECISION TREE (animated SVG) ---------------- */
-// Logical (base) node layout in a 1050x460 design space, with generous empty
-// space below the nodes (they top out around y=338) so the .tree-fill-box
-// overlay has clear room and never covers a node. The actual <svg> viewBox is
-// recomputed every render from the wrapper's real aspect ratio so the tree
-// fills the panel edge-to-edge instead of letterboxing.
+// Logical (base) node layout in a 1050x380 design space (nodes top out around
+// y=338, a modest margin below). The order-fill/loss box lives in its own
+// #tree-fill-box-row flex sibling below tree-svg-wrap, not inside this SVG's
+// coordinate space at all, so this height no longer needs to reserve extra
+// room for it. The actual <svg> viewBox is recomputed every render from the
+// wrapper's real aspect ratio so the tree fills the panel edge-to-edge
+// instead of letterboxing.
 const TREE_NODES_BASE = {
   tick:       { x: 55,  y: 168, label: 'TICK' },
   scan:       { x: 200, y: 168, label: 'SCAN' },
@@ -892,7 +952,7 @@ const TREE_NODES_BASE = {
   fill:       { x: 860, y: 168, label: 'FILL' },
   pnl:        { x: 980, y: 168, label: 'P&L' },
 };
-const TREE_BASE_W = 1050, TREE_BASE_H = 460;
+const TREE_BASE_W = 1050, TREE_BASE_H = 380;
 const TREE_EDGES = [
   ['tick', 'scan'], ['scan', 'classify'],
   ['classify', 'repricing'], ['classify', 'order_book'], ['classify', 'momentum'], ['classify', 'volume'],
@@ -1001,6 +1061,10 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
 
   // Real-data fill box: shows the actual most-recently-opened trade's state
   // (open, or its real resolved result), never a decorative placeholder.
+  // Rendered into #tree-fill-box-row, a normal flex row BELOW tree-svg-wrap
+  // (see the HTML comment near that element) -- never an overlay on the SVG,
+  // so it can't cover a node.
+  const fillBoxRow = document.getElementById('tree-fill-box-row');
   const lastTrade = trades && trades.length
     ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
   let fillBoxHtml;
@@ -1019,7 +1083,7 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
       <div class="ff-sub">EXECUTION CONFIRMED &middot; ${lastTrade.asset} ${lastTrade.direction} &middot; ${lastTrade.signal_source}</div>
     </div>`;
   }
-  wrap.insertAdjacentHTML('beforeend', fillBoxHtml);
+  if (fillBoxRow) fillBoxRow.innerHTML = fillBoxHtml;
 
   const lastFillTs = (executionCycle && executionCycle.stage === 'fill') ? executionCycle.updated_at : null;
   if (lastFillTs && lastFillTs !== _lastSeenTreeFillTs) {
@@ -1048,18 +1112,21 @@ function resizeCanvasToParent(canvas) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { ctx, w, h };
 }
-function renderCandlestick(candles, marketBias) {
+function renderCandlestick(candles, marketBias, assetKey) {
   const canvas = document.getElementById('candle-canvas');
   const priceEl = document.getElementById('chart-hdr-price');
   const chgEl = document.getElementById('chart-hdr-chg');
+  const nameEl = document.getElementById('chart-asset-name');
   const { ctx, w, h } = resizeCanvasToParent(canvas);
   ctx.clearRect(0, 0, w, h);
 
-  if (marketBias && has(marketBias.btc_price)) {
-    priceEl.textContent = '$' + marketBias.btc_price.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    if (has(marketBias.btc_24h_change)) {
-      const up = marketBias.btc_24h_change >= 0;
-      chgEl.textContent = (up ? '+' : '') + marketBias.btc_24h_change.toFixed(2) + '% 24h';
+  if (nameEl) nameEl.textContent = assetKey;
+  const [priceKey, chgKey] = ASSET_PRICE_FIELDS[assetKey] || ASSET_PRICE_FIELDS.BTC;
+  if (marketBias && has(marketBias[priceKey])) {
+    priceEl.textContent = '$' + marketBias[priceKey].toLocaleString('en-US', { maximumFractionDigits: assetKey === 'BTC' ? 0 : 2 });
+    if (has(marketBias[chgKey])) {
+      const up = marketBias[chgKey] >= 0;
+      chgEl.textContent = (up ? '+' : '') + marketBias[chgKey].toFixed(2) + '% 24h';
       chgEl.className = 'chart-hdr-chg num ' + (up ? 'up' : 'down');
     } else { chgEl.innerHTML = ''; }
   } else {
@@ -1070,7 +1137,7 @@ function renderCandlestick(candles, marketBias) {
   if (!candles || candles.length < 2) {
     ctx.fillStyle = '#8A8570';
     ctx.font = '12px monospace';
-    ctx.fillText(candles ? 'Not enough BTC ticks yet for a candle' : 'NO DATA', 12, h / 2);
+    ctx.fillText(candles ? `Not enough ${assetKey} ticks yet for a candle` : 'NO DATA', 12, h / 2);
     return;
   }
 
@@ -1168,123 +1235,103 @@ function renderEquityCurve(m) {
   ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length})`, w - pad - 100, pad - 6);
 }
 
-/* ---------------- SECTION 6: ROBUSTNESS: BY ASSET, TRAILING 1D/3D/7D %-RETURN ---------------- */
-function computeRobustnessByAsset(trades) {
-  if (!trades) return null;
-  const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null && t.close_ts);
-  const assets = ['BTC', 'ETH', 'SOL', 'COMBINED'];
-  const windows = [1, 3, 7];
-  const now = Date.now();
-  const rows = assets.map(asset => {
-    const subsetAll = asset === 'COMBINED' ? closed : closed.filter(t => t.asset === asset);
-    const cells = windows.map(days => {
-      const cutMs = now - days * 24 * 3600 * 1000;
-      const subset = subsetAll.filter(t => new Date(t.close_ts).getTime() > cutMs);
-      if (!subset.length) return { n: 0, pct: null };
-      const pnl = subset.reduce((s, t) => s + t.pnl_usd, 0);
-      return { n: subset.length, pct: computeAllTimeReturnPct(pnl) };
-    });
-    return { asset, cells };
-  });
-  return { rows, windows };
+/* ---------------- SECTION 6: LIVE TRADES (last 20, one row per trade_id) ----------------
+   loadTrades() already dedupes paper_trades.jsonl by trade_id, keeping only
+   the LATEST line per trade (the close/resolution line overwrites the open
+   line in that Map) -- so trades here already has exactly one entry per
+   trade_id reflecting its current status. Rebuilding the table from that
+   array every refresh is enough to satisfy "one row per trade, updates in
+   place, never duplicated": there is structurally only one row possible per
+   trade_id, whether it's still open or has since resolved. */
+function tradeStatusInfo(t) {
+  if (t.status === 'open') return { cls: 'open', text: 'OPEN' };
+  return t.result === 'WIN' ? { cls: 'win', text: 'WIN' } : { cls: 'loss', text: 'LOSS' };
 }
-function robustnessCellColor(cell) {
-  if (!cell || cell.n === 0 || cell.pct == null) return 'rgba(90,86,70,0.06)';
-  const alpha = 0.18 + Math.min(1, cell.n / 10) * 0.42;
-  return cell.pct >= 0 ? `rgba(26,127,55,${alpha.toFixed(2)})` : `rgba(207,34,46,${alpha.toFixed(2)})`;
-}
-// Wilson-score 95% lower confidence bound on the all-time win rate, scaled to
-// 0-100 -- a real statistic (not invented) answering "how confident are we
-// this win rate holds up," accounting for sample size.
-function computeHorizonScore(portfolio) {
-  if (!portfolio || !portfolio.closed.length) return null;
-  const n = portfolio.closed.length, p = portfolio.winRate, z = 1.96;
-  const denom = 1 + (z * z) / n;
-  const center = p + (z * z) / (2 * n);
-  const margin = z * Math.sqrt((p * (1 - p) / n) + (z * z) / (4 * n * n));
-  const lowerBound = (center - margin) / denom;
-  return Math.max(0, Math.min(100, lowerBound * 100));
-}
-function renderHorizonTag(portfolio) {
-  const el = document.getElementById('horizon-tag');
-  const score = computeHorizonScore(portfolio);
-  if (score == null) { el.innerHTML = noData(); return; }
-  const color = score >= 60 ? 'var(--green)' : (score >= 35 ? 'var(--gold)' : 'var(--red)');
-  el.innerHTML = `HORIZON ${score.toFixed(0)}/100 <span class="horizon-dot" style="background:${color};"></span>`;
-  el.title = '95% Wilson lower-confidence-bound on the all-time win rate, scaled 0-100 -- a real statistic accounting for sample size, not an invented score.';
-}
-function renderRobustnessGrid(trades) {
-  const wrap = document.getElementById('robustness-body');
-  const r = computeRobustnessByAsset(trades);
-  if (!r) { wrap.innerHTML = noData(); return; }
-  const header = '<div class="rb-row rb-head"><div class="rb-cell rb-label"></div>'
-    + r.windows.map(d => `<div class="rb-cell rb-label">${d}D%</div>`).join('') + '</div>';
-  const rows = r.rows.map(row => {
-    const cells = row.cells.map(cell => {
-      const txt = cell.n ? (cell.pct >= 0 ? '+' : '') + cell.pct.toFixed(1) + '%' : '&mdash;';
-      return `<div class="rb-cell" style="background:${robustnessCellColor(cell)};" title="${cell.n} closed trade(s)">${txt}</div>`;
-    }).join('');
-    return `<div class="rb-row"><div class="rb-cell rb-label">${row.asset}</div>${cells}</div>`;
-  }).join('');
-  wrap.innerHTML = header + rows + `<div class="rb-caption">%-return per asset over trailing 1/3/7 days, per $100 notional. &mdash; means no closed trades in that window.</div>`;
-}
-
-/* ---------------- MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ---------------- */
-const MC_PATHS = 7000;
-function computeMonteCarlo(m) {
-  if (!m || !m.wins.length || !m.losses.length) return null;
-  const n = Math.min(m.closed.length, 5000);
-  const winRate = m.winRate, avgWin = m.avgWin, avgLoss = m.avgLoss;
-  const finals = new Array(MC_PATHS);
-  for (let p = 0; p < MC_PATHS; p++) {
-    let total = 0;
-    for (let t = 0; t < n; t++) {
-      total += (Math.random() < winRate) ? avgWin : -avgLoss;
-    }
-    finals[p] = total;
-  }
-  finals.sort((a, b) => a - b);
-  const pct = frac => finals[Math.min(finals.length - 1, Math.max(0, Math.floor(frac * (finals.length - 1))))];
-  const mean = finals.reduce((s, v) => s + v, 0) / finals.length;
-  return { finals, n, p05: pct(0.05), p01: pct(0.01), mean };
-}
-function renderMonteCarlo(portfolio) {
-  const statsEl = document.getElementById('mc-stats');
-  const canvas = document.getElementById('mc-canvas');
-  const p01TagEl = document.getElementById('mc-p01-tag');
-  const mc = computeMonteCarlo(portfolio);
-  if (!mc) {
-    statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
-    if (p01TagEl) p01TagEl.innerHTML = '';
-    const { ctx, w, h } = resizeCanvasToParent(canvas);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#8A8570'; ctx.font = '12px monospace';
-    ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
+function renderLiveTrades(trades) {
+  const wrap = document.getElementById('live-trades-body');
+  const countEl = document.getElementById('lt-open-count');
+  if (!trades || !trades.length) {
+    wrap.innerHTML = noData();
+    if (countEl) countEl.textContent = '';
     return;
   }
-  if (p01TagEl) p01TagEl.textContent = 'P < 0.010';
-  statsEl.innerHTML = `
-    <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
-    <div class="mc-stat"><div class="mc-label">5th %ile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
-    <div class="mc-stat hi"><div class="mc-label">P &lt; 0.010</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
-  `;
-  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  const sorted = trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts));
+  const openCount = sorted.reduce((n, t) => n + (t.status === 'open' ? 1 : 0), 0);
+  if (countEl) countEl.textContent = `${openCount} OPEN`;
+  const header = `<div class="lt-row lt-head">
+    <div>TIME</div><div>ASSET</div><div>DIR</div><div>ENTRY</div><div>STATUS</div><div>PNL</div>
+  </div>`;
+  const rows = sorted.slice(0, 20).map(t => {
+    const { cls, text } = tradeStatusInfo(t);
+    const pnlKnown = t.pnl_usd != null;
+    const pnlText = pnlKnown ? fmtUsd(t.pnl_usd) : '&mdash;';
+    const pnlCls = pnlKnown ? (t.pnl_usd >= 0 ? 'up' : 'down') : '';
+    return `<div class="lt-row lt-${cls}" data-trade-id="${t.trade_id}">
+      <div class="lt-time">${fmtClock(t.open_ts)}</div>
+      <div>${t.asset}</div>
+      <div>${t.direction}</div>
+      <div class="num">${t.entry_price.toFixed(3)}</div>
+      <div><span class="lt-badge lt-badge-${cls}">${text}</span></div>
+      <div class="num ${pnlCls}">${pnlText}</div>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = header + rows;
+}
+
+/* ---------------- MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ----------------
+   Runs on its own MC_TICK_MS timer, independent of the main data-refresh loop
+   (see mcTick() / setInterval below) -- each tick draws MC_BATCH_SIZE more
+   genuine random paths using the live win_rate/avg_win/avg_loss and appends
+   them to a running pool (seeded with MC_INITIAL_PATHS on the first tick),
+   so the displayed path count is a real, monotonically growing count of
+   simulations actually run, not a cosmetic fake counter. Histogram bars
+   animate between their previous and new heights over MC_ANIM_MS. */
+const MC_INITIAL_PATHS = 7000;
+const MC_BATCH_SIZE = 34;
+const MC_TICK_MS = 5000;
+const MC_ANIM_MS = 500;
+const MC_BINS = 26;
+// _mcFinals is a BOUNDED sample pool (capped at MC_MAX_POOL, oldest paths
+// dropped) used only for the histogram/stats -- kept bounded so render/sort
+// cost never grows unbounded over a long-running session. _mcTotalCount is a
+// SEPARATE, always-monotonic real count of every path ever simulated; it is
+// what's displayed, and it must never shrink except via an explicit reset
+// (the "Reset Session" button), which is what a naive "wipe the pool when
+// there are 0 wins or 0 losses" approach got wrong before -- that could zero
+// the pool on a transient state and make the displayed count jump backward.
+const MC_MAX_POOL = 20000;
+let _mcFinals = [];
+let _mcTotalCount = 0;
+let _mcPrevBarFracs = null;
+function mcResetAccumulator() { _mcFinals = []; _mcTotalCount = 0; _mcPrevBarFracs = null; }
+function mcAccumulate(portfolio) {
+  if (!portfolio || !portfolio.wins.length || !portfolio.losses.length) return null;
+  const n = Math.min(portfolio.closed.length, 5000);
+  const batchSize = _mcTotalCount === 0 ? MC_INITIAL_PATHS : MC_BATCH_SIZE;
+  for (let p = 0; p < batchSize; p++) {
+    let total = 0;
+    for (let t = 0; t < n; t++) {
+      total += (Math.random() < portfolio.winRate) ? portfolio.avgWin : -portfolio.avgLoss;
+    }
+    _mcFinals.push(total);
+  }
+  _mcTotalCount += batchSize;
+  if (_mcFinals.length > MC_MAX_POOL) _mcFinals = _mcFinals.slice(-MC_MAX_POOL);
+  const sorted = _mcFinals.slice().sort((a, b) => a - b);
+  const pct = frac => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(frac * (sorted.length - 1))))];
+  const mean = _mcFinals.reduce((s, v) => s + v, 0) / _mcFinals.length;
+  return { finals: sorted, n, count: _mcTotalCount, p05: pct(0.05), p01: pct(0.01), mean };
+}
+function drawMcHistogram(ctx, w, h, finals, barFracs) {
   ctx.clearRect(0, 0, w, h);
-  const pad = 24, BINS = 26;
-  const min = mc.finals[0], max = mc.finals[mc.finals.length - 1];
+  const pad = 24;
+  const min = finals[0], max = finals[finals.length - 1];
   const span = (max - min) || 1;
-  const counts = new Array(BINS).fill(0);
-  mc.finals.forEach(v => {
-    let idx = Math.floor(((v - min) / span) * BINS);
-    idx = Math.max(0, Math.min(BINS - 1, idx));
-    counts[idx]++;
-  });
-  const maxCount = Math.max(...counts);
   const plotW = w - pad * 2, plotH = h - pad * 2;
-  const barW = plotW / BINS;
-  for (let i = 0; i < BINS; i++) {
-    const binStart = min + (i / BINS) * span;
-    const barH = (counts[i] / maxCount) * plotH;
+  const barW = plotW / MC_BINS;
+  for (let i = 0; i < MC_BINS; i++) {
+    const binStart = min + (i / MC_BINS) * span;
+    const barH = barFracs[i] * plotH;
     ctx.fillStyle = binStart >= 0 ? 'rgba(26,127,55,0.55)' : 'rgba(207,34,46,0.55)';
     ctx.fillRect(pad + i * barW + 1, h - pad - barH, Math.max(1, barW - 2), barH);
   }
@@ -1297,6 +1344,70 @@ function renderMonteCarlo(portfolio) {
   ctx.fillStyle = 'rgba(90,86,70,0.6)'; ctx.font = '10px monospace';
   ctx.fillText(fmtUsd(min), pad, h - 8);
   ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
+}
+let _mcHistogramToken = 0;
+function animateMcHistogram(canvas, finals, targetFracs) {
+  const prevFracs = _mcPrevBarFracs || new Array(MC_BINS).fill(0);
+  const start = performance.now();
+  const myToken = ++_mcHistogramToken; // cancels any still-running previous animation on this canvas
+  function step(now) {
+    if (_mcHistogramToken !== myToken) return;
+    const t = Math.max(0, Math.min(1, (now - start) / MC_ANIM_MS));
+    const eased = 1 - Math.pow(1 - t, 3);
+    const { ctx, w, h } = resizeCanvasToParent(canvas);
+    const frame = targetFracs.map((v, i) => prevFracs[i] + (v - prevFracs[i]) * eased);
+    drawMcHistogram(ctx, w, h, finals, frame);
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+  _mcPrevBarFracs = targetFracs;
+}
+function dbgLog(msg) { const d = document.getElementById('debug-log'); if (d) d.textContent += msg + '\n'; }
+function renderMonteCarlo(portfolio) {
+  const statsEl = document.getElementById('mc-stats');
+  const canvas = document.getElementById('mc-canvas');
+  const p01TagEl = document.getElementById('mc-p01-tag');
+  const pathCountEl = document.getElementById('mc-path-count');
+  const mc = mcAccumulate(portfolio);
+  dbgLog(`rMC mc=${mc ? mc.count : 'NULL'} totalCount=${_mcTotalCount} preText=${pathCountEl && pathCountEl.textContent}`);
+  if (!mc) {
+    // A transient portfolio read (e.g. paper_trades.jsonl caught mid-write by
+    // the live bot) can briefly look like "no wins" or "no losses" even
+    // though real accumulated simulation history exists. Once we have real
+    // history (_mcTotalCount > 0), don't blank the panel over a one-tick
+    // data hiccup -- just skip this render pass and keep showing the last
+    // known-good state. Only show "no data" for a genuinely fresh session.
+    if (_mcTotalCount > 0) { dbgLog('  -> null but totalCount>0, RETURN early'); return; }
+    dbgLog('  -> null, totalCount==0, writing 0');
+    statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
+    if (p01TagEl) p01TagEl.innerHTML = '';
+    if (pathCountEl) pathCountEl.textContent = '0';
+    const { ctx, w, h } = resizeCanvasToParent(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#8A8570'; ctx.font = '12px monospace';
+    ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
+    return;
+  }
+  dbgLog(`  -> success, calling animateNumber target=${mc.count}`);
+  if (p01TagEl) p01TagEl.textContent = 'P < 0.010';
+  if (pathCountEl) animateNumber(pathCountEl, mc.count, v => Math.max(0, Math.round(v)).toLocaleString('en-US'), MC_ANIM_MS);
+  dbgLog(`  -> after animateNumber, text=${pathCountEl && pathCountEl.textContent}`);
+  statsEl.innerHTML = `
+    <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
+    <div class="mc-stat"><div class="mc-label">5th %ile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
+    <div class="mc-stat hi"><div class="mc-label">P &lt; 0.010</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
+  `;
+  const min = mc.finals[0], max = mc.finals[mc.finals.length - 1];
+  const span = (max - min) || 1;
+  const counts = new Array(MC_BINS).fill(0);
+  mc.finals.forEach(v => {
+    let idx = Math.floor(((v - min) / span) * MC_BINS);
+    idx = Math.max(0, Math.min(MC_BINS - 1, idx));
+    counts[idx]++;
+  });
+  const maxCount = Math.max(...counts);
+  const targetFracs = counts.map(c => c / maxCount);
+  animateMcHistogram(canvas, mc.finals, targetFracs);
 }
 
 /* ---------------- SECTION 7: LIVE FEED (scrolling, BUY/SELL badges) ---------------- */
@@ -1322,20 +1433,26 @@ function renderLiveFeed(trades) {
   track.innerHTML = rowsHtml + rowsHtml;
 }
 
+/* ---------------- chart asset rotation (BTC -> ETH -> SOL -> BTC, every 10s) ---------------- */
+async function updateChart() {
+  const ticks = await loadPriceHistoryTicks(_currentChartAsset);
+  const candles = computeOhlcCandles(ticks, CANDLE_BUCKET_SEC, CANDLE_COUNT);
+  renderCandlestick(candles, _lastMarketBias, _currentChartAsset);
+}
+
 /* =============================================================================
    REFRESH LOOP
    ============================================================================= */
 async function refresh() {
-  const [trades, state, liveStatus, latency, btcTicks, biasHistory, combinerStatus, executionCycle, stats] = await Promise.all([
+  const [trades, state, liveStatus, latency, biasHistory, combinerStatus, executionCycle, stats] = await Promise.all([
     loadTrades(), loadState(), loadLiveStatus(), loadLatency(),
-    loadPriceHistoryTicks('BTC'), loadMarketBiasHistory(),
-    loadSignalCombinerStatus(), loadExecutionCycle(), loadStats(),
+    loadMarketBiasHistory(), loadSignalCombinerStatus(), loadExecutionCycle(), loadStats(),
   ]);
-  const marketBias = biasHistory && biasHistory.length ? biasHistory[biasHistory.length - 1] : null;
-  const candles = computeOhlcCandles(btcTicks, CANDLE_BUCKET_SEC, CANDLE_COUNT);
+  _lastMarketBias = biasHistory && biasHistory.length ? biasHistory[biasHistory.length - 1] : null;
   renderHeader(state, liveStatus, latency);
   const portfolio = renderPortfolio(trades, state);
-  renderTicker(marketBias, biasHistory, portfolio);
+  _lastPortfolio = portfolio;
+  renderTicker(_lastMarketBias, biasHistory, portfolio);
   renderLiqRisk(state);
   renderStatGrid(stats, portfolio);
   renderBiggestWin(portfolio);
@@ -1345,12 +1462,10 @@ async function refresh() {
   renderTreeInflight(trades);
   renderTreeSparklines(trades);
   renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades);
-  renderCandlestick(candles, marketBias);
-  renderHorizonTag(portfolio);
-  renderRobustnessGrid(trades);
-  renderMonteCarlo(portfolio);
+  renderLiveTrades(trades);
   renderEquityCurve(portfolio);
   renderLiveFeed(trades);
+  await updateChart(); // uses the current rotating asset + freshly cached _lastMarketBias
 }
 
 document.getElementById('reset-session-btn').addEventListener('click', async () => {
@@ -1362,6 +1477,7 @@ document.getElementById('reset-session-btn').addEventListener('click', async () 
   try {
     const res = await fetch('/api/reset-session', { method: 'POST' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    mcResetAccumulator(); // scoped trades (and thus win_rate/avg_win/avg_loss) just changed
     await refresh();
   } catch (e) {
     alert('Reset failed: ' + e.message + '\n\nMake sure the dashboard is served by scripts/dashboard_server.py (not plain `python -m http.server`), which is what implements POST /api/reset-session.');
@@ -1371,11 +1487,20 @@ document.getElementById('reset-session-btn').addEventListener('click', async () 
   }
 });
 
-new ResizeObserver(() => refresh()).observe(document.getElementById('candle-wrap'));
-new ResizeObserver(() => refresh()).observe(document.getElementById('equity-wrap'));
-new ResizeObserver(() => refresh()).observe(document.getElementById('mc-chart-wrap'));
+new ResizeObserver(() => updateChart()).observe(document.getElementById('candle-wrap'));
+new ResizeObserver(() => renderEquityCurve(_lastPortfolio)).observe(document.getElementById('equity-wrap'));
+new ResizeObserver(() => { _mcPrevBarFracs = null; renderMonteCarlo(_lastPortfolio); }).observe(document.getElementById('mc-chart-wrap'));
 
-refresh();
+refresh().then(() => renderMonteCarlo(_lastPortfolio)); // seed it immediately so the panel isn't blank until the first tick
+// Monte Carlo runs on its own clock, independent of the main data refresh --
+// see the comment above MC_INITIAL_PATHS.
+setInterval(() => renderMonteCarlo(_lastPortfolio), MC_TICK_MS);
+// Rotates the BTC/USD chart panel through BTC -> ETH -> SOL every 10s.
+setInterval(() => {
+  _chartAssetIdx = (_chartAssetIdx + 1) % CHART_ASSETS.length;
+  _currentChartAsset = CHART_ASSETS[_chartAssetIdx];
+  updateChart();
+}, CHART_ROTATE_MS);
 setInterval(refresh, REFRESH_MS);
 setInterval(() => {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });

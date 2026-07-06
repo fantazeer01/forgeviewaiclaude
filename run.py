@@ -146,8 +146,17 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         # non-None), so this still isn't the legacy repricing detector making
         # the call -- it's the combiner alone, model gate bypassed, exactly
         # per decide()'s warmup docstring.
+        #
+        # SIZED VIA KELLY TOO (2026-07-06): this previously fell through to
+        # open_trade()'s flat PAPER_TRADE_SIZE_USD default regardless of
+        # confidence, so every warm-up trade was $10 even at combiner
+        # confidence 0.95 -- kelly_size() only ran in the is_warmed_up()
+        # branch above. Same sizing call as that branch now applies here too.
         signal = combined_signal
-        trade = engine.open_trade(signal, source="repricing")
+        size_usd = online_model.kelly_size(combined_signal.confidence)
+        _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
+                                 size_usd=size_usd, detail=f"sized at ${size_usd:.2f}")
+        trade = engine.open_trade(signal, source="repricing", size_usd=size_usd)
     if trade:
         _export_execution_cycle("fill", asset=trade.asset, market_id=trade.market_id, trade_id=trade.trade_id,
                                  size_usd=trade.size_usd, detail=f"{trade.direction} @ {trade.entry_price:.3f}")
