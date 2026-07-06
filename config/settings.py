@@ -28,6 +28,21 @@ QUANT_FEATURES_LOG = "data/quant_features.jsonl"
 # a biased sample) this is meant to answer "where does price actually spend
 # its time" so SIGNAL_COMBINER_MIN/MAX_YES_PRICE can be set from real data.
 PRICE_HISTORY_LOG = "data/price_history.jsonl"
+# Shadow NO learning (2026-07-06): real NO-direction trading was tried and
+# disabled (10.5% win rate over 19 trades, net -$139.67 -- see
+# SignalCombiner's docstring). This still lets the online model learn from
+# what a NO bet would have seen, with zero money at risk: whenever
+# yes_price > NO_SHADOW_YES_PRICE_THRESHOLD, core/no_shadow_tracker.py
+# records the feature snapshot (no trade opens), and once the market
+# resolves, feeds (features, 1 if outcome=="YES" else 0) into the SAME
+# online model via update() -- the model's target is always "did YES win,"
+# direction-independent, so this is exactly the same training signal a real
+# NO trade's resolution would have produced, just without the paper-money
+# exposure. Once 50+ of these have resolved, the model's own p at open time
+# (also recorded) can be checked against real outcomes to see whether it's
+# actually learning anything in this price range.
+NO_SHADOW_LOG = "data/no_shadow.jsonl"
+NO_SHADOW_YES_PRICE_THRESHOLD = 0.80
 QUANT_MODEL_PATH = "data/quant_model.pkl"
 # KELLY_FRACTION_CAP stays defined here: core/kelly_criterion.py (a separate,
 # still-valid standalone utility module with its own tests) uses it

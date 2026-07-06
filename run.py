@@ -26,6 +26,7 @@ from core.quant_signal import QuantSignalGenerator
 from core.live_features import LiveFeatureCollector
 from core.online_model import OnlineQuantModel
 from core.signal_combiner import SignalCombiner
+from core.no_shadow_tracker import NoShadowTracker
 from reporting.stats_reporter import StatsReporter
 from reporting.telegram_reporter import TelegramReporter
 
@@ -51,6 +52,7 @@ def main():
     live_features = LiveFeatureCollector()
     online_model = OnlineQuantModel()
     signal_combiner = SignalCombiner()
+    no_shadow = NoShadowTracker()
     stats_rep = StatsReporter(tracker, state)
     tg = TelegramReporter()
     logger.info(f"Online model: {online_model.n_updates}/{online_model.warmup_trades} warm-up trades "
@@ -73,6 +75,7 @@ def main():
             _maybe_refresh_fear_greed(fear_greed_fetcher)
             _maybe_refresh_macro_events(macro_events_fetcher)
             _close_resolved_trades(engine, fetcher, tg, tracker, stats_rep, online_model)
+            no_shadow.resolve_pending(fetcher, online_model)
             signal_gen.resolve_pending()
             markets = fetcher.get_active_5min_markets()
             for market in markets:
@@ -87,6 +90,8 @@ def main():
                 signal_gen.process_market(market)
                 snapshot = live_features.extract(market, fetcher)
                 _export_live_status(snapshot)
+                if market["asset"] in ("BTC", "ETH"):
+                    no_shadow.maybe_record(market, snapshot, online_model.predict_proba_one(snapshot))
                 combined_signal = signal_combiner.combine(
                     market, fetcher, snapshot.get("btc_eth_correlation"),
                 )
