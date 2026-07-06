@@ -137,13 +137,15 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)
     else:
         # warm-up bootstrap fallback: the model has no training data of its own
-        # yet, so it still needs *some* real trades to learn from. In
-        # QUANT_ONLY_MODE this fallback is disabled too -- repricing is fully
-        # off as a trading input, not just during live mode -- so no trade
-        # opens here at all until the model is warmed up some other way.
-        if QUANT_ONLY_MODE:
-            logger.debug("QUANT_ONLY_MODE: skipping warm-up repricing fallback trade")
-            return None
+        # yet, so it needs *some* real trades to learn from. UNGATED FROM
+        # QUANT_ONLY_MODE (2026-07-06 urgent fix): this used to return None
+        # here unconditionally, meaning a reset model could never re-warm
+        # itself (no trade ever opened to call record_features()/resolve()).
+        # `combined_signal` at this point is already the signal combiner's own
+        # output (decide()'s warmup branch only returns True when it's
+        # non-None), so this still isn't the legacy repricing detector making
+        # the call -- it's the combiner alone, model gate bypassed, exactly
+        # per decide()'s warmup docstring.
         signal = combined_signal
         trade = engine.open_trade(signal, source="repricing")
     if trade:

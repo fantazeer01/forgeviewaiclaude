@@ -182,7 +182,7 @@ def test_signal_stats_accumulates_across_multiple_combine_calls(combiner):
 def test_price_below_band_blocks_combine_entirely(combiner):
     import json
     top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}  # would otherwise fire at 0.95
-    result = combiner.combine(make_market(yes_price=0.30, no_price=0.70), FakeFetcher(top), btc_eth_correlation=None)
+    result = combiner.combine(make_market(yes_price=0.20, no_price=0.80), FakeFetcher(top), btc_eth_correlation=None)
     assert result is None
     with open(combiner.status_path) as f:
         data = json.load(f)

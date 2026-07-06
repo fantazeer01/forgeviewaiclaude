@@ -59,7 +59,14 @@ QUANT_MODEL_PATH = "data/quant_model.pkl"
 # table below instead of the Kelly formula.
 KELLY_FRACTION_CAP = 0.25
 ONLINE_MODEL_STATE_FILE = "data/online_model_state.pkl"
-ONLINE_MODEL_WARMUP_TRADES = 200
+# LOWERED (2026-07-06 urgent fix): was 200. The model diverged to a saturated
+# binary step function (intercept -80, yes_price coef +65 -- predict_proba_one
+# only ever returned ~0.21 or ~0.79, with the crossover around yes_price 0.80,
+# well outside SIGNAL_COMBINER_MAX_YES_PRICE=0.65) after 509 updates, so it was
+# reset (data/online_model_state.pkl.bak has the pre-reset state). 50 gets a
+# fresh model back to live-driven decisions faster; re-evaluate whether that's
+# enough real data once it's warmed up again.
+ONLINE_MODEL_WARMUP_TRADES = 50
 ONLINE_MODEL_CONFIDENCE_THRESHOLD = 0.55
 # Simple step-function bet sizing, replacing the old Kelly-criterion formula
 # (which used to need ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
@@ -75,22 +82,17 @@ BET_SIZES = {0.60: 5, 0.70: 10, 0.80: 15, 0.90: 25}
 # construction only exists when its confidence already exceeds
 # SIGNAL_COMBINER_THRESHOLD) -- see core/online_model.py.decide().
 #
-# TEMPORARY LOWERING (2026-07-06): the model (297/200 warm-up trades, already
-# past warm-up) was trained almost entirely on 0.45-0.60 yes_price data, so
-# now that SIGNAL_COMBINER_MIN/MAX_YES_PRICE is temporarily 0.35-0.65 (see
-# above), it's extrapolating p<=0.5 for the new price wings just from lack of
-# training data there, blocking every combiner-agreed signal in that range.
-# Lowered to 0.3 here (not reset to 0.5 threshold + wiped model weights) --
-# a model *reset* was considered and rejected as the riskier option: with
-# QUANT_ONLY_MODE=True, run.py's warm-up fallback branch (the ONLY path that
-# would normally open trades and call record_features()/resolve() to
-# re-accumulate n_updates during warm-up) is explicitly skipped, so a reset
-# model would never open a trade and could never re-warm itself -- a
-# permanent trading halt, not just slower learning. Lowering this threshold
-# is a single reversible constant with no such failure mode. Revert to 0.5
-# once the model has enough resolved trades in the new 0.35-0.65 range to
-# have relearned it (or once the price band itself reverts to 0.45-0.60).
-ONLINE_MODEL_OWN_THRESHOLD = 0.3
+# RESET BACK TO SPEC (2026-07-06 urgent fix): had been temporarily lowered to
+# 0.3 to work around the same divergence issue described at
+# ONLINE_MODEL_WARMUP_TRADES above -- but 0.3 still wasn't enough once the
+# model fully saturated to a ~0.21/~0.79 step function (0.21 < 0.3 too).
+# Restored to the original 0.5 spec value now that the model itself has been
+# reset: previously a reset was rejected specifically because QUANT_ONLY_MODE's
+# warm-up fallback in run.py was skipped, so a reset model could never
+# re-accumulate training data and would halt trading permanently -- that
+# fallback skip has now been removed (see run.py._decide_and_open), so this
+# failure mode no longer applies.
+ONLINE_MODEL_OWN_THRESHOLD = 0.5
 ONLINE_MODEL_COMBINER_THRESHOLD = 0.60
 # Probability calibration: the raw SGDClassifier sigmoid output saturates to
 # ~0.0/1.0 on this project's limited real training data (observed
@@ -236,7 +238,14 @@ SIGNAL_COMBINER_THRESHOLD = 0.60
 # band alone. Revert to 0.45/0.60 (or narrow to e.g. 0.45-0.65) once enough
 # fresh trades have accumulated to re-decide with new-session data instead of
 # this backtest.
-SIGNAL_COMBINER_MIN_YES_PRICE = 0.35
+# TEMPORARY WIDENING #2 (2026-07-06 urgent fix): lowered further from 0.35 to
+# 0.30 to catch more signals while the reset online model (see
+# ONLINE_MODEL_WARMUP_TRADES above) re-warms. NOTE: the 2026-07-05 backtest
+# above found [0.35,0.45) alone historically lost money (-$1.12/trade avg,
+# n=268, net -$300.19) -- 0.30-0.35 is uncharted territory with zero backtest
+# support, not a proven-safe extension. This is a deliberate data-accumulation
+# tradeoff, not a profitability claim; revisit once fresh trades accumulate.
+SIGNAL_COMBINER_MIN_YES_PRICE = 0.30
 SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 
 # DISABLED (2026-07-06): an "extreme mean-reversion" strategy briefly traded
