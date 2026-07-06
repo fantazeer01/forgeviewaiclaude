@@ -17,8 +17,13 @@
      surfaced in this trimmed-down view.
      ========================================================================== */
   :root {
-    --bg:        #0c0e0f;
-    --panel:     #12161c;
+    /* Whole page is ONE dark color; generic panels share it too (distinguished
+       only by their 1px border) -- the portfolio card is the one deliberate
+       exception, a step lighter with a green-tinted border. */
+    --bg:        #0d1117;
+    --panel:     #0d1117;
+    --portfolio-bg:     #161b22;
+    --portfolio-border: rgba(57,211,83,0.35);
     --border:    rgba(201,209,217,0.10);
     --border-hi: rgba(201,209,217,0.20);
     --grid:      rgba(201,209,217,0.06);
@@ -32,19 +37,6 @@
     --gold:   #e3b341;
     --purple: #6e40c9;
     --cyan:   #58a6ff;
-
-    /* Cream card, confirmed earlier in this session: #F5F0E8 (not the dark
-       green-black hex that appeared alongside it in one message) -- the
-       on-cream accent colors below are separately tuned for contrast on a
-       light surface rather than reused from the dark-mode neons above. */
-    --cream-bg:     #F5F0E8;
-    --cream-border: rgba(26,26,22,0.12);
-    --cream-grid:   rgba(26,26,22,0.08);
-    --cream-text:   #1A1A16;
-    --cream-muted:  #6B6459;
-    --cream-green:  #1F7A3D;
-    --cream-red:    #B4232A;
-    --cream-gold:   #8A6D1E;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -130,41 +122,32 @@
   .panel-title .glyph { color: var(--gold); margin-right: 6px; }
   .panel-body { padding: 20px; flex: 1; min-height: 0; overflow: auto; }
 
-  /* ---- portfolio (cream card) ---- */
-  #portfolio-panel.panel-cream { background: var(--cream-bg); border-color: var(--cream-border); }
-  #portfolio-panel.panel-cream .panel-head { border-bottom-color: var(--cream-border); }
-  #portfolio-panel.panel-cream .panel-title { color: var(--cream-muted); }
-  #portfolio-panel.panel-cream .panel-body { color: var(--cream-text); }
-  #portfolio-panel.panel-cream .up   { color: var(--cream-green); }
-  #portfolio-panel.panel-cream .down { color: var(--cream-red); }
-  #portfolio-panel.panel-cream .no-data { color: var(--cream-muted); border-color: rgba(26,26,22,0.25); }
-  #portfolio-panel.panel-cream .real-tag { color: var(--cream-green); border-color: rgba(31,122,61,0.35); }
-  #portfolio-panel.panel-cream .reset-session-btn { color: var(--cream-muted); border-color: rgba(26,26,22,0.3); }
-  #portfolio-panel.panel-cream .reset-session-btn:hover { color: var(--cream-text); border-color: var(--cream-green); }
+  /* ---- portfolio (the one panel a step lighter than the page, green border) ---- */
+  #portfolio-panel { background: var(--portfolio-bg); border-color: var(--portfolio-border); }
 
-  .wallet-line { font-size: 12px; color: var(--cream-muted); letter-spacing: 0.02em; display:flex; align-items:center; justify-content:space-between; margin-bottom: 18px; }
+  .wallet-line { font-size: 12px; color: var(--text-muted); letter-spacing: 0.02em; display:flex; align-items:center; justify-content:space-between; margin-bottom: 18px; }
   .hero { font-size: 48px; font-weight: 800; line-height: 1; }
-  .hero-sub { font-size: 13px; color: var(--cream-muted); letter-spacing: 0.02em; margin-top: 8px; margin-bottom: 22px; }
+  .hero-sub { font-size: 13px; color: var(--text-muted); letter-spacing: 0.02em; margin-top: 8px; margin-bottom: 22px; }
 
-  .triple-stat { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 22px; padding: 18px 0; border-top: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
+  .triple-stat { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 22px; padding: 18px 0; border-top: 1px solid var(--grid); border-bottom: 1px solid var(--grid); }
   .triple-stat .ts-cell { text-align: center; }
-  .triple-stat .ts-label { font-size: 11px; color: var(--cream-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .triple-stat .ts-value { font-size: 24px; font-weight: 800; color: var(--cream-text); margin-top: 6px; }
+  .triple-stat .ts-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .triple-stat .ts-value { font-size: 24px; font-weight: 800; color: var(--text-primary); margin-top: 6px; }
 
   .liq-risk-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-  .liq-risk-label { font-size: 12px; color: var(--cream-muted); letter-spacing: 0.04em; flex-shrink: 0; }
+  .liq-risk-label { font-size: 12px; color: var(--text-muted); letter-spacing: 0.04em; flex-shrink: 0; }
   .liq-risk-segs { display: flex; gap: 3px; flex: 1; }
-  .liq-risk-segs .seg { flex: 1; height: 10px; border-radius: 1px; background: rgba(26,26,22,0.08); }
-  .liq-risk-segs .seg.filled { background: var(--seg-color, var(--cream-green)); }
+  .liq-risk-segs .seg { flex: 1; height: 10px; border-radius: 1px; background: rgba(201,209,217,0.08); }
+  .liq-risk-segs .seg.filled { background: var(--seg-color, var(--green)); }
   .liq-risk-tag { font-size: 11px; font-weight: 800; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 3px; flex-shrink: 0; }
-  .liq-risk-note { font-size: 12px; color: var(--cream-muted); margin-bottom: 22px; }
+  .liq-risk-note { font-size: 12px; color: var(--text-muted); margin-bottom: 22px; }
 
-  .stat-grid2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-top: 1px solid var(--cream-grid); }
-  .stat-grid2 .sg-cell { padding: 14px 8px; border-right: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
+  .stat-grid2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-top: 1px solid var(--grid); }
+  .stat-grid2 .sg-cell { padding: 14px 8px; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid); }
   .stat-grid2 .sg-cell:nth-child(3n) { border-right: none; }
-  .stat-grid2 .sg-label { font-size: 11px; color: var(--cream-muted); letter-spacing: 0.04em; text-transform: uppercase; }
-  .stat-grid2 .sg-value { font-size: 15px; font-weight: 800; color: var(--cream-text); margin-top: 5px; }
-  .stat-grid2-note { font-size: 11px; color: var(--cream-muted); margin-top: 14px; }
+  .stat-grid2 .sg-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .stat-grid2 .sg-value { font-size: 15px; font-weight: 800; color: var(--text-primary); margin-top: 5px; }
+  .stat-grid2-note { font-size: 11px; color: var(--text-muted); margin-top: 14px; }
 
   .reset-session-btn {
     font-family: inherit; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
@@ -223,24 +206,18 @@
   .tree-node-sub { font-size: 11px; fill: var(--text-muted); font-family: 'Courier New', monospace; text-anchor: middle; }
   .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
   .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
-  .tree-fill-box {
-    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
-    background: var(--panel); border: 1.5px solid var(--gold); border-radius: 6px;
-    padding: 10px 24px; text-align: center; white-space: nowrap;
-    box-shadow: 0 0 14px rgba(227,179,65,0.16);
-  }
-  .tree-fill-box .ff-main { font-size: 17px; font-weight: 800; }
-  .tree-fill-box .ff-sub { font-size: 11px; color: var(--text-secondary); letter-spacing: 0.02em; margin-top: 5px; }
+  .tree-last-trade { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+  .tree-last-trade .val { font-weight: 800; }
 
   /* ---- SECTION 5: robustness / monte carlo / pnl growth ---- */
   .rb-row { display: grid; grid-template-columns: 88px repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
-  .rb-cell { text-align: center; padding: 12px 6px; border-radius: 5px; font-size: 13px; font-weight: 700; }
+  .rb-cell { text-align: center; padding: 16px 8px; border-radius: 5px; font-size: 13px; font-weight: 700; }
   .rb-label { color: var(--text-secondary); font-weight: 400; font-size: 12px; text-align: left; background: none !important; padding-left: 2px; display:flex; align-items:center; }
-  .rb-head .rb-cell { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
-  .rb-caption { font-size: 11px; color: var(--text-muted); margin-top: 14px; }
+  .rb-head .rb-cell { font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+  .rb-caption { font-size: 12px; color: var(--text-muted); margin-top: 14px; }
 
   .mc-stats { display: flex; gap: 22px; padding-bottom: 18px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); margin-bottom: 16px; }
-  .mc-stat .mc-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .mc-stat .mc-label { font-size: 12px; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
   .mc-stat .mc-value { font-size: 15px; font-weight: 800; margin-top: 4px; }
   .mc-stat.hi .mc-value { color: var(--red); }
   .mc-chart-wrap { position: relative; flex: 1; min-height: 130px; }
@@ -253,7 +230,7 @@
   .feed-track { animation: feedScroll 34s linear infinite; }
   .feed-wrap:hover .feed-track { animation-play-state: paused; }
   @keyframes feedScroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
-  .feed-row { display: flex; gap: 14px; align-items: center; padding: 8px 20px; font-size: 13px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .feed-row { display: flex; gap: 14px; align-items: center; min-height: 18px; padding: 8px 20px; font-size: 13px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   .feed-time { color: var(--text-muted); flex-shrink: 0; }
   .feed-badge {
     flex-shrink: 0; display: inline-block; min-width: 46px; text-align: center;
@@ -284,7 +261,7 @@
 
   <!-- ================= SECTION 2: MAIN ROW ================= -->
   <div class="main-row">
-    <div class="panel panel-cream" id="portfolio-panel">
+    <div class="panel" id="portfolio-panel">
       <div class="panel-head">
         <div class="panel-title">Portfolio</div>
         <span style="display:flex; align-items:center; gap:10px;">
@@ -352,6 +329,7 @@
         <div class="pace-label">PACE</div>
         <div class="pace-value num" id="tree-pace-value">--</div>
         <div class="next-value" id="tree-next-value"></div>
+        <div class="tree-last-trade" id="tree-last-trade"></div>
       </div>
     </div>
     <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
@@ -683,7 +661,7 @@ function renderLiqRisk(state) {
   const used = state.daily_loss_usd;
   const pct = Math.min(100, (used / MAX_DAILY_LOSS_USD) * 100);
   const filledSegs = Math.round(pct / 10);
-  const color = pct >= 80 ? 'var(--cream-red)' : (pct >= 50 ? 'var(--cream-gold)' : 'var(--cream-green)');
+  const color = pct >= 80 ? 'var(--red)' : (pct >= 50 ? 'var(--gold)' : 'var(--green)');
   const tag = pct >= 80 ? 'DANGER' : (pct >= 50 ? 'WARNING' : 'SAFE');
   const segs = Array.from({ length: 10 }, (_, i) => `<div class="seg ${i < filledSegs ? 'filled' : ''}" style="--seg-color:${color};"></div>`).join('');
   wrap.innerHTML = `
@@ -787,12 +765,13 @@ function renderTreePace(portfolio, state, trades) {
 }
 
 /* ---------------- SECTION 4: STRATEGY DECISION TREE (animated SVG) ---------------- */
-// Logical (base) node layout in a 1050x460 design space. The bottom ~25% of
-// that height is intentionally empty (nodes top out around y=338) so the
-// .tree-fill-box HTML overlay always has clear room below the branch nodes.
-// The actual <svg> viewBox is recomputed every render from the wrapper's
-// real aspect ratio so the tree fills the panel edge-to-edge instead of
-// letterboxing inside a fixed-ratio viewBox.
+// Logical (base) node layout in a 1050x460 design space, with generous empty
+// space below the nodes (they top out around y=338). The actual <svg>
+// viewBox is recomputed every render from the wrapper's real aspect ratio so
+// the tree fills the panel edge-to-edge instead of letterboxing inside a
+// fixed-ratio viewBox. The last trade's result is shown as plain text in the
+// top-right pace box, not an overlay on top of the nodes -- see
+// #tree-last-trade below.
 const TREE_NODES_BASE = {
   tick:       { x: 55,  y: 168, label: 'TICK' },
   scan:       { x: 200, y: 168, label: 'SCAN' },
@@ -889,7 +868,7 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     const isPnl = key === 'pnl';
     const isRepricing = key === 'repricing';
     const r = isPnl ? 34 : 23;
-    const fill = isActive ? 'rgba(57,211,83,0.15)' : '#12161c';
+    const fill = isActive ? 'rgba(57,211,83,0.15)' : '#0d1117';
     const stroke = isActive ? '#39d353' : '#30363d';
     const dash = isRepricing ? ' stroke-dasharray="3,3"' : '';
     svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"${dash}/>`;
@@ -912,24 +891,19 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
   svg += `</svg>`;
   wrap.innerHTML = svg;
 
-  const lastTrade = trades && trades.length
-    ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
-  let fillBoxHtml;
-  if (!lastTrade) {
-    fillBoxHtml = `<div class="tree-fill-box"><div class="ff-main">${noData('AWAITING FIRST SIGNAL')}</div></div>`;
-  } else if (lastTrade.status === 'open') {
-    fillBoxHtml = `<div class="tree-fill-box">
-      <div class="ff-main" style="color:var(--gold);">OPEN &middot; ${lastTrade.asset} ${lastTrade.direction} @ ${lastTrade.entry_price.toFixed(3)}</div>
-      <div class="ff-sub">ORDER FILLED &middot; EXECUTION CONFIRMED &middot; ${fmtClock(lastTrade.open_ts)}</div>
-    </div>`;
-  } else {
-    const pnlColor = lastTrade.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)';
-    fillBoxHtml = `<div class="tree-fill-box">
-      <div class="ff-main" style="color:${pnlColor};">${fmtUsd(lastTrade.pnl_usd)} ORDER ${lastTrade.result}</div>
-      <div class="ff-sub">EXECUTION CONFIRMED &middot; ${lastTrade.asset} ${lastTrade.direction} &middot; ${lastTrade.signal_source}</div>
-    </div>`;
+  const lastTradeEl = document.getElementById('tree-last-trade');
+  if (lastTradeEl) {
+    const lastTrade = trades && trades.length
+      ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
+    if (!lastTrade) {
+      lastTradeEl.innerHTML = noData('AWAITING FIRST SIGNAL');
+    } else if (lastTrade.status === 'open') {
+      lastTradeEl.innerHTML = `LAST: <span class="val" style="color:var(--gold);">OPEN ${lastTrade.asset} ${lastTrade.direction} @ ${lastTrade.entry_price.toFixed(3)}</span>`;
+    } else {
+      const pnlColor = lastTrade.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)';
+      lastTradeEl.innerHTML = `LAST: <span class="val" style="color:${pnlColor};">${fmtUsd(lastTrade.pnl_usd)} ${lastTrade.result}</span> &middot; ${lastTrade.asset} ${lastTrade.direction}`;
+    }
   }
-  wrap.insertAdjacentHTML('beforeend', fillBoxHtml);
 
   const lastFillTs = (executionCycle && executionCycle.stage === 'fill') ? executionCycle.updated_at : null;
   if (lastFillTs && lastFillTs !== _lastSeenTreeFillTs) {
