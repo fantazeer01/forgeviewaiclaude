@@ -358,7 +358,7 @@
     <div class="tree-top-strip">
       <div class="tree-sparklines" id="tree-sparklines"></div>
       <div class="tree-edge-conf">
-        <div class="ec-label">EDGE CONF (BTC)</div>
+        <div class="ec-label" id="tree-edge-label">EDGE CONF (BTC)</div>
         <div class="ec-value" id="tree-edge-value">--</div>
         <div class="ec-detail" id="tree-edge-detail"></div>
       </div>
@@ -428,10 +428,9 @@
    -----------------------------------------------------------------------------
    data/paper_trades.jsonl   real trades (asset, direction, entry, result, PnL,
                               open/close ts, size_usd), deduped by trade_id.
-                              Backs Portfolio, Biggest Win, per-asset
-                              sparklines, Live Trades, PnL Growth, Live Feed,
-                              Monte Carlo inputs, and the client-computed
-                              all-time %-return / avg hold time.
+                              Backs Portfolio, Biggest Win, Live Trades, PnL
+                              Growth, Live Feed, Monte Carlo inputs, and the
+                              client-computed all-time %-return / avg hold time.
    data/state.json           daily_loss_usd, system_stopped, session_start_clean.
                               Backs header STATUS, LIQ RISK gauge. Pace uses the
                               earliest open_ts across paper_trades.jsonl (or
@@ -453,9 +452,13 @@
    data/live_status.json     quant_only_mode flag, written by run.py.
    data/latency.json         real Polymarket HTTP call latency, written by
                               core/market_fetcher.py after every call.
-   data/price_history.jsonl  real per-tick yes_price samples for BTC, ~5s
-                              cadence. Bucketed client-side into real OHLC
-                              candles for the BTC chart -- see computeOhlcCandles.
+   data/price_history.jsonl  real per-tick yes_price samples for BTC/ETH/SOL,
+                              ~5s cadence. Bucketed client-side into real OHLC
+                              candles for the rotating chart -- see
+                              computeOhlcCandles -- and, as a raw last-20-ticks
+                              slice per asset, feeds the Decision Tree's
+                              per-asset sparklines -- see
+                              loadRecentYesPricesByAsset/renderTreeSparklines.
    data/market_bias.jsonl    CoinGecko spot prices + 24h change + bias label,
                               written by run.py every 60s. Feeds the ticker,
                               the BTC chart header price/change, and (via its
@@ -883,17 +886,24 @@ function renderTreeInflight(trades) {
   el.textContent = `IN-FLIGHT ${open}`;
 }
 
-/* ---------------- per-asset sparklines (top-left of decision tree) ---------------- */
-function computeAssetCurve(trades, asset) {
-  const closed = trades.filter(t => t.asset === asset && t.status !== 'open' && t.pnl_usd != null && t.close_ts)
-    .sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
-  let running = 0;
-  const curve = closed.map(t => { running += t.pnl_usd; return running; });
-  return { curve, total: running };
+/* ---------------- per-asset sparklines (top-left of decision tree) ----------------
+   Real data/price_history.jsonl yes_price ticks (the same unconditioned,
+   every-poll-tick log the candlestick chart reads), not a synthetic curve --
+   last 20 ticks per asset, green if the last price is >= the first, red if
+   it dropped. */
+async function loadRecentYesPricesByAsset() {
+  const rows = await fetchJsonlTail('data/price_history.jsonl', 1500);
+  if (!rows) return null;
+  const byAsset = { BTC: [], ETH: [], SOL: [] };
+  for (const r of rows) {
+    if (byAsset[r.asset] && has(r.yes_price)) byAsset[r.asset].push(r.yes_price);
+  }
+  Object.keys(byAsset).forEach(a => { byAsset[a] = byAsset[a].slice(-20); });
+  return byAsset;
 }
-function renderTreeSparklines(trades) {
+function renderTreeSparklines(pricesByAsset) {
   const wrap = document.getElementById('tree-sparklines');
-  if (!trades) { wrap.innerHTML = noData(); return; }
+  if (!pricesByAsset) { wrap.innerHTML = noData(); return; }
   wrap.innerHTML = ['BTC', 'ETH', 'SOL'].map(asset => `
     <div class="tree-spark">
       <div class="ts-asset">${asset}</div>
@@ -902,26 +912,25 @@ function renderTreeSparklines(trades) {
     </div>
   `).join('');
   ['BTC', 'ETH', 'SOL'].forEach(asset => {
-    const { curve, total } = computeAssetCurve(trades, asset);
+    const curve = pricesByAsset[asset] || [];
     const canvas = document.getElementById(`spark-${asset}`);
     const valEl = document.getElementById(`spark-${asset}-val`);
     const { ctx, w, h } = resizeCanvasToParent(canvas);
     ctx.clearRect(0, 0, w, h);
     if (curve.length < 2) {
-      valEl.innerHTML = curve.length ? fmtUsd(total) : noData();
-      if (valEl && curve.length) valEl.className = 'ts-val num ' + (total >= 0 ? 'up' : 'down');
+      valEl.innerHTML = curve.length ? curve[curve.length - 1].toFixed(3) : noData();
       return;
     }
-    const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
-    const span = (max - min) || 1;
+    const min = Math.min(...curve), max = Math.max(...curve);
+    const span = (max - min) || 0.001;
     const x = i => (i / (curve.length - 1)) * w;
     const y = v => h - ((v - min) / span) * h;
-    const positive = total >= 0;
+    const positive = curve[curve.length - 1] >= curve[0];
     ctx.beginPath();
     curve.forEach((v, i) => i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v)));
     ctx.strokeStyle = positive ? '#1a7f37' : '#cf222e'; ctx.lineWidth = 1.5;
     ctx.stroke();
-    valEl.textContent = fmtUsd(total);
+    valEl.textContent = curve[curve.length - 1].toFixed(3);
     valEl.className = 'ts-val num ' + (positive ? 'up' : 'down');
   });
 }
@@ -974,20 +983,28 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
   const wrap = document.getElementById('tree-svg-wrap');
   const edgeValueEl = document.getElementById('tree-edge-value');
   const edgeDetailEl = document.getElementById('tree-edge-detail');
+  const edgeLabelEl = document.getElementById('tree-edge-label');
   const btcStatus = combinerStatus ? combinerStatus.BTC : null;
 
-  if (btcStatus && has(btcStatus.combined_confidence) && !btcStatus.correlation_filter_blocked && !btcStatus.price_out_of_band) {
-    const pct = btcStatus.combined_confidence * 100;
+  // EDGE CONF rotates BTC -> ETH -> SOL in lockstep with the candlestick
+  // chart, sharing _currentChartAsset / CHART_ROTATE_MS -- independent of
+  // the tree diagram's node highlighting below, which stays BTC-specific
+  // (that's the tree's own walkthrough, not asked to rotate).
+  const edgeAsset = _currentChartAsset;
+  const edgeStatus = combinerStatus ? combinerStatus[edgeAsset] : null;
+  if (edgeLabelEl) edgeLabelEl.textContent = `EDGE CONF (${edgeAsset})`;
+  if (edgeStatus && has(edgeStatus.combined_confidence) && !edgeStatus.correlation_filter_blocked && !edgeStatus.price_out_of_band) {
+    const pct = edgeStatus.combined_confidence * 100;
     edgeValueEl.textContent = pct.toFixed(1) + '%';
-    edgeValueEl.className = 'ec-value ' + (btcStatus.fired ? 'up' : '');
+    edgeValueEl.className = 'ec-value ' + (edgeStatus.fired ? 'up' : '');
   } else {
     edgeValueEl.innerHTML = noData();
   }
-  if (btcStatus) {
+  if (edgeStatus) {
     const fmtSig = s => (s && s.fired) ? `<span class="up">${(s.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted);">--</span>';
-    const combinedText = btcStatus.correlation_filter_blocked ? '<span class="down">BLOCKED</span>'
-      : btcStatus.price_out_of_band ? '<span style="color:var(--gold);">OUT OF BAND</span>'
-      : 'Order Book ' + fmtSig(btcStatus.order_book) + ' &middot; Momentum ' + fmtSig(btcStatus.momentum) + ' &middot; Volume ' + fmtSig(btcStatus.volume);
+    const combinedText = edgeStatus.correlation_filter_blocked ? '<span class="down">BLOCKED</span>'
+      : edgeStatus.price_out_of_band ? '<span style="color:var(--gold);">OUT OF BAND</span>'
+      : 'Order Book ' + fmtSig(edgeStatus.order_book) + ' &middot; Momentum ' + fmtSig(edgeStatus.momentum) + ' &middot; Volume ' + fmtSig(edgeStatus.volume);
     edgeDetailEl.innerHTML = combinedText;
   } else {
     edgeDetailEl.innerHTML = noData();
@@ -1137,8 +1154,15 @@ function renderCandlestick(candles, marketBias, assetKey) {
 
   const pad = { t: 14, r: 52, b: 20, l: 4 };
   const allPrices = candles.flatMap(c => [c.high, c.low]);
-  const min = Math.min(...allPrices), max = Math.max(...allPrices);
-  const span = (max - min) || 0.01;
+  // 10% padding above/below the real high/low range -- without it, the
+  // tallest wick's high and the lowest wick's low map exactly to the plot's
+  // top/bottom pixel with zero margin, so candles visually touch/clip the
+  // grid lines and header text instead of sitting inside the chart.
+  const rawMin = Math.min(...allPrices), rawMax = Math.max(...allPrices);
+  const rawSpan = (rawMax - rawMin) || 0.01;
+  const rangePad = rawSpan * 0.10;
+  const min = rawMin - rangePad, max = rawMax + rangePad;
+  const span = max - min;
   const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
   const n = candles.length;
   const slot = plotW / n;
@@ -1433,9 +1457,10 @@ async function updateChart() {
    REFRESH LOOP
    ============================================================================= */
 async function refresh() {
-  const [trades, state, liveStatus, latency, biasHistory, combinerStatus, executionCycle, stats] = await Promise.all([
+  const [trades, state, liveStatus, latency, biasHistory, combinerStatus, executionCycle, stats, sparkPrices] = await Promise.all([
     loadTrades(), loadState(), loadLiveStatus(), loadLatency(),
     loadMarketBiasHistory(), loadSignalCombinerStatus(), loadExecutionCycle(), loadStats(),
+    loadRecentYesPricesByAsset(),
   ]);
   _lastMarketBias = biasHistory && biasHistory.length ? biasHistory[biasHistory.length - 1] : null;
   renderHeader(state, liveStatus, latency);
@@ -1449,7 +1474,7 @@ async function refresh() {
   renderNextTick();
   renderTreePace(portfolio, state, trades);
   renderTreeInflight(trades);
-  renderTreeSparklines(trades);
+  renderTreeSparklines(sparkPrices);
   renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades);
   renderLiveTrades(trades);
   renderEquityCurve(portfolio);
