@@ -186,7 +186,7 @@
      (Portfolio/Biggest Win), and clips anything that would still overflow
      it. #equity-wrap (PnL Growth, bottom row) also uses .chart-wrap and is
      deliberately untouched -- this id-specific rule only applies to #candle-wrap. */
-  #candle-wrap { flex: 0 0 150px; height: 150px; min-height: 0; overflow: hidden; }
+  #candle-wrap { flex: 0 0 170px; height: 170px; min-height: 0; overflow: hidden; }
 
   /* ---- SECTION 4: execution cycle ---- */
   .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 18px; }
@@ -995,6 +995,17 @@ const TREE_EDGES = [
 ];
 let _lastSeenTreeFillTs = undefined;
 const _lastSeenBranchFireTs = { order_book: undefined, momentum: undefined, volume: undefined };
+// EDGE CONF "last known" fallback (2026-07-06): combined_confidence is null
+// whenever an asset is currently blocked (price out of band, correlation
+// filter, or just no signal firing this tick) -- since EDGE CONF rotates
+// through all 3 assets and any of them can be blocked at once (e.g. all 3
+// out of the tradeable price band simultaneously), showing a blank "NO DATA"
+// every time that happens would make the panel go dark constantly even
+// though a real recent reading exists. Cache the last real (non-null)
+// reading per asset with its own real timestamp instead of inventing a
+// number -- shown as stale (no up/down tint) alongside whatever the current
+// live block reason is.
+const _lastEdgeConfByAsset = { BTC: null, ETH: null, SOL: null };
 let _currentTreeNodes = TREE_NODES_BASE;
 function buildFlowPath(...nodeKeys) {
   return 'M ' + nodeKeys.map(k => `${_currentTreeNodes[k].x} ${_currentTreeNodes[k].y}`).join(' L ');
@@ -1028,8 +1039,15 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     const pct = edgeStatus.combined_confidence * 100;
     edgeValueEl.textContent = pct.toFixed(1) + '%';
     edgeValueEl.className = 'ec-value ' + (edgeStatus.fired ? 'up' : '');
+    _lastEdgeConfByAsset[edgeAsset] = { pct, ts: (combinerStatus && combinerStatus.updated_at) || null };
   } else {
-    edgeValueEl.innerHTML = noData();
+    const cached = _lastEdgeConfByAsset[edgeAsset];
+    if (cached) {
+      edgeValueEl.innerHTML = `${cached.pct.toFixed(1)}% <span style="font-size:10px;color:var(--text-muted);">(last ${fmtClock(cached.ts)})</span>`;
+      edgeValueEl.className = 'ec-value';
+    } else {
+      edgeValueEl.innerHTML = noData();
+    }
   }
   if (edgeStatus) {
     const fmtSig = s => (s && s.fired) ? `<span class="up">${(s.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted);">--</span>';
