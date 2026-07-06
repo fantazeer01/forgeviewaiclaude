@@ -1,6 +1,7 @@
 import datetime
 import json
 
+from config.settings import VOLUME_SKIP_MINUTES_REMAINING_THRESHOLD
 from core.signals.volume_signal import VolumeSignalGenerator
 
 
@@ -34,6 +35,30 @@ def test_fires_when_volume_exceeds_threshold(tmp_path):
     signal = gen.generate(make_market(volume_24h=2000.0))  # 2.0x avg of 1000
     assert signal is not None
     assert signal.direction == "YES"
+
+
+def test_skips_in_first_60s_of_a_fresh_window(tmp_path):
+    # 2026-07-06 signal quality pass: minutes_remaining > 4.0 means less
+    # than 60s has elapsed since the 5-min window opened -- skip even with
+    # a qualifying volume spike.
+    path = str(tmp_path / "volume_history.jsonl")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    write_history(path, [
+        {"asset": "BTC", "volume_24h": 1000.0, "timestamp": (now - datetime.timedelta(days=1)).isoformat()},
+    ])
+    gen = VolumeSignalGenerator(history_path=path)
+    assert gen.generate(make_market(volume_24h=2000.0, minutes_remaining=4.5)) is None
+
+
+def test_fires_right_at_the_60s_boundary(tmp_path):
+    path = str(tmp_path / "volume_history.jsonl")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    write_history(path, [
+        {"asset": "BTC", "volume_24h": 1000.0, "timestamp": (now - datetime.timedelta(days=1)).isoformat()},
+    ])
+    gen = VolumeSignalGenerator(history_path=path)
+    signal = gen.generate(make_market(volume_24h=2000.0, minutes_remaining=VOLUME_SKIP_MINUTES_REMAINING_THRESHOLD))
+    assert signal is not None
 
 
 def test_no_signal_when_ratio_at_or_below_threshold(tmp_path):

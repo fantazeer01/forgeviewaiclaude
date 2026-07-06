@@ -26,6 +26,7 @@ def test_signal_to_dict_roundtrip():
         "asset": "BTC", "market_id": "m1", "direction": "YES",
         "yes_price": 0.6, "no_price": 0.4, "confidence": 0.8, "reason": "test",
         "timestamp": "2024-01-01T00:00:00", "minutes_remaining": 3.0,
+        "decisive_signal": None,
     }
 
 

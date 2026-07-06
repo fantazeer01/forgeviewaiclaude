@@ -12,7 +12,7 @@ from config.settings import (
     MARKET_POLL_INTERVAL_SEC,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
-    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG,
+    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG, SIGNALS_LOG,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -124,6 +124,7 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             yes_price=market["yes_price"], no_price=market["no_price"],
             confidence=round(win_probability, 3), reason=reason,
             minutes_remaining=market.get("minutes_remaining", 5.0),
+            decisive_signal=combined_signal.decisive_signal,
         )
         size_usd = online_model.kelly_size(combined_signal.confidence)
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
@@ -186,7 +187,6 @@ def _maybe_reset_daily(state: StateManager):
 
 def _log_signal(signal):
     import json
-    from config.settings import SIGNALS_LOG
     os.makedirs(os.path.dirname(SIGNALS_LOG), exist_ok=True)
     with open(SIGNALS_LOG, "a") as f:
         f.write(json.dumps(signal.to_dict()) + "\n")

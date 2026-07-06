@@ -42,6 +42,7 @@ def test_order_book_alone_above_threshold_fires(combiner):
     assert result is not None
     assert result.confidence == pytest.approx(0.95)
     assert result.direction == "YES"
+    assert result.decisive_signal == "order_book"
 
 
 def test_order_book_alone_below_threshold_does_not_fire(combiner):
@@ -64,6 +65,7 @@ def test_weighted_average_renormalizes_among_active_signals_only(combiner, mocke
     assert result is not None
     expected = (0.25 * 0.75 + 0.25 * 0.9) / (0.25 + 0.25)
     assert result.confidence == pytest.approx(expected, abs=0.001)
+    assert result.decisive_signal == "combined"
 
 
 def _fake_signal(confidence):
@@ -101,6 +103,32 @@ def test_correlation_filter_does_not_block_btc(combiner):
         btc_eth_correlation=0.9,
     )
     assert result is not None
+
+
+def test_price_stability_filter_blocks_a_flat_market(combiner):
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}  # would otherwise fire at 0.95
+    combiner.combine(make_market(yes_price=0.500), FakeFetcher(top), btc_eth_correlation=None)
+    result = combiner.combine(make_market(yes_price=0.501), FakeFetcher(top), btc_eth_correlation=None)  # flat
+    assert result is None
+
+
+def test_price_stability_filter_does_not_block_a_moving_market(combiner):
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+    combiner.combine(make_market(yes_price=0.50), FakeFetcher(top), btc_eth_correlation=None)
+    result = combiner.combine(make_market(yes_price=0.53), FakeFetcher(top), btc_eth_correlation=None)  # moved 0.03
+    assert result is not None
+
+
+def test_price_stability_blocked_status_is_set(combiner):
+    import json
+    top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
+    combiner.combine(make_market(yes_price=0.500), FakeFetcher(top), btc_eth_correlation=None)
+    combiner.combine(make_market(yes_price=0.501), FakeFetcher(top), btc_eth_correlation=None)
+    with open(combiner.status_path) as f:
+        data = json.load(f)
+    assert data["BTC"]["price_stability_blocked"] is True
+    assert data["BTC"]["fired"] is False
+    assert data["BTC"]["order_book"]["fired"] is False  # signal never even evaluated
 
 
 def test_status_exported_after_combine(combiner, tmp_path):
@@ -141,8 +169,11 @@ def test_signal_stats_increments_fired_today_and_last_fired_at(combiner):
 def test_signal_stats_accumulates_across_multiple_combine_calls(combiner):
     import json
     top = {"total_bid_depth": 400.0, "total_ask_depth": 100.0}
-    combiner.combine(make_market(), FakeFetcher(top), btc_eth_correlation=None)
-    combiner.combine(make_market(), FakeFetcher(top), btc_eth_correlation=None)
+    # different market_ids -- a repeated identical price on the SAME market_id
+    # would now get blocked by the price stability filter, which is tested
+    # separately; this test is only about the fired_today counter accumulating.
+    combiner.combine(make_market(market_id="m1"), FakeFetcher(top), btc_eth_correlation=None)
+    combiner.combine(make_market(market_id="m2"), FakeFetcher(top), btc_eth_correlation=None)
     with open(combiner.status_path) as f:
         data = json.load(f)
     assert data["signal_stats"]["order_book"]["fired_today"] == 2

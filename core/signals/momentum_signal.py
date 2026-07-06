@@ -1,7 +1,7 @@
 import datetime
 from typing import Optional
 
-from config.settings import MOMENTUM_WINDOW_SEC, MOMENTUM_MIN_SAMPLES
+from config.settings import MOMENTUM_WINDOW_SEC, MOMENTUM_MIN_SAMPLES, MOMENTUM_MIN_REVERSAL_STRENGTH
 from core.repricing_detector import RepricingSignal
 
 
@@ -11,6 +11,11 @@ class MomentumSignalGenerator:
     falling, then the most recent sample reverses upward. This is a
     3-point pattern (fall, then rise) meant to catch a reversal before it's
     obvious, distinct from RepricingDetector's own drop-only trigger.
+
+    Requires the bounce to recover at least MOMENTUM_MIN_REVERSAL_STRENGTH
+    (50%) of the drop -- a bounce of just a few thousandths after a real
+    drop is noise, not a reversal worth trading (2026-07-06 signal quality
+    pass).
     """
 
     def __init__(self):
@@ -37,6 +42,8 @@ class MomentumSignalGenerator:
         if drop <= 0:
             return None
         reversal_strength = bounce / drop
+        if reversal_strength < MOMENTUM_MIN_REVERSAL_STRENGTH:
+            return None
         confidence = min(0.95, 0.5 + reversal_strength * 0.4)
         return RepricingSignal(
             asset=market["asset"], market_id=market["market_id"], direction="YES",

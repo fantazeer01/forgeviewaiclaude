@@ -6,7 +6,7 @@ from typing import Optional
 
 from config.settings import (
     VOLUME_HISTORY_LOG, VOLUME_RATIO_THRESHOLD, VOLUME_LOOKBACK_DAYS,
-    VOLUME_RECORD_INTERVAL_SEC,
+    VOLUME_RECORD_INTERVAL_SEC, VOLUME_SKIP_MINUTES_REMAINING_THRESHOLD,
 )
 from core.repricing_detector import RepricingSignal
 
@@ -23,6 +23,12 @@ class VolumeSignalGenerator:
     at most once per VOLUME_RECORD_INTERVAL_SEC (1 hour) per asset --
     volume_24h itself only changes gradually, so recording it every 3s poll
     tick would just bloat the log with near-duplicate rows for no benefit.
+
+    Skips firing entirely in the first 60s of a fresh 5-min window
+    (minutes_remaining > VOLUME_SKIP_MINUTES_REMAINING_THRESHOLD) -- prices
+    and the order book are less settled right after a market opens, so a
+    volume-based confirmation there is less reliable (2026-07-06 signal
+    quality pass).
     """
 
     def __init__(self, history_path: str = VOLUME_HISTORY_LOG):
@@ -74,6 +80,9 @@ class VolumeSignalGenerator:
         return sum(values) / len(values)
 
     def generate(self, market: dict) -> Optional[RepricingSignal]:
+        minutes_remaining = market.get("minutes_remaining", 5.0)
+        if minutes_remaining > VOLUME_SKIP_MINUTES_REMAINING_THRESHOLD:
+            return None
         current = market.get("volume_24h")
         if current is None:
             return None

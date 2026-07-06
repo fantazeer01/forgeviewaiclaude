@@ -155,6 +155,32 @@ ORDER_BOOK_RATIO_THRESHOLD = 1.3
 # ---- momentum (bounce/reversal) signal ----
 MOMENTUM_WINDOW_SEC = 45
 MOMENTUM_MIN_SAMPLES = 3
+# SIGNAL QUALITY SPRINT (2026-07-06): the request read "only fire if
+# reversal_strength > 0.5 * drop_size", but reversal_strength is already
+# defined as bounce/drop (a ratio) in momentum_signal.py -- multiplying a
+# ratio by drop again doesn't parse dimensionally. The parenthetical right
+# next to it ("bounce must be at least 50% of the drop") is unambiguous and
+# is what's implemented: require reversal_strength >= this fraction, i.e.
+# bounce >= MOMENTUM_MIN_REVERSAL_STRENGTH * drop.
+MOMENTUM_MIN_REVERSAL_STRENGTH = 0.5
+
+# ---- volume signal ----
+# SIGNAL QUALITY SPRINT (2026-07-06): skip volume signals in the first 60s
+# of a fresh 5-min window (market just opened, price/volume less settled).
+# minutes_remaining starts at ~5.0 and counts down, so "first 60s elapsed"
+# is minutes_remaining <= 4.0; skip while it's still above that.
+VOLUME_SKIP_MINUTES_REMAINING_THRESHOLD = 4.0
+
+# ---- price stability filter ----
+# SIGNAL QUALITY SPRINT (2026-07-06): a FILTER (like the correlation and
+# price-band filters), not a weighted signal -- it never contributes a
+# confidence, it only blocks combine() entirely when yes_price has moved
+# less than PRICE_STABILITY_MIN_MOVE over the trailing
+# PRICE_STABILITY_WINDOW_SEC. Rationale: order_book/momentum/volume are all
+# continuation signals that only mean something if the market is actually
+# moving -- a flat market gives them nothing real to detect.
+PRICE_STABILITY_WINDOW_SEC = 90
+PRICE_STABILITY_MIN_MOVE = 0.02
 
 # ---- correlation filter ----
 CORRELATION_HIGH_THRESHOLD = 0.8

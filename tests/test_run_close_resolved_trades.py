@@ -28,6 +28,9 @@ def wiring(tmp_path, monkeypatch):
     trades_log = tmp_path / "trades.jsonl"
     monkeypatch.setattr("core.paper_trading_engine.TRADES_LOG", str(trades_log))
     monkeypatch.setattr("core.pnl_tracker.TRADES_LOG", str(trades_log))
+    # _close_resolved_trades() also calls _export_execution_cycle("settle", ...)
+    # -- without this, tests silently overwrite the real data/execution_cycle.json.
+    monkeypatch.setattr("run.EXECUTION_CYCLE_FILE", str(tmp_path / "execution_cycle.json"))
     state = StateManager(state_file=str(tmp_path / "state.json"))
     dedup = DedupGuard(state_file=str(tmp_path / "dedup.json"))
     engine = PaperTradingEngine(state, dedup)

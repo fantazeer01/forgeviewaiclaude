@@ -17,6 +17,12 @@ class RepricingSignal:
     reason: str
     timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     minutes_remaining: float = 5.0
+    # Which of order_book/momentum/volume actually drove this signal --
+    # "combined" if more than one fired together, None if not set by
+    # SignalCombiner (e.g. the legacy repricing_detector path). 2026-07-06
+    # signal quality pass: lets signals_log.jsonl record which signal was
+    # decisive for each trade.
+    decisive_signal: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -29,6 +35,7 @@ class RepricingSignal:
             "reason": self.reason,
             "timestamp": self.timestamp,
             "minutes_remaining": self.minutes_remaining,
+            "decisive_signal": self.decisive_signal,
         }
 
 class RepricingDetector:

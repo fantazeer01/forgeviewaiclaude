@@ -13,6 +13,7 @@ from core.signals.order_book_signal import OrderBookSignalGenerator
 from core.signals.momentum_signal import MomentumSignalGenerator
 from core.signals.volume_signal import VolumeSignalGenerator
 from core.signals.correlation_signal import CorrelationFilter
+from core.signals.price_stability_filter import PriceStabilityFilter
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,13 @@ class SignalCombiner:
     -$139.67 -- not viable. Trading is YES-only again, exclusively within
     [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]; anything
     outside that band is simply not traded, full stop.
+
+    A third FILTER (2026-07-06 signal quality pass):
+    core/signals/price_stability_filter.py's PriceStabilityFilter blocks
+    combine() when yes_price has moved less than PRICE_STABILITY_MIN_MOVE
+    over the trailing PRICE_STABILITY_WINDOW_SEC -- order_book/momentum/
+    volume are all continuation signals that need real movement to detect
+    anything; a flat market gives them nothing.
     """
 
     SIGNAL_NAMES = ("order_book", "momentum", "volume")
@@ -64,11 +72,13 @@ class SignalCombiner:
                  momentum_gen: Optional[MomentumSignalGenerator] = None,
                  volume_gen: Optional[VolumeSignalGenerator] = None,
                  correlation_filter: Optional[CorrelationFilter] = None,
+                 price_stability_filter: Optional[PriceStabilityFilter] = None,
                  status_path: str = SIGNAL_COMBINER_STATUS_FILE):
         self.order_book_gen = order_book_gen or OrderBookSignalGenerator()
         self.momentum_gen = momentum_gen or MomentumSignalGenerator()
         self.volume_gen = volume_gen or VolumeSignalGenerator()
         self.correlation_filter = correlation_filter or CorrelationFilter()
+        self.price_stability_filter = price_stability_filter or PriceStabilityFilter()
         self.status_path = status_path
         self._status: dict[str, dict] = {}
         self._stats_date = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
@@ -129,6 +139,7 @@ class SignalCombiner:
 
         # feed rolling histories every tick, regardless of whether anything fires
         self.momentum_gen.update(market_id, market["yes_price"])
+        self.price_stability_filter.update(market_id, market["yes_price"])
         if asset == "BTC":
             self.correlation_filter.update_btc_price(market["yes_price"])
         self.volume_gen.record_volume(asset, market.get("volume_24h", 0.0))
@@ -141,6 +152,7 @@ class SignalCombiner:
                 "volume": self._signal_summary(None),
                 "correlation_filter_blocked": True,
                 "price_out_of_band": False,
+                "price_stability_blocked": False,
                 "combined_confidence": None,
                 "fired": False,
             }
@@ -166,6 +178,7 @@ class SignalCombiner:
                 "volume": self._signal_summary(None),
                 "correlation_filter_blocked": False,
                 "price_out_of_band": True,
+                "price_stability_blocked": False,
                 "combined_confidence": None,
                 "fired": False,
             }
@@ -174,6 +187,24 @@ class SignalCombiner:
                 f"Signal combiner blocked by price band: {asset} {market_id} "
                 f"yes_price={yes_price} not in [{SIGNAL_COMBINER_MIN_YES_PRICE}, {SIGNAL_COMBINER_MAX_YES_PRICE}]"
             )
+            return None
+
+        # PRICE STABILITY FILTER (2026-07-06 signal quality pass): checked
+        # only within the tradeable band, since the dead/extreme zones
+        # above already block for their own reasons regardless of movement.
+        if self.price_stability_filter.is_stable(market_id):
+            self._status[asset] = {
+                "order_book": self._signal_summary(None),
+                "momentum": self._signal_summary(None),
+                "volume": self._signal_summary(None),
+                "correlation_filter_blocked": False,
+                "price_out_of_band": False,
+                "price_stability_blocked": True,
+                "combined_confidence": None,
+                "fired": False,
+            }
+            self._export_status()
+            logger.info(f"Signal combiner blocked by price stability: {asset} {market_id} yes_price={yes_price} flat")
             return None
 
         order_book_signal = self.order_book_gen.generate(market, fetcher)
@@ -199,12 +230,14 @@ class SignalCombiner:
                 SIGNAL_COMBINER_WEIGHTS[name] * sig.confidence for name, sig in active.items()
             ) / total_weight
             if combined_confidence > SIGNAL_COMBINER_THRESHOLD:
+                decisive_signal = "combined" if len(active) > 1 else next(iter(active))
                 result = RepricingSignal(
                     asset=asset, market_id=market_id, direction="YES",
                     yes_price=market["yes_price"], no_price=market["no_price"],
                     confidence=round(combined_confidence, 3),
                     reason=f"combined({','.join(sorted(active.keys()))})={combined_confidence:.3f}",
                     minutes_remaining=market.get("minutes_remaining", 5.0),
+                    decisive_signal=decisive_signal,
                 )
 
         self._status[asset] = {
@@ -213,6 +246,7 @@ class SignalCombiner:
             "volume": self._signal_summary(volume_signal),
             "correlation_filter_blocked": False,
             "price_out_of_band": False,
+            "price_stability_blocked": False,
             "combined_confidence": round(combined_confidence, 3) if combined_confidence is not None else None,
             "fired": result is not None,
         }
