@@ -7,19 +7,21 @@
 <style>
   /* ==========================================================================
      RULE OF THIS FILE: every widget shows REAL data or an explicit "NO DATA"
-     tag. Nothing here is randomly generated or fabricated. See the header
-     comment in the <script> block for exactly which files back which panel.
-     Any panel element from the reference layout that has no real backing
-     metric in this codebase (a synthetic "horizon score", undefined PUBT/RISK/
-     STAT columns, "cheap tail" markers for a strategy retired in D-003) is
-     deliberately omitted rather than invented.
+     tag. Nothing here is randomly generated or fabricated.
+     This is the deliberately minimal layout: 6 sections only (top bar, main
+     row, execution cycle, decision tree, 3-column bottom row, live feed).
+     Panels that existed in earlier iterations (correlation map, signal
+     combiner breakdown, AI reasoning, AI signal panel, decision timeline,
+     live trades table) were removed per an explicit "NO other panels" request
+     -- their real-data logic still exists in core/*.py, it's just not
+     surfaced in this trimmed-down view.
      ========================================================================== */
   :root {
     --bg:        #0c0e0f;
-    --panel:     #161b22;
-    --border:    #21262d;
-    --border-hi: #30363d;
-    --grid:      rgba(201,209,217,0.07);
+    --panel:     #12161c;
+    --border:    rgba(201,209,217,0.10);
+    --border-hi: rgba(201,209,217,0.20);
+    --grid:      rgba(201,209,217,0.06);
 
     --text-primary:   #c9d1d9;
     --text-secondary: #8b949e;
@@ -31,9 +33,10 @@
     --purple: #6e40c9;
     --cyan:   #58a6ff;
 
-    /* on-cream (warm card) accent variants -- the dark-surface hues above
-       fall below 3:1 on a light background, so the cream card gets its own
-       darker steps of the same hues rather than reusing the dark-mode ones. */
+    /* Cream card, confirmed earlier in this session: #F5F0E8 (not the dark
+       green-black hex that appeared alongside it in one message) -- the
+       on-cream accent colors below are separately tuned for contrast on a
+       light surface rather than reused from the dark-mode neons above. */
     --cream-bg:     #F5F0E8;
     --cream-border: rgba(26,26,22,0.12);
     --cream-grid:   rgba(26,26,22,0.08);
@@ -49,7 +52,7 @@
     background: var(--bg);
     color: var(--text-primary);
     font-family: 'Courier New', ui-monospace, Consolas, monospace;
-    font-size: 11.5px;
+    font-size: 13px;
   }
   .num { font-variant-numeric: tabular-nums; }
   .up   { color: var(--green); }
@@ -60,104 +63,74 @@
     color: var(--text-muted);
     border: 1px dashed var(--border-hi);
     border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 10px;
-    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
   }
   .real-tag {
-    font-size: 8.5px; letter-spacing: 0.08em; color: var(--green);
-    border: 1px solid rgba(57,211,83,0.35); border-radius: 3px; padding: 1px 5px;
+    font-size: 10px; letter-spacing: 0.06em; color: var(--green);
+    border: 1px solid rgba(57,211,83,0.3); border-radius: 3px; padding: 2px 6px;
   }
-  .scanning {
-    display: inline-block; color: var(--cyan); font-size: 10px;
-    letter-spacing: 0.06em; animation: scanPulse 1.6s ease-in-out infinite;
-  }
-  @keyframes scanPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-  /* ---- 1. top header bar ---- */
+  /* ---- SECTION 1: top bar ---- */
   #header-bar {
-    display: flex; align-items: center; gap: 14px;
-    height: 30px; padding: 0 12px;
-    background: #090a0b;
+    display: flex; align-items: center; gap: 18px;
+    height: 34px; padding: 0 16px;
+    background: #08090a;
     border-bottom: 1px solid var(--border);
-    font-size: 10.5px;
+    font-size: 12px;
   }
-  #header-bar .brand { font-weight: 700; letter-spacing: 0.05em; color: var(--text-primary); flex-shrink: 0; }
-  #header-bar .brand .live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); margin-right:6px; }
-  #header-bar .tagline { color: var(--gold); flex-shrink: 0; letter-spacing: 0.04em; }
-  #header-bar .subtitle { color: var(--text-secondary); flex-shrink: 0; letter-spacing: 0.03em; }
+  #header-bar .brand { font-weight: 700; letter-spacing: 0.04em; color: var(--text-primary); flex-shrink: 0; }
+  #header-bar .brand .live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); margin-right:7px; }
+  #header-bar .tagline { color: var(--gold); flex-shrink: 0; letter-spacing: 0.02em; }
   #header-bar .sep { color: var(--text-muted); flex-shrink: 0; }
   #header-bar b { color: var(--text-primary); }
-  #header-bar .hdr-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; flex-wrap: nowrap; margin-left: auto; }
+  #header-bar .ticker { display: flex; align-items: center; gap: 20px; flex: 1; overflow: hidden; white-space: nowrap; padding-left: 6px; }
+  #header-bar .ticker-item b { color: var(--text-primary); margin-right: 6px; }
+  #header-bar .hdr-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
   .status-run { color: var(--green); }
   .status-stop { color: var(--red); }
   .quant-mode-badge {
     display: inline-block; padding: 1px 7px;
     border: 1px solid var(--purple); border-radius: 3px;
-    color: var(--purple); font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em;
+    color: var(--purple); font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
     flex-shrink: 0;
   }
-
-  /* ---- 2. live ticker strip ---- */
-  #ticker-bar {
-    display: flex; align-items: center; height: 24px; padding: 0 12px;
-    background: #0a0c0d; border-bottom: 1px solid var(--border);
-    overflow: hidden;
-  }
-  #ticker-wrap { flex: 1; overflow: hidden; white-space: nowrap; height: 100%; display: flex; align-items: center; min-width: 40px; }
-  #ticker-track { display: inline-block; animation: tickerScroll 24s linear infinite; }
-  @keyframes tickerScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-  .ticker-item { font-size: 10.5px; margin: 0 18px; }
-  .ticker-item b { color: var(--text-primary); margin-right: 5px; }
-  .ticker-sep { color: var(--text-muted); margin: 0 8px; }
-  .live-pill { color: var(--green); font-weight: 800; letter-spacing: 0.05em; flex-shrink:0; margin-right: 14px; }
-  .live-pill .live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); margin-right:6px; }
-
-  .bias-tag {
-    display: inline-block; padding: 2px 9px; border-radius: 3px;
-    font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
-  }
+  .live-pill { color: var(--green); font-weight: 800; letter-spacing: 0.05em; flex-shrink:0; display:flex; align-items:center; gap:6px; }
+  .live-pill .live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); }
+  .bias-tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 800; }
   .bias-tag.bullish { color: #05070A; background: var(--green); }
   .bias-tag.bearish { color: #05070A; background: var(--red); }
   .bias-tag.neutral { color: var(--text-primary); background: var(--border-hi); }
 
-  /* ---- layout ---- */
-  .terminal { max-width: 1900px; margin: 0 auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-  .row1 { display: grid; grid-template-columns: 35fr 65fr; gap: 12px; align-items: stretch; }
-  .row1-right { display: grid; grid-template-columns: 40fr 60fr; gap: 12px; min-height: 0; }
-  .row4 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-  .row-extra-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .col-stack { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  /* ---- overall layout ---- */
+  .terminal { max-width: 1900px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
+  .main-row { display: grid; grid-template-columns: 35fr 65fr; gap: 24px; align-items: stretch; min-height: 540px; }
+  .main-row-right { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-height: 0; }
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
   @media (max-width: 1100px) {
-    .row1, .row1-right, .row4, .row-extra-2col { grid-template-columns: 1fr; }
+    .main-row, .main-row-right, .bottom-row { grid-template-columns: 1fr; }
   }
-
-  .section-label {
-    font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
-    padding: 2px 2px 0; display: flex; align-items: center; gap: 8px;
-  }
-  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--grid); }
 
   .panel {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
     display: flex; flex-direction: column;
     min-height: 0; overflow: hidden;
   }
   .panel-head {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 7px 11px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    padding: 14px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0;
   }
   .panel-title {
-    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;
     color: var(--text-secondary); font-weight: 700;
   }
-  .panel-title .glyph { color: var(--gold); margin-right: 5px; }
-  .panel-body { padding: 9px 11px; flex: 1; min-height: 0; overflow: auto; }
-  .panel-body.nopad { padding: 0; }
+  .panel-title .glyph { color: var(--gold); margin-right: 6px; }
+  .panel-body { padding: 20px; flex: 1; min-height: 0; overflow: auto; }
 
-  /* ---- portfolio (warm cream card) ---- */
+  /* ---- portfolio (cream card) ---- */
   #portfolio-panel.panel-cream { background: var(--cream-bg); border-color: var(--cream-border); }
   #portfolio-panel.panel-cream .panel-head { border-bottom-color: var(--cream-border); }
   #portfolio-panel.panel-cream .panel-title { color: var(--cream-muted); }
@@ -165,216 +138,156 @@
   #portfolio-panel.panel-cream .up   { color: var(--cream-green); }
   #portfolio-panel.panel-cream .down { color: var(--cream-red); }
   #portfolio-panel.panel-cream .no-data { color: var(--cream-muted); border-color: rgba(26,26,22,0.25); }
-  #portfolio-panel.panel-cream .real-tag { color: var(--cream-green); border-color: rgba(31,122,61,0.4); }
+  #portfolio-panel.panel-cream .real-tag { color: var(--cream-green); border-color: rgba(31,122,61,0.35); }
   #portfolio-panel.panel-cream .reset-session-btn { color: var(--cream-muted); border-color: rgba(26,26,22,0.3); }
   #portfolio-panel.panel-cream .reset-session-btn:hover { color: var(--cream-text); border-color: var(--cream-green); }
 
-  .wallet-line { font-size: 10px; color: var(--cream-muted); letter-spacing: 0.02em; display:flex; align-items:center; justify-content:space-between; }
-  .wallet-tag { font-size: 8.5px; color: var(--cream-green); border: 1px solid rgba(31,122,61,0.35); border-radius: 3px; padding: 1px 5px; letter-spacing: 0.05em; }
-  .hero { font-size: 32px; font-weight: 800; margin-top: 4px; }
-  .hero-sub { font-size: 10.5px; color: var(--cream-muted); letter-spacing: 0.02em; margin-top: 2px; margin-bottom: 10px; }
-  .triple-stat { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0 10px; padding: 8px 0; border-top: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
+  .wallet-line { font-size: 12px; color: var(--cream-muted); letter-spacing: 0.02em; display:flex; align-items:center; justify-content:space-between; margin-bottom: 18px; }
+  .hero { font-size: 48px; font-weight: 800; line-height: 1; }
+  .hero-sub { font-size: 13px; color: var(--cream-muted); letter-spacing: 0.02em; margin-top: 8px; margin-bottom: 22px; }
+
+  .triple-stat { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 22px; padding: 18px 0; border-top: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
   .triple-stat .ts-cell { text-align: center; }
-  .triple-stat .ts-label { font-size: 8.5px; color: var(--cream-muted); letter-spacing: 0.06em; text-transform: uppercase; }
-  .triple-stat .ts-value { font-size: 15px; font-weight: 800; color: var(--cream-text); margin-top: 2px; }
+  .triple-stat .ts-label { font-size: 11px; color: var(--cream-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .triple-stat .ts-value { font-size: 24px; font-weight: 800; color: var(--cream-text); margin-top: 6px; }
 
-  .liq-risk-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-  .liq-risk-label { font-size: 9.5px; color: var(--cream-muted); letter-spacing: 0.05em; flex-shrink: 0; }
-  .liq-risk-segs { display: flex; gap: 2px; flex: 1; }
-  .liq-risk-segs .seg { flex: 1; height: 7px; border-radius: 1px; background: rgba(26,26,22,0.10); }
+  .liq-risk-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .liq-risk-label { font-size: 12px; color: var(--cream-muted); letter-spacing: 0.04em; flex-shrink: 0; }
+  .liq-risk-segs { display: flex; gap: 3px; flex: 1; }
+  .liq-risk-segs .seg { flex: 1; height: 10px; border-radius: 1px; background: rgba(26,26,22,0.08); }
   .liq-risk-segs .seg.filled { background: var(--seg-color, var(--cream-green)); }
-  .liq-risk-tag { font-size: 8.5px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 3px; flex-shrink: 0; }
+  .liq-risk-tag { font-size: 11px; font-weight: 800; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 3px; flex-shrink: 0; }
+  .liq-risk-note { font-size: 12px; color: var(--cream-muted); margin-bottom: 22px; }
 
-  .stat-grid2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-top: 10px; border-top: 1px solid var(--cream-grid); }
-  .stat-grid2 .sg-cell { padding: 7px 4px; border-right: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
+  .stat-grid2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-top: 1px solid var(--cream-grid); }
+  .stat-grid2 .sg-cell { padding: 14px 8px; border-right: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
   .stat-grid2 .sg-cell:nth-child(3n) { border-right: none; }
-  .stat-grid2 .sg-label { font-size: 8px; color: var(--cream-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .stat-grid2 .sg-value { font-size: 12.5px; font-weight: 800; color: var(--cream-text); margin-top: 2px; }
+  .stat-grid2 .sg-label { font-size: 11px; color: var(--cream-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .stat-grid2 .sg-value { font-size: 15px; font-weight: 800; color: var(--cream-text); margin-top: 5px; }
+  .stat-grid2-note { font-size: 11px; color: var(--cream-muted); margin-top: 14px; }
 
   .reset-session-btn {
-    font-family: inherit; font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase;
+    font-family: inherit; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
     color: var(--text-secondary); background: transparent; border: 1px solid var(--border-hi);
-    border-radius: 3px; padding: 3px 7px; cursor: pointer;
+    border-radius: 3px; padding: 4px 10px; cursor: pointer;
   }
   .reset-session-btn:disabled { opacity: 0.5; cursor: default; }
 
-  /* ---- biggest win callout ---- */
-  .bw-star { color: var(--gold); }
-  .bw-mult { font-size: 34px; font-weight: 800; color: var(--green); line-height: 1; margin: 10px 0 6px; }
+  /* ---- biggest win ---- */
+  .bw-mult { font-size: 64px; font-weight: 800; color: var(--green); line-height: 1; margin-bottom: 16px; }
   .bw-mult.down { color: var(--red); }
-  .bw-row { display: flex; justify-content: space-between; padding: 3px 0; border-top: 1px solid var(--grid); font-size: 10.5px; }
+  .bw-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
+  .bw-row { display: flex; justify-content: space-between; padding: 9px 0; border-top: 1px solid var(--grid); font-size: 13px; }
   .bw-row .label { color: var(--text-muted); }
   .bw-row .value { font-weight: 700; }
 
-  /* ---- BTC chart header price ---- */
-  .chart-hdr-price { font-size: 13px; font-weight: 800; }
+  /* ---- BTC chart ---- */
+  .chart-hdr-price { font-size: 16px; font-weight: 800; }
+  .chart-wrap { position: relative; flex: 1; min-height: 220px; }
+  .chart-wrap canvas { display: block; width: 100%; height: 100%; }
 
-  /* ---- execution cycle ---- */
-  .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 14px; }
-  .exec-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative; z-index: 1; }
+  /* ---- SECTION 3: execution cycle ---- */
+  .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 24px; }
+  .exec-step { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; position: relative; z-index: 1; }
   .exec-step .dot {
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
     border: 2px solid var(--border-hi); background: var(--panel);
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px; color: var(--text-muted); font-weight: 800;
+    font-size: 13px; color: var(--text-muted); font-weight: 800;
     transition: all 0.3s ease;
   }
-  .exec-step .label { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
-  .exec-step .detail { font-size: 9px; color: var(--text-muted); max-width: 130px; text-align: center; min-height: 12px; }
+  .exec-step .label { font-size: 12px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-muted); }
   .exec-step.done .dot { border-color: rgba(57,211,83,0.4); color: var(--green); background: rgba(57,211,83,0.06); }
   .exec-step.done .label { color: var(--text-secondary); }
   .exec-step.current .dot {
     border-color: var(--purple); color: #fff; background: var(--purple);
     box-shadow: 0 0 12px rgba(110,64,201,0.6);
-    animation: execPulse 1.3s ease-in-out infinite;
   }
   .exec-step.current .label { color: var(--purple); }
-  .exec-step.current .detail { color: var(--text-primary); }
-  @keyframes execPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
-  .exec-connector { flex: 0 0 auto; width: 28px; height: 2px; background: var(--border); margin: 0 -4px 18px; }
+  .exec-connector { flex: 0 0 auto; width: 32px; height: 2px; background: var(--border); }
   .exec-connector.done { background: rgba(57,211,83,0.4); }
-  #next-tick-countdown, #exec-fill-price { font-size: 9.5px; color: var(--text-muted); }
 
-  /* ---- strategy decision tree ---- */
-  .tree-top-strip { display: flex; align-items: stretch; border-bottom: 1px solid var(--grid); }
-  .tree-mini-chart { width: 160px; flex-shrink: 0; padding: 6px 10px; border-right: 1px solid var(--grid); }
-  .tree-mini-chart canvas { display: block; width: 100%; height: 40px; }
-  .tree-mini-chart .mini-label { font-size: 8px; color: var(--text-muted); letter-spacing: 0.06em; }
-  .tree-edge-conf { flex: 1; text-align: center; padding: 8px 0; }
-  .tree-edge-conf .ec-label { font-size: 9px; color: var(--text-muted); letter-spacing: 0.1em; }
-  .tree-edge-conf .ec-value { font-size: 26px; font-weight: 800; line-height: 1.1; }
-  .tree-edge-conf .ec-detail { font-size: 9.5px; color: var(--text-secondary); margin-top: 2px; }
-  .tree-pace-box { width: 170px; flex-shrink: 0; padding: 6px 10px; border-left: 1px solid var(--grid); text-align: right; }
-  .tree-pace-box .pace-label { font-size: 8px; color: var(--text-muted); letter-spacing: 0.06em; }
-  .tree-pace-box .pace-value { font-size: 15px; font-weight: 800; }
-  .tree-pace-box .next-value { font-size: 9.5px; color: var(--text-muted); margin-top: 4px; }
+  /* ---- SECTION 4: strategy decision tree ---- */
+  .tree-top-strip { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--grid); }
+  .tree-edge-conf { text-align: center; flex: 1; }
+  .tree-edge-conf .ec-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; }
+  .tree-edge-conf .ec-value { font-size: 26px; font-weight: 800; line-height: 1.2; margin-top: 4px; }
+  .tree-edge-conf .ec-detail { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+  .tree-pace-box { text-align: right; flex-shrink: 0; }
+  .tree-pace-box .pace-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.06em; }
+  .tree-pace-box .pace-value { font-size: 17px; font-weight: 800; margin-top: 4px; }
+  .tree-pace-box .next-value { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
   .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
   .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
-  .tree-node-label { font-size: 11.5px; font-weight: 700; fill: var(--text-secondary); font-family: 'Courier New', monospace; text-anchor: middle; }
-  .tree-node-sub { font-size: 9px; fill: var(--text-muted); font-family: 'Courier New', monospace; text-anchor: middle; }
+  .tree-node-label { font-size: 12px; font-weight: 700; fill: var(--text-secondary); font-family: 'Courier New', monospace; text-anchor: middle; }
+  .tree-node-sub { font-size: 11px; fill: var(--text-muted); font-family: 'Courier New', monospace; text-anchor: middle; }
   .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
   .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
   .tree-fill-box {
-    position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
-    background: var(--panel); border: 1.5px solid var(--gold); border-radius: 5px;
-    padding: 6px 16px; text-align: center; white-space: nowrap;
-    box-shadow: 0 0 14px rgba(227,179,65,0.18);
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+    background: var(--panel); border: 1.5px solid var(--gold); border-radius: 6px;
+    padding: 10px 24px; text-align: center; white-space: nowrap;
+    box-shadow: 0 0 14px rgba(227,179,65,0.16);
   }
-  .tree-fill-box .ff-main { font-size: 13px; font-weight: 800; }
-  .tree-fill-box .ff-sub { font-size: 9px; color: var(--text-secondary); letter-spacing: 0.03em; margin-top: 2px; }
+  .tree-fill-box .ff-main { font-size: 17px; font-weight: 800; }
+  .tree-fill-box .ff-sub { font-size: 11px; color: var(--text-secondary); letter-spacing: 0.02em; margin-top: 5px; }
 
-  /* ---- robustness grid ---- */
-  .rb-row { display: grid; grid-template-columns: 76px repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
-  .rb-cell { text-align: center; padding: 8px 4px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-  .rb-label { color: var(--text-secondary); font-weight: 400; font-size: 9.5px; text-align: left; background: none !important; padding-left: 2px; display:flex; align-items:center; }
-  .rb-head .rb-cell { font-size: 8.5px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+  /* ---- SECTION 5: robustness / monte carlo / pnl growth ---- */
+  .rb-row { display: grid; grid-template-columns: 88px repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+  .rb-cell { text-align: center; padding: 12px 6px; border-radius: 5px; font-size: 13px; font-weight: 700; }
+  .rb-label { color: var(--text-secondary); font-weight: 400; font-size: 12px; text-align: left; background: none !important; padding-left: 2px; display:flex; align-items:center; }
+  .rb-head .rb-cell { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+  .rb-caption { font-size: 11px; color: var(--text-muted); margin-top: 14px; }
 
-  /* ---- monte carlo ---- */
-  .mc-stats { display: flex; gap: 14px; padding: 7px 11px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); }
-  .mc-stat .mc-label { font-size: 8px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .mc-stat .mc-value { font-size: 13px; font-weight: 800; }
+  .mc-stats { display: flex; gap: 22px; padding-bottom: 18px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); margin-bottom: 16px; }
+  .mc-stat .mc-label { font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .mc-stat .mc-value { font-size: 15px; font-weight: 800; margin-top: 4px; }
   .mc-stat.hi .mc-value { color: var(--red); }
+  .mc-chart-wrap { position: relative; flex: 1; min-height: 130px; }
+  .mc-chart-wrap canvas { display: block; width: 100%; height: 100%; }
 
-  /* ---- live feed ---- */
+  .pnl-hdr-pct { font-size: 13px; font-weight: 800; }
+
+  /* ---- SECTION 6: live feed ---- */
   .feed-wrap { flex: 1; overflow: hidden; position: relative; min-height: 0; }
   .feed-track { animation: feedScroll 34s linear infinite; }
   .feed-wrap:hover .feed-track { animation-play-state: paused; }
   @keyframes feedScroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
-  .feed-row { display: flex; gap: 10px; align-items: center; padding: 5px 14px; font-size: 10.5px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  .feed-row { display: flex; gap: 14px; align-items: center; padding: 8px 20px; font-size: 13px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   .feed-time { color: var(--text-muted); flex-shrink: 0; }
   .feed-badge {
-    flex-shrink: 0; display: inline-block; min-width: 40px; text-align: center;
-    font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
-    padding: 2px 7px; border-radius: 3px;
+    flex-shrink: 0; display: inline-block; min-width: 46px; text-align: center;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.03em;
+    padding: 3px 9px; border-radius: 3px;
   }
   .feed-badge.badge-buy  { color: #05070A; background: var(--green); }
   .feed-badge.badge-sell { color: #05070A; background: var(--red); }
-
-  /* ---- decision timeline / AI reasoning (additional detail) ---- */
-  .timeline { display: flex; flex-direction: column; gap: 2px; }
-  .tl-node { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px; border: 1px solid var(--border); font-size: 10px; position: relative; }
-  .tl-node .name { flex: 1; letter-spacing: 0.03em; color: var(--text-secondary); }
-  .tl-node .state { font-weight: 700; font-size: 9.5px; letter-spacing: 0.04em; }
-  .tl-node.active { border-color: rgba(57,211,83,0.4); box-shadow: 0 0 10px rgba(57,211,83,0.12) inset; }
-  .tl-node.active .state { color: var(--green); }
-  .tl-node.waiting .state { color: var(--gold); }
-  .tl-node.blocked { border-color: rgba(248,81,73,0.4); }
-  .tl-node.blocked .state { color: var(--red); }
-  .tl-node.nodata .state { color: var(--text-muted); }
-  .tl-arrow { text-align: center; color: var(--text-muted); font-size: 9px; line-height: 1; }
-  .tl-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  #timeline-body { position: relative; }
-  .tl-flow-dot { position: absolute; left: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px var(--cyan), 0 0 3px #fff; opacity: 0; pointer-events: none; z-index: 5; }
-  .tl-flow-dot.run { animation: tl-flow 1.6s ease-in-out 1; }
-  @keyframes tl-flow { 0% { top: 0%; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { top: 96%; opacity: 0; } }
-  .reason-line { margin-bottom: 8px; }
-  .reason-label { font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .reason-value { font-size: 12px; font-weight: 700; margin-top: 2px; }
-  .reason-quote { font-size: 11px; color: var(--cyan); margin-top: 2px; border-left: 2px solid var(--cyan); padding-left: 8px; }
-
-  .metric-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--grid); }
-  .metric-row .label { color: var(--text-secondary); font-size: 10px; }
-  .metric-row .value { font-weight: 700; }
-  .sig-asset-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-top: 1px solid var(--grid); font-size: 10.5px; }
-  .pill { font-size: 9px; padding: 2px 8px; border-radius: 20px; border: 1px solid currentColor; letter-spacing: 0.03em; }
-  .pill.ready { color: var(--green); }
-  .pill.cooldown { color: var(--gold); }
-  .warmup-track { position: relative; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 10px; overflow: hidden; }
-  .warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); transition: width 0.6s ease; }
-  .corr-grid { display: grid; grid-template-columns: 40px repeat(2, 1fr); gap: 4px; margin-top: 6px; }
-  .corr-cell { padding: 7px 6px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 11px; }
-  .corr-head { font-size: 9px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
-  .corr-row-label { font-size: 9px; color: var(--text-secondary); display: flex; align-items: center; }
-
-  table.dense { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-  table.dense thead th { position: sticky; top: 0; background: var(--panel); text-align: left; font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  table.dense tbody td { padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-  table.dense tbody tr.win td.pnl { color: var(--green); }
-  table.dense tbody tr.loss td.pnl { color: var(--red); }
-  table.dense tbody tr.open td.pnl { color: var(--gold); }
-  .empty-row { color: var(--text-muted); text-align: center; padding: 14px 0; }
-  .sub-panel-title { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 8px 12px 2px; }
-  #signal-combiner-table tbody td.plain { color: var(--text-primary); }
-  #signal-combiner-table tbody tr.win { background: rgba(57,211,83,0.06); }
-
-  .chart-wrap { position: relative; flex: 1; min-height: 0; }
-  .chart-wrap canvas { display: block; width: 100%; height: 100%; }
-  .chart-caption { font-size: 8.5px; color: var(--text-muted); padding: 4px 11px 7px; border-top: 1px solid var(--grid); }
 </style>
 </head>
 <body>
 
+<!-- ================= SECTION 1: TOP BAR ================= -->
 <div id="header-bar">
   <span class="brand"><span class="live-dot"></span>FORGEVIEWAI // QUANT</span>
   <span class="sep">·</span>
   <span class="tagline">MARKOV &middot; KELLY &middot; SELF-LEARN</span>
-  <span class="sep">·</span>
-  <span class="subtitle">BTC/ETH/SOL 5M POLYMARKET DASHBOARD</span>
   <span id="hdr-quant-mode-wrap"></span>
+  <div class="ticker" id="ticker-track"></div>
   <div class="hdr-right">
+    <span class="live-pill"><span class="live-dot"></span>LIVE</span>
     <span>UTC <b id="hdr-time" class="num">--:--:--</b></span>
-    <span class="sep">|</span>
     <span>STATUS <b id="hdr-status">--</b></span>
-    <span class="sep">|</span>
-    <span>LATENCY <b id="hdr-latency" class="num">--</b></span>
-    <span class="sep">|</span>
-    <span>API <b id="hdr-api-calls" class="num">--</b></span>
   </div>
-</div>
-
-<div id="ticker-bar">
-  <span class="live-pill"><span class="live-dot"></span>LIVE</span>
-  <div id="ticker-wrap"><div id="ticker-track"></div></div>
 </div>
 
 <div class="terminal">
 
-  <!-- ================= ROW 1: PORTFOLIO (35%, cream) | BIGGEST WIN (40%) + BTC CHART (60%) (65%) ================= -->
-  <div class="row1">
+  <!-- ================= SECTION 2: MAIN ROW ================= -->
+  <div class="main-row">
     <div class="panel panel-cream" id="portfolio-panel">
       <div class="panel-head">
-        <div class="panel-title" id="pf-panel-title">Portfolio</div>
-        <span style="display:flex; align-items:center; gap:8px;">
+        <div class="panel-title">Portfolio</div>
+        <span style="display:flex; align-items:center; gap:10px;">
           <button id="reset-session-btn" class="reset-session-btn" title="Zero out visible stats without touching paper_trades.jsonl">Reset Session</button>
           <span class="real-tag">REAL</span>
         </span>
@@ -382,18 +295,16 @@
       <div class="panel-body">
         <div class="wallet-line">
           <span>FORGEVIEWAI &middot; PAPER TRADING</span>
-          <span class="wallet-tag">REAL DATA</span>
         </div>
         <div class="hero num" id="pf-total-pnl">--</div>
         <div id="pf-hero-sub" class="hero-sub"></div>
         <div id="pf-triple-stat"></div>
         <div id="liq-risk-body"></div>
         <div id="stat-grid-body"></div>
-        <div id="pf-session-sub" class="hero-sub" style="margin-top:8px;"></div>
       </div>
     </div>
 
-    <div class="row1-right">
+    <div class="main-row-right">
       <div class="panel">
         <div class="panel-head">
           <div class="panel-title"><span class="glyph">&#9733;</span>Biggest Win</div>
@@ -405,42 +316,33 @@
       <div class="panel">
         <div class="panel-head">
           <div class="panel-title"><span class="glyph">&#9632;</span>BTC / USD &middot; 5-Min</div>
-          <span style="display:flex;align-items:center;gap:8px;">
+          <span style="display:flex;align-items:center;gap:10px;">
             <span id="chart-hdr-price" class="chart-hdr-price num"></span>
             <span class="real-tag">REAL</span>
           </span>
         </div>
         <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
-        <div class="chart-caption" id="candle-caption"></div>
       </div>
     </div>
   </div>
 
-  <!-- ================= ROW 2: EXECUTION CYCLE (full width) ================= -->
-  <div class="panel" style="height:110px;">
+  <!-- ================= SECTION 3: EXECUTION CYCLE ================= -->
+  <div class="panel" style="height:120px;">
     <div class="panel-head">
       <div class="panel-title">Execution Cycle</div>
-      <span style="display:flex;align-items:center;gap:10px;">
-        <span id="next-signal-countdown" style="font-size:9px;color:var(--text-muted);"></span>
-        <span id="next-tick-countdown"></span>
-        <span id="exec-fill-price"></span>
-        <span class="real-tag">REAL</span>
-      </span>
+      <span class="real-tag">REAL</span>
     </div>
-    <div class="panel-body" id="exec-cycle-body"></div>
+    <div class="panel-body" style="padding:0;" id="exec-cycle-body"></div>
   </div>
 
-  <!-- ================= ROW 3: STRATEGY DECISION TREE (full width, large) ================= -->
+  <!-- ================= SECTION 4: STRATEGY DECISION TREE ================= -->
   <div class="panel" style="height:400px;">
     <div class="panel-head">
       <div class="panel-title">Strategy Decision Tree</div>
       <span class="real-tag">REAL</span>
     </div>
     <div class="tree-top-strip">
-      <div class="tree-mini-chart">
-        <div class="mini-label">LIVE PNL (ALL-TIME CURVE)</div>
-        <canvas id="tree-mini-canvas"></canvas>
-      </div>
+      <div style="width:120px;flex-shrink:0;"></div>
       <div class="tree-edge-conf">
         <div class="ec-label">EDGE CONF (BTC)</div>
         <div class="ec-value" id="tree-edge-value">--</div>
@@ -455,116 +357,43 @@
     <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
   </div>
 
-  <!-- ================= ROW 4: ROBUSTNESS | MONTE CARLO | PNL GROWTH ================= -->
-  <div class="row4">
-    <div class="panel" style="height:270px;">
+  <!-- ================= SECTION 5: BOTTOM ROW ================= -->
+  <div class="bottom-row">
+    <div class="panel" style="height:360px;">
       <div class="panel-head">
-        <div class="panel-title"><span class="glyph">&#9632;</span>Robustness &middot; By Asset (1D / 3D / 7D)</div>
+        <div class="panel-title"><span class="glyph">&#9632;</span>Robustness &middot; By Asset</div>
         <span class="real-tag">REAL</span>
       </div>
       <div class="panel-body" id="robustness-body"></div>
     </div>
 
-    <div class="panel" style="height:270px;">
+    <div class="panel" style="height:360px;">
       <div class="panel-head">
-        <div class="panel-title"><span class="glyph">~</span>Monte Carlo &middot; 7,000 Simulated Paths</div>
+        <div class="panel-title"><span class="glyph">~</span>Monte Carlo &middot; 7,000 Paths</div>
         <span class="real-tag">REAL</span>
       </div>
-      <div class="mc-stats" id="mc-stats"></div>
-      <div class="chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;" id="mc-body">
+        <div class="mc-stats" id="mc-stats"></div>
+        <div class="mc-chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
+      </div>
     </div>
 
-    <div class="panel" style="height:270px;">
+    <div class="panel" style="height:360px;">
       <div class="panel-head">
         <div class="panel-title"><span class="glyph">&#9642;</span>PnL Growth &middot; All-Time</div>
-        <span id="pnl-growth-pct" class="num" style="font-size:11px;font-weight:800;"></span>
+        <span id="pnl-growth-pct" class="pnl-hdr-pct num"></span>
       </div>
       <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
     </div>
   </div>
 
-  <!-- ================= BOTTOM: POLYMARKET BOT LIVE FEED (full width) ================= -->
-  <div class="panel" style="height:180px;">
+  <!-- ================= SECTION 6: LIVE FEED ================= -->
+  <div class="panel" style="height:110px;">
     <div class="panel-head">
       <div class="panel-title"><span class="glyph">&#9642;</span>Polymarket Bot &middot; Live Feed</div>
       <span class="real-tag">REAL</span>
     </div>
     <div class="feed-wrap"><div class="feed-track" id="feed-track"></div></div>
-  </div>
-
-  <!-- ================= ADDITIONAL DETAIL (beyond the reference layout) -------
-       The seven sections above match the requested reference layout. The
-       panels below are extra real-data detail built up over the project's
-       life (AI signal reasoning, correlation, decision timeline, live trade
-       tables, per-signal breakdown) -- kept so no existing functionality is
-       lost, just placed after the primary reference rows. ================= -->
-  <div class="section-label">Additional Detail</div>
-
-  <div class="row-extra-2col">
-    <div class="col-stack">
-      <div class="panel" style="height:250px;">
-        <div class="panel-head">
-          <div class="panel-title">AI Signal Panel</div>
-          <span class="real-tag">REAL</span>
-        </div>
-        <div class="panel-body" id="ai-signal-body"></div>
-      </div>
-      <div class="panel" style="height:280px;">
-        <div class="panel-head">
-          <div class="panel-title">Correlation Map</div>
-          <span class="real-tag">REAL</span>
-        </div>
-        <div class="panel-body" id="corr-body"></div>
-      </div>
-    </div>
-    <div class="col-stack">
-      <div class="panel" style="height:260px;">
-        <div class="panel-head">
-          <div class="panel-title">Decision Timeline</div>
-          <span class="real-tag">REAL</span>
-        </div>
-        <div class="panel-body" id="timeline-body"></div>
-      </div>
-      <div class="panel" style="height:270px;">
-        <div class="panel-head">
-          <div class="panel-title">AI Reasoning</div>
-          <span class="real-tag">REAL</span>
-        </div>
-        <div class="panel-body" id="reasoning-body"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-head">
-      <div class="panel-title">Live Trades</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div class="sub-panel-title">Open Positions</div>
-    <div class="panel-body nopad" style="flex: 0 0 auto; max-height: 90px; overflow:auto;">
-      <table class="dense"><tbody id="positions-body"></tbody></table>
-    </div>
-    <div class="sub-panel-title">Last 20 Trades</div>
-    <div class="panel-body nopad" style="max-height:260px; overflow:auto;">
-      <table class="dense"><tbody id="trades-body"></tbody></table>
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-head">
-      <div class="panel-title">Signal Combiner &middot; Per-Signal Breakdown</div>
-      <span class="real-tag">REAL</span>
-    </div>
-    <div id="signal-stats-strip"></div>
-    <div class="panel-body nopad" style="max-height:260px; overflow:auto;">
-      <table class="dense" id="signal-combiner-table">
-        <thead><tr>
-          <th>Asset</th><th>Order Book (0.25)</th><th>Momentum (0.25)</th>
-          <th>Volume (0.15)</th><th>Correlation Filter</th><th>Combined</th>
-        </tr></thead>
-        <tbody id="signal-combiner-body"></tbody>
-      </table>
-    </div>
   </div>
 
 </div>
@@ -575,92 +404,67 @@
 /* =============================================================================
    DATA SOURCES -- what is real, and where it comes from
    -----------------------------------------------------------------------------
-   data/paper_trades.jsonl        real trades: asset, direction, entry, result,
-                                   PnL, open/close timestamps, signal_reason,
-                                   signal_confidence, size_usd (deduped by
-                                   trade_id). Backs Portfolio, Biggest Win,
-                                   Robustness, PnL Growth, Live Feed, Live
-                                   Trades table, Monte Carlo inputs, and the
-                                   client-computed all-time %-return and avg
-                                   hold-time figures (see computeAllTimeReturnPct
-                                   / computeAvgHoldMinutes below).
-   data/state.json                daily_loss_usd, loss_streak, system_stopped,
-                                   last_signal_ts per asset, session_start,
-                                   session_start_clean. Backs header STATUS,
-                                   LIQ RISK gauge, Decision Timeline. Pace uses
-                                   the earliest open_ts across paper_trades.jsonl
-                                   (or session_start_clean after a reset), never
-                                   session_start/hours_running -- that resets on
-                                   every bot restart and inflates pace.
-   session_start_clean            NOT written by the bot. Written by
-                                   scripts/dashboard_server.py's
-                                   POST /api/reset-session, called by the
-                                   "Reset Session" button. Purely a display
-                                   cutoff -- paper_trades.jsonl is never
-                                   modified. Requires the dashboard to be
-                                   served via scripts/dashboard_server.py.
-   data/online_model_status.json  n_updates / warmup_trades / fitted /
-                                   is_warmed_up, written by
-                                   core/online_model.py on every update/load.
-   data/stats.json                 sharpe_ratio, avg_rr, apy_pct, best_day_pnl,
-                                   max/current_win_streak -- written by
-                                   core/stats_calculator.py every 60s.
-                                   apy_pct/all-time %-return are relative to a
-                                   notional $100 capital base (same constant as
-                                   config.settings.STATS_APY_NOTIONAL_CAPITAL_USD),
-                                   NOT tied to any real tracked balance.
-   data/live_status.json          per-tick btc_eth_correlation + quant_only_mode,
-                                   written by run.py right after
-                                   LiveFeatureCollector.extract().
-   data/quant_features.jsonl      used only for "last signal confidence" (the
-                                   older shadow model's logged confidence).
-   data/price_history.jsonl       real per-tick yes_price samples for BTC/ETH/
-                                   SOL, ~5s cadence. Bucketed client-side into
-                                   real OHLC candles (open/high/low/close per
-                                   time bucket) for the BTC 5-Min Chart -- see
-                                   computeOhlcCandles.
-   data/market_bias.jsonl         written by run.py every 60s via
-                                   core/market_bias.py (CoinGecko spot prices +
-                                   24h change + a bearish/bullish/neutral bias
-                                   label). Feeds the ticker and AI Signal Panel.
+   data/paper_trades.jsonl   real trades (asset, direction, entry, result, PnL,
+                              open/close ts, size_usd), deduped by trade_id.
+                              Backs Portfolio, Biggest Win, Robustness, PnL
+                              Growth, Live Feed, Monte Carlo inputs, and the
+                              client-computed all-time %-return / avg hold time.
+   data/state.json           daily_loss_usd, system_stopped, session_start_clean.
+                              Backs header STATUS, LIQ RISK gauge. Pace uses the
+                              earliest open_ts across paper_trades.jsonl (or
+                              session_start_clean after a reset), never
+                              session_start/hours_running -- that resets on
+                              every bot restart and inflates pace.
+   session_start_clean       NOT written by the bot -- written by
+                              scripts/dashboard_server.py's POST
+                              /api/reset-session (the "Reset Session" button).
+                              Purely a display cutoff; paper_trades.jsonl is
+                              never modified.
+   data/stats.json           sharpe_ratio, avg_rr, apy_pct, best_day_pnl,
+                              max/current_win_streak -- written by
+                              core/stats_calculator.py every 60s. apy_pct /
+                              all-time %-return are relative to a notional
+                              $100 capital base (matches
+                              config.settings.STATS_APY_NOTIONAL_CAPITAL_USD),
+                              not tied to any real tracked balance.
+   data/live_status.json     quant_only_mode flag, written by run.py.
+   data/price_history.jsonl  real per-tick yes_price samples for BTC, ~5s
+                              cadence. Bucketed client-side into real OHLC
+                              candles for the BTC chart -- see computeOhlcCandles.
+   data/market_bias.jsonl    CoinGecko spot prices + 24h change + bias label,
+                              written by run.py every 60s. Feeds the ticker.
    data/exchange_status.json, data/latency.json, data/api_stats.json
-                                   written by core/market_fetcher.py from real
-                                   Polymarket HTTP calls -- feed the header
-                                   bar's STATUS/LATENCY/API fields.
-   data/fear_greed.json, data/macro_events.json
-                                   external real feeds (alternative.me,
-                                   ForexFactory) -- feed the AI Signal Panel.
-   data/execution_cycle.json      real stage of the scan->detect->validate->
-                                   size->fill pipeline, written by run.py at
-                                   each stage. Feeds Execution Cycle, the
-                                   Strategy Decision Tree's SIZE/FILL nodes and
-                                   fill box, and the NEXT tick countdown (a
-                                   real countdown against the documented
-                                   MARKET_POLL_INTERVAL_SEC, not fabricated).
+                              real Polymarket HTTP call telemetry from
+                              core/market_fetcher.py -- latency/API fields were
+                              part of the header in earlier iterations; this
+                              minimal layout keeps only STATUS from state.json
+                              in the top bar per the "few elements" request.
+   data/execution_cycle.json real stage of the scan->detect->validate->size->
+                              fill pipeline, written by run.py at each stage.
+                              Feeds Execution Cycle, the Decision Tree's
+                              SIZE/FILL nodes, fill box, and NEXT countdown.
    data/signal_combiner_status.json  Per-asset order_book/momentum/volume
-                                   signal state + combined confidence, written
-                                   every tick by core/signal_combiner.py. Feeds
-                                   the Signal Combiner table and the Decision
-                                   Tree's EDGE CONF readout / branch nodes.
+                              signal state + combined confidence, written every
+                              tick by core/signal_combiner.py. Feeds the
+                              Decision Tree's EDGE CONF readout and branch nodes.
    -----------------------------------------------------------------------------
-   Things the reference layout showed with no real backing metric in this
-   codebase -- a synthetic "HORIZON 79/100" score, undefined PUBT/RISK/STAT
-   columns, "CHEAP TAIL"/"TAIL TRADE" markers for the extreme-price NO-direction
-   strategy retired in docs/polymarket/DECISIONS.md D-003, and a real on-chain
-   wallet address (this is a paper-trading bot with no wallet) -- are
-   deliberately omitted or relabeled honestly rather than invented.
+   Panels removed in this pass (AI Signal Panel, Correlation Map, Decision
+   Timeline, AI Reasoning, Live Trades table, Signal Combiner breakdown table)
+   per an explicit "NO other panels, ONLY these sections" request -- their
+   real-data logic still exists in core/*.py, it's just not surfaced here.
+   Things with no real backing metric in this codebase (a synthetic "horizon
+   score", undefined PUBT/RISK/STAT columns, "cheap tail" markers for the
+   NO-direction strategy retired in DECISIONS.md D-003, a literal on-chain
+   wallet address) are omitted rather than invented.
    ============================================================================= */
 
 const REFRESH_MS = 5000;
-const TRACKED_ASSETS = ['BTC', 'ETH'];
-const SIGNAL_COOLDOWN_SEC = 120;
 const MAX_DAILY_LOSS_USD = 1000.0;
-const MAX_LOSS_STREAK = 50;
-const MARKET_POLL_INTERVAL_SEC = 3;
 const STALE_AFTER_MS = 15000;
 const CANDLE_BUCKET_SEC = 60;
 const CANDLE_COUNT = 60;
 const NOTIONAL_CAPITAL_USD = 100.0; // mirrors config.settings.STATS_APY_NOTIONAL_CAPITAL_USD
+const MARKET_POLL_INTERVAL_SEC = 3;
 
 async function fetchNoCache(path) {
   const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
@@ -747,16 +551,7 @@ async function loadTrades() {
 }
 async function loadState() { return await fetchJson('data/state.json'); }
 async function loadStats() { return await fetchJson('data/stats.json'); }
-async function loadOnlineModelStatus() { return await fetchJson('data/online_model_status.json'); }
 async function loadLiveStatus() { return await fetchJson('data/live_status.json'); }
-async function loadLastQuantFeature() {
-  const rows = await fetchJsonl('data/quant_features.jsonl');
-  if (!rows || !rows.length) return null;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i].model_probability != null) return rows[i];
-  }
-  return null;
-}
 async function loadPriceHistoryTicks(asset) {
   const rows = await fetchJsonlTail('data/price_history.jsonl', 6000);
   if (!rows) return null;
@@ -781,43 +576,20 @@ async function loadLastMarketBias() {
   if (!rows || !rows.length) return null;
   return rows[rows.length - 1];
 }
-async function loadExchangeStatus() { return await fetchJson('data/exchange_status.json'); }
-async function loadLatency() { return await fetchJson('data/latency.json'); }
-async function loadApiStats() { return await fetchJson('data/api_stats.json'); }
 async function loadExecutionCycle() { return await fetchJson('data/execution_cycle.json'); }
-async function loadFearGreed() { return await fetchJson('data/fear_greed.json'); }
-async function loadMacroEvents() { return await fetchJson('data/macro_events.json'); }
-async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bias.jsonl'); }
 async function loadSignalCombinerStatus() { return await fetchJson('data/signal_combiner_status.json'); }
 
-/* ---------------- 1. HEADER + TICKER ---------------- */
-function renderHeader(state, exchangeStatus, latency, liveStatus, apiStats) {
+/* ---------------- SECTION 1: HEADER + TICKER ---------------- */
+function renderHeader(state, liveStatus) {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
   const statusEl = document.getElementById('hdr-status');
-  const latEl = document.getElementById('hdr-latency');
-  const apiEl = document.getElementById('hdr-api-calls');
   const quantModeWrap = document.getElementById('hdr-quant-mode-wrap');
   quantModeWrap.innerHTML = (liveStatus && liveStatus.quant_only_mode === true)
     ? `<span class="quant-mode-badge">QUANT MODE</span>` : '';
-  if (latency && has(latency.last_ms)) {
-    latEl.textContent = Math.round(latency.last_ms) + 'ms';
-    latEl.title = `avg ${latency.avg_ms}ms / p99 ${latency.p99_ms}ms over ${latency.sample_count} real Polymarket calls`;
-  } else {
-    latEl.innerHTML = noData();
-  }
-  if (apiStats && has(apiStats.calls_last_minute)) {
-    apiEl.textContent = apiStats.calls_last_minute + '/min';
-    apiEl.title = `${apiStats.calls_total} real Polymarket API calls total this session, last updated ${fmtClock(apiStats.last_updated)}`;
-  } else {
-    apiEl.innerHTML = noData();
-  }
   if (!state) { statusEl.innerHTML = noData(); return; }
   const stopped = !!state.system_stopped;
   statusEl.textContent = stopped ? 'STOPPED' : 'RUNNING';
   statusEl.className = stopped ? 'status-stop' : 'status-run';
-  if (exchangeStatus && has(exchangeStatus.status)) {
-    statusEl.title = `Exchange: ${exchangeStatus.status} (checked ${fmtClock(exchangeStatus.checked_at)})`;
-  }
 }
 function tickerItem(label, price, chg, decimals) {
   if (!has(price)) return `<span class="ticker-item"><b>${label}</b>${noData()}</span>`;
@@ -827,17 +599,14 @@ function tickerItem(label, price, chg, decimals) {
 function renderTicker(marketBias) {
   const track = document.getElementById('ticker-track');
   if (!marketBias) { track.innerHTML = noData('NO MARKET DATA'); return; }
-  const items = [
+  track.innerHTML = [
     tickerItem('BTC ', marketBias.btc_price, marketBias.btc_24h_change, 0),
     tickerItem('ETH ', marketBias.eth_price, marketBias.eth_24h_change, 2),
     tickerItem('SOL ', marketBias.sol_price, marketBias.sol_24h_change, 2),
-  ].join('<span class="ticker-sep">&bull;</span>');
-  const bias = has(marketBias.market_bias) ? `<span class="ticker-item">BIAS <b style="color:${marketBias.market_bias === 'BULLISH' ? 'var(--green)' : marketBias.market_bias === 'BEARISH' ? 'var(--red)' : 'var(--text-secondary)'};">${marketBias.market_bias}</b></span><span class="ticker-sep">&bull;</span>` : '';
-  const block = bias + items + '<span class="ticker-sep">&bull;</span>';
-  track.innerHTML = block + block;
+  ].join('');
 }
 
-/* ---------------- 2. PORTFOLIO ---------------- */
+/* ---------------- SECTION 2: PORTFOLIO ---------------- */
 function computePortfolio(trades) {
   const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
   const wins = closed.filter(t => t.pnl_usd > 0);
@@ -849,65 +618,46 @@ function computePortfolio(trades) {
   const avgWin = wins.length ? grossWin / wins.length : 0;
   const avgLoss = losses.length ? grossLoss / losses.length : 0;
   const avgRR = (wins.length && losses.length && avgLoss > 0) ? avgWin / avgLoss : null;
-  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : null);
-  const expectancy = closed.length ? totalPnl / closed.length : null;
   const sortedClosed = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
   let running = 0, peak = 0, maxDD = 0;
   const curve = sortedClosed.map(t => {
     running += t.pnl_usd; peak = Math.max(peak, running); maxDD = Math.max(maxDD, peak - running);
     return running;
   });
-
   const now = Date.now();
-  const weekAgo = now - 7 * 24 * 3600 * 1000;
-  const monthAgo = now - 30 * 24 * 3600 * 1000;
-  const weeklyClosed = closed.filter(t => t.close_ts && new Date(t.close_ts).getTime() > weekAgo);
-  const monthlyClosed = closed.filter(t => t.close_ts && new Date(t.close_ts).getTime() > monthAgo);
-  const weeklyPnl = closed.length ? weeklyClosed.reduce((s, t) => s + t.pnl_usd, 0) : null;
-  const monthlyPnl = closed.length ? monthlyClosed.reduce((s, t) => s + t.pnl_usd, 0) : null;
   const earliestTradeMs = sortedClosed.length ? new Date(sortedClosed[0].close_ts).getTime() : null;
   const historyDays = earliestTradeMs != null ? (now - earliestTradeMs) / (24 * 3600 * 1000) : null;
-
   const holdMinutes = closed.filter(t => t.open_ts && t.close_ts).map(t => (new Date(t.close_ts) - new Date(t.open_ts)) / 60000);
   const avgHoldMinutes = holdMinutes.length ? holdMinutes.reduce((s, v) => s + v, 0) / holdMinutes.length : null;
 
-  return {
-    closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, avgRR, profitFactor, expectancy, maxDD,
-    weeklyPnl, monthlyPnl, historyDays, avgHoldMinutes,
-  };
+  return { closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, avgRR, maxDD, historyDays, avgHoldMinutes };
 }
-// All-time %-return relative to the same $100 notional base
-// core/stats_calculator.py uses for APY -- non-annualized, so it is directly
-// comparable to totalPnl in dollars (a $30 all-time PnL == +30%).
 function computeAllTimeReturnPct(totalPnl) { return (totalPnl / NOTIONAL_CAPITAL_USD) * 100; }
 function computePace(portfolio, state, trades) {
   if (!portfolio || !trades || !trades.length) return null;
   const sessionStartClean = state && state.session_start_clean;
   const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
-  let startMs, basisLabel;
+  let startMs;
   if (cutMs && !isNaN(cutMs)) {
-    startMs = cutMs; basisLabel = 'since reset';
+    startMs = cutMs;
   } else {
     const openTimes = trades.map(t => new Date(t.open_ts).getTime()).filter(ms => !isNaN(ms));
     if (!openTimes.length) return null;
-    startMs = Math.min(...openTimes); basisLabel = 'since first trade ever';
+    startMs = Math.min(...openTimes);
   }
   const hoursRunning = (Date.now() - startMs) / 3600000;
-  if (!(hoursRunning > 0)) return { pace: null, hoursRunning: 0, basisLabel, startMs };
-  return { pace: portfolio.totalPnl / hoursRunning, hoursRunning, basisLabel, startMs };
+  if (!(hoursRunning > 0)) return { pace: null };
+  return { pace: portfolio.totalPnl / hoursRunning };
 }
 function renderPortfolio(trades, state) {
   const heroEl = document.getElementById('pf-total-pnl');
-  const titleEl = document.getElementById('pf-panel-title');
   const heroSubEl = document.getElementById('pf-hero-sub');
-  const sessionSubEl = document.getElementById('pf-session-sub');
   if (!trades) {
     heroEl.innerHTML = noData();
     document.getElementById('pf-triple-stat').innerHTML = '';
     return null;
   }
-  const { scoped, cutMs } = scopeTradesToSession(trades, state);
-  if (titleEl) titleEl.textContent = cutMs ? 'SESSION STATS (since reset)' : 'Portfolio';
+  const { scoped } = scopeTradesToSession(trades, state);
   const m = computePortfolio(scoped);
   animateNumber(heroEl, m.totalPnl, v => fmtUsd(v));
   heroEl.classList.toggle('up', m.totalPnl >= 0);
@@ -916,7 +666,7 @@ function renderPortfolio(trades, state) {
   const allTimePct = computeAllTimeReturnPct(m.totalPnl);
   const daysTxt = m.historyDays != null ? m.historyDays.toFixed(1) : '?';
   heroSubEl.innerHTML = m.closed.length
-    ? `ALL-TIME PNL &middot; ${daysTxt} DAYS &middot; <span class="${allTimePct >= 0 ? 'up' : 'down'}">${allTimePct >= 0 ? '+' : ''}${allTimePct.toFixed(1)}%</span>`
+    ? `ALL-TIME &middot; ${daysTxt} DAYS &middot; <span class="${allTimePct >= 0 ? 'up' : 'down'}">${allTimePct >= 0 ? '+' : ''}${allTimePct.toFixed(0)}%</span>`
     : noData('NO CLOSED TRADES YET');
 
   document.getElementById('pf-triple-stat').innerHTML = `
@@ -925,12 +675,6 @@ function renderPortfolio(trades, state) {
       <div class="ts-cell"><div class="ts-label">Win Rate</div><div class="ts-value">${m.closed.length ? (m.winRate * 100).toFixed(0) + '%' : '--'}</div></div>
       <div class="ts-cell"><div class="ts-label">Avg R/R</div><div class="ts-value">${m.avgRR == null ? '--' : m.avgRR.toFixed(2)}</div></div>
     </div>`;
-
-  sessionSubEl.innerHTML = cutMs
-    ? `reset at ${fmtClock(state.session_start_clean)} &middot; ${trades.length - scoped.length} earlier trade(s) hidden, still in paper_trades.jsonl`
-    : (m.historyDays != null && m.historyDays < 30
-      ? `trade history spans only ${m.historyDays.toFixed(1)} days, so recent-period figures may closely track the all-time total`
-      : '');
   return m;
 }
 function renderLiqRisk(state) {
@@ -949,12 +693,12 @@ function renderLiqRisk(state) {
       <span class="liq-risk-label num">${filledSegs}/10</span>
       <span class="liq-risk-tag" style="color:${color};border:1px solid ${color};">${tag}</span>
     </div>
-    <div style="font-size:8.5px;color:var(--cream-muted);">No leverage/margin in this project (simple Polymarket binary contracts) -- this tracks the real daily-loss cap instead: ${fmtUsd(-used)} used of ${fmtUsd(-MAX_DAILY_LOSS_USD)} hard stop.</div>
+    <div class="liq-risk-note">No leverage/margin in this project -- this tracks the real daily-loss cap: ${fmtUsd(-used)} used of ${fmtUsd(-MAX_DAILY_LOSS_USD)} hard stop.</div>
   `;
 }
 function renderStatGrid(stats, portfolio) {
   const wrap = document.getElementById('stat-grid-body');
-  if (!stats || !stats.n_trades) { wrap.innerHTML = `<div style="margin-top:8px;">${noData()}</div>`; return; }
+  if (!stats || !stats.n_trades) { wrap.innerHTML = noData(); return; }
   const holdTxt = portfolio && has(portfolio.avgHoldMinutes) ? portfolio.avgHoldMinutes.toFixed(1) + 'm' : '--';
   const cells = [
     ['Sharpe', stats.sharpe_ratio == null ? '--' : stats.sharpe_ratio.toFixed(2)],
@@ -967,86 +711,10 @@ function renderStatGrid(stats, portfolio) {
   wrap.innerHTML = `<div class="stat-grid2">${cells.map(([l, v]) => `
     <div class="sg-cell"><div class="sg-label">${l}</div><div class="sg-value">${v}</div></div>
   `).join('')}</div>
-  <div style="font-size:8px;color:var(--cream-muted);margin-top:6px;">APY/all-time %-return are per $100 notionally risked (this bot has no real tracked capital balance; stakes are flat $5-$25). n=${stats.n_trades} resolved trades. Updated ${fmtClock(stats.updated_at)}.</div>`;
+  <div class="stat-grid2-note">Per $100 notionally risked (no real tracked capital balance; stakes are flat $5-$25). n=${stats.n_trades} resolved trades.</div>`;
 }
 
-/* ---------------- 3. AI SIGNAL PANEL (additional detail) ---------------- */
-function assetCooldown(state, asset) {
-  const lastTsMap = (state && state.last_signal_ts) || {};
-  const ts = lastTsMap[asset];
-  if (!ts) return { known: true, ready: true, remain: 0 };
-  const ageSec = (Date.now() - new Date(ts).getTime()) / 1000;
-  if (ageSec < SIGNAL_COOLDOWN_SEC) return { known: true, ready: false, remain: Math.ceil(SIGNAL_COOLDOWN_SEC - ageSec) };
-  return { known: true, ready: true, remain: 0 };
-}
-function fearGreedColor(classification) {
-  const c = (classification || '').toLowerCase();
-  if (c.includes('extreme fear')) return 'var(--red)';
-  if (c === 'fear') return '#FF9457';
-  if (c.includes('extreme greed')) return 'var(--green)';
-  if (c === 'greed') return '#7CE87A';
-  return 'var(--text-secondary)';
-}
-function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents) {
-  const wrap = document.getElementById('ai-signal-body');
-  let html = '';
-
-  if (onlineStatus && has(onlineStatus.n_updates) && has(onlineStatus.warmup_trades)) {
-    const pct = Math.min(100, (onlineStatus.n_updates / onlineStatus.warmup_trades) * 100);
-    html += `
-      <div style="font-size:10px;color:var(--text-secondary);">MODEL WARMUP &mdash; ${onlineStatus.n_updates}/${onlineStatus.warmup_trades} trades
-        &middot; <b style="color:${onlineStatus.is_warmed_up ? 'var(--green)' : 'var(--gold)'}">${onlineStatus.is_warmed_up ? 'LIVE' : 'WARMUP'}</b></div>
-      <div class="warmup-track"><div class="warmup-fill" style="width:${pct.toFixed(1)}%"></div></div>
-    `;
-  } else {
-    html += `<div style="margin-bottom:8px;">MODEL WARMUP ${noData()}</div>`;
-  }
-
-  if (lastQuantFeature) {
-    const pct = (lastQuantFeature.model_probability * 100).toFixed(1);
-    html += `<div style="font-size:10px;color:var(--text-secondary);margin-top:4px;">LAST SIGNAL CONFIDENCE (shadow model, ${lastQuantFeature.asset})</div>
-      <div style="font-size:15px;font-weight:800;color:var(--cyan);">${pct}%</div>
-      <div style="font-size:9px;color:var(--text-muted);">${fmtClock(lastQuantFeature.timestamp)}</div>`;
-  } else {
-    html += `<div style="margin-top:6px;">LAST SIGNAL CONFIDENCE ${noData()}</div>`;
-  }
-
-  html += `<div style="margin-top:8px;font-size:10px;color:var(--text-secondary);">DETECTOR STATUS</div>`;
-  TRACKED_ASSETS.forEach(asset => {
-    const cd = assetCooldown(state, asset);
-    const label = !state ? noData() : (cd.ready ? `<span class="pill ready">READY</span>` : `<span class="pill cooldown">COOLDOWN ${cd.remain}s</span>`);
-    html += `<div class="sig-asset-row"><span>${asset}</span>${label}</div>`;
-  });
-
-  if (marketBias && has(marketBias.market_bias)) {
-    const biasCls = marketBias.market_bias.toLowerCase();
-    html += `<div class="sig-asset-row"><span>Market Bias (BTC 24h)</span><span class="bias-tag ${biasCls}">${marketBias.market_bias}</span></div>`;
-  } else {
-    html += `<div class="sig-asset-row"><span>Market Bias</span>${noData()}</div>`;
-  }
-
-  if (fearGreed && has(fearGreed.value)) {
-    html += `<div class="sig-asset-row"><span>Macro Sentiment</span>
-      <span style="font-weight:800;color:${fearGreedColor(fearGreed.classification)};">F&amp;G: ${fearGreed.value} (${fearGreed.classification})</span></div>`;
-  } else {
-    html += `<div class="sig-asset-row"><span>Macro Sentiment</span>${noData()}</div>`;
-  }
-
-  if (macroEvents && Array.isArray(macroEvents.events) && macroEvents.events.length) {
-    const e = macroEvents.events[0];
-    const d = new Date(e.date);
-    const dateTxt = isNaN(d.getTime()) ? e.date : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    html += `<div class="sig-asset-row" style="font-size:10px;"><span>Next Event</span><span style="color:var(--text-primary);text-align:right;">${dateTxt} &middot; ${e.title}</span></div>`;
-  } else if (macroEvents && Array.isArray(macroEvents.events)) {
-    html += `<div class="sig-asset-row"><span>Events</span>${noData('NONE FOUND')}</div>`;
-  } else {
-    html += `<div class="sig-asset-row"><span>Events</span>${noData()}</div>`;
-  }
-
-  wrap.innerHTML = html;
-}
-
-/* ---------------- 4. BIGGEST WIN CALLOUT ---------------- */
+/* ---------------- BIGGEST WIN ---------------- */
 function computeBiggestWin(m) {
   if (!m || !m.wins.length) return null;
   const bw = m.wins.reduce((a, b) => (b.pnl_usd > a.pnl_usd ? b : a));
@@ -1065,35 +733,28 @@ function renderBiggestWin(portfolio) {
   const bw = c.bw;
   wrap.innerHTML = `
     <div class="bw-mult num">${c.multiplier != null ? 'X' + c.multiplier.toFixed(1) : noData()}</div>
-    <div style="font-size:9px;color:var(--text-muted);margin-bottom:8px;">PnL &divide; stake on this trade (${fmtUsd(bw.pnl_usd)} on a ${fmtUsd(bw.size_usd, 2).replace('+','')} stake)</div>
+    <div class="bw-sub">PnL &divide; stake (${fmtUsd(bw.pnl_usd)} on a $${bw.size_usd.toFixed(2)} stake)</div>
     <div class="bw-row"><span class="label">Entry Price</span><span class="value num">${bw.entry_price.toFixed(3)}</span></div>
     <div class="bw-row"><span class="label">Market</span><span class="value">${bw.asset} &middot; ${bw.direction}</span></div>
     <div class="bw-row"><span class="label">Date</span><span class="value num">${fmtClock(bw.close_ts)}</span></div>
-    <div class="bw-row"><span class="label">Sharpe (per-trade, all closed)</span><span class="value num">${has(c.sharpe) ? c.sharpe.toFixed(2) : noData()}</span></div>
+    <div class="bw-row"><span class="label">Sharpe (per-trade)</span><span class="value num">${has(c.sharpe) ? c.sharpe.toFixed(2) : noData()}</span></div>
   `;
 }
 
-/* ---------------- 5. EXECUTION CYCLE + NEXT TICK ---------------- */
+/* ---------------- SECTION 3: EXECUTION CYCLE ---------------- */
 const EXEC_STAGES = ['scan', 'detect', 'validate', 'size', 'fill', 'settle'];
 let _lastTickAtMs = null;
-function renderExecutionCycle(cycle, trades) {
+function renderExecutionCycle(cycle) {
   const wrap = document.getElementById('exec-cycle-body');
-  const fillPriceEl = document.getElementById('exec-fill-price');
   if (!cycle || !cycle.stage) {
     wrap.innerHTML = noData();
     _lastTickAtMs = null;
-    if (fillPriceEl) fillPriceEl.textContent = '';
     return;
   }
   _lastTickAtMs = new Date(cycle.updated_at).getTime();
   const idx = EXEC_STAGES.indexOf(cycle.stage);
   const age = fmtAge(cycle.updated_at);
   const fresh = age != null && age < STALE_AFTER_MS * 8;
-  if (fillPriceEl) {
-    const lastTrade = trades && trades.length
-      ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
-    fillPriceEl.textContent = lastTrade ? `FILL ${lastTrade.entry_price.toFixed(3)}` : '';
-  }
   let row = '<div class="exec-cycle-row">';
   EXEC_STAGES.forEach((stage, i) => {
     if (i > 0) row += `<div class="exec-connector ${fresh && i <= idx ? 'done' : ''}"></div>`;
@@ -1103,43 +764,18 @@ function renderExecutionCycle(cycle, trades) {
     row += `<div class="exec-step ${cls}">
       <div class="dot">${String(i + 1).padStart(2, '0')}</div>
       <div class="label">${stage}</div>
-      <div class="detail">${isCurrent ? (cycle.detail || '') : ''}</div>
     </div>`;
   });
   row += '</div>';
   wrap.innerHTML = row;
 }
 function renderNextTick() {
-  const el = document.getElementById('next-tick-countdown');
   const treeNextEl = document.getElementById('tree-next-value');
-  if (_lastTickAtMs == null) {
-    if (el) el.textContent = '';
-    if (treeNextEl) treeNextEl.textContent = '';
-    return;
-  }
+  if (!treeNextEl) return;
+  if (_lastTickAtMs == null) { treeNextEl.textContent = ''; return; }
   const elapsedSec = (Date.now() - _lastTickAtMs) / 1000;
   const remain = Math.max(0, MARKET_POLL_INTERVAL_SEC - (elapsedSec % MARKET_POLL_INTERVAL_SEC));
-  if (el) el.textContent = `next tick ~${remain.toFixed(0)}s`;
-  if (treeNextEl) treeNextEl.textContent = `NEXT: ${remain.toFixed(0)}s`;
-}
-let _lastKnownState = null;
-function renderNextSignalCountdown() {
-  const el = document.getElementById('next-signal-countdown');
-  if (!el) return;
-  if (!_lastKnownState || !_lastKnownState.last_signal_ts) { el.innerHTML = ''; return; }
-  let soonestAsset = null, soonestRemain = Infinity, anyReady = false;
-  TRACKED_ASSETS.forEach(asset => {
-    const cd = assetCooldown(_lastKnownState, asset);
-    if (cd.ready) anyReady = true;
-    else if (cd.remain < soonestRemain) { soonestRemain = cd.remain; soonestAsset = asset; }
-  });
-  if (anyReady) {
-    el.innerHTML = `<span style="color:var(--green);">signal ready now</span>`;
-  } else if (soonestAsset) {
-    el.innerHTML = `next signal ~${soonestRemain}s (${soonestAsset})`;
-  } else {
-    el.innerHTML = '';
-  }
+  treeNextEl.textContent = `NEXT: ${remain.toFixed(0)}s`;
 }
 function renderTreePace(portfolio, state, trades) {
   const valEl = document.getElementById('tree-pace-value');
@@ -1150,12 +786,13 @@ function renderTreePace(portfolio, state, trades) {
   valEl.className = 'pace-value num ' + (p.pace >= 0 ? 'up' : 'down');
 }
 
-/* ---------------- 6. STRATEGY DECISION TREE (animated SVG) ---------------- */
-// Logical (base) node layout in a 1050x340 design space. The actual <svg>
-// viewBox is recomputed every render from the wrapper's real aspect ratio
-// (see renderDecisionTree) and node x-coordinates are scaled to fill it --
-// otherwise preserveAspectRatio="meet" letterboxes a fixed 1050:340 viewBox
-// inside a much wider panel, leaving large empty margins on both sides.
+/* ---------------- SECTION 4: STRATEGY DECISION TREE (animated SVG) ---------------- */
+// Logical (base) node layout in a 1050x460 design space. The bottom ~25% of
+// that height is intentionally empty (nodes top out around y=338) so the
+// .tree-fill-box HTML overlay always has clear room below the branch nodes.
+// The actual <svg> viewBox is recomputed every render from the wrapper's
+// real aspect ratio so the tree fills the panel edge-to-edge instead of
+// letterboxing inside a fixed-ratio viewBox.
 const TREE_NODES_BASE = {
   tick:       { x: 55,  y: 168, label: 'TICK' },
   scan:       { x: 200, y: 168, label: 'SCAN' },
@@ -1168,9 +805,6 @@ const TREE_NODES_BASE = {
   fill:       { x: 860, y: 168, label: 'FILL' },
   pnl:        { x: 980, y: 168, label: 'P&L' },
 };
-// TREE_BASE_H is taller than the node layout actually needs (nodes top out
-// around y=338) so the bottom ~25% of the coordinate space is always clear
-// for the .tree-fill-box HTML overlay to sit in without covering a node.
 const TREE_BASE_W = 1050, TREE_BASE_H = 460;
 const TREE_EDGES = [
   ['tick', 'scan'], ['scan', 'classify'],
@@ -1180,7 +814,7 @@ const TREE_EDGES = [
 ];
 let _lastSeenTreeFillTs = undefined;
 const _lastSeenBranchFireTs = { order_book: undefined, momentum: undefined, volume: undefined };
-let _currentTreeNodes = TREE_NODES_BASE; // updated to the scaled layout on every renderDecisionTree call
+let _currentTreeNodes = TREE_NODES_BASE;
 function buildFlowPath(...nodeKeys) {
   return 'M ' + nodeKeys.map(k => `${_currentTreeNodes[k].x} ${_currentTreeNodes[k].y}`).join(' L ');
 }
@@ -1195,27 +829,6 @@ function triggerFlowDot(pathStr, durSec) {
   motion.beginElement();
   opacityAnim.beginElement();
 }
-function renderTreeMiniChart(portfolio) {
-  const canvas = document.getElementById('tree-mini-canvas');
-  if (!canvas) return;
-  const { ctx, w, h } = resizeCanvasToParent(canvas);
-  ctx.clearRect(0, 0, w, h);
-  if (!portfolio || !portfolio.curve || portfolio.curve.length < 2) {
-    ctx.fillStyle = 'rgba(201,209,217,0.3)'; ctx.font = '9px monospace';
-    ctx.fillText(portfolio ? 'building...' : 'NO DATA', 4, h / 2);
-    return;
-  }
-  const curve = portfolio.curve;
-  const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
-  const span = (max - min) || 1;
-  const x = i => (i / (curve.length - 1)) * w;
-  const y = v => h - ((v - min) / span) * h;
-  const positive = curve[curve.length - 1] >= 0;
-  ctx.beginPath();
-  curve.forEach((v, i) => i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v)));
-  ctx.strokeStyle = positive ? '#39d353' : '#f85149'; ctx.lineWidth = 1.5;
-  ctx.stroke();
-}
 function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades) {
   const wrap = document.getElementById('tree-svg-wrap');
   const edgeValueEl = document.getElementById('tree-edge-value');
@@ -1226,7 +839,6 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     const pct = btcStatus.combined_confidence * 100;
     edgeValueEl.textContent = pct.toFixed(1) + '%';
     edgeValueEl.className = 'ec-value ' + (btcStatus.fired ? 'up' : '');
-    edgeValueEl.style.color = btcStatus.fired ? '' : 'var(--text-primary)';
   } else {
     edgeValueEl.innerHTML = noData();
   }
@@ -1257,9 +869,6 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     pnl: !!(portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length > 0),
   };
 
-  // Recompute the viewBox from the wrapper's real aspect ratio so the tree
-  // fills the panel edge-to-edge instead of letterboxing inside a fixed
-  // 1050:340 box (this panel is much wider than that in practice).
   const rectW = wrap.clientWidth || TREE_BASE_W, rectH = wrap.clientHeight || TREE_BASE_H;
   const viewBoxW = TREE_BASE_H * (rectW / rectH);
   const xScale = viewBoxW / TREE_BASE_W;
@@ -1280,7 +889,7 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     const isPnl = key === 'pnl';
     const isRepricing = key === 'repricing';
     const r = isPnl ? 34 : 23;
-    const fill = isActive ? 'rgba(57,211,83,0.15)' : '#161b22';
+    const fill = isActive ? 'rgba(57,211,83,0.15)' : '#12161c';
     const stroke = isActive ? '#39d353' : '#30363d';
     const dash = isRepricing ? ' stroke-dasharray="3,3"' : '';
     svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"${dash}/>`;
@@ -1292,8 +901,8 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
       svg += `<text x="${n.x}" y="${n.y - 4}" text-anchor="middle" fill="${pnlColor}" font-size="14" font-weight="800" font-family="'Courier New', monospace">${pnlText}</text>`;
       svg += `<text x="${n.x}" y="${n.y + 13}" class="tree-node-sub">last trade</text>`;
     } else {
-      svg += `<text x="${n.x}" y="${n.y + r + 15}" class="tree-node-label">${n.label}</text>`;
-      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 27}" class="tree-node-sub" style="fill:var(--gold);">(disabled, shadow only)</text>`;
+      svg += `<text x="${n.x}" y="${n.y + r + 16}" class="tree-node-label">${n.label}</text>`;
+      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 29}" class="tree-node-sub" style="fill:var(--gold);">(disabled, shadow only)</text>`;
     }
   });
   svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="6" fill="#39d353" opacity="0">`
@@ -1303,9 +912,6 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
   svg += `</svg>`;
   wrap.innerHTML = svg;
 
-  // Real-data fill box: last trade's actual outcome, in the style of the
-  // reference's center "ORDER FILLED" callout. Shows the most recent trade
-  // regardless of age (there is no fabricated "just now" framing).
   const lastTrade = trades && trades.length
     ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
   let fillBoxHtml;
@@ -1342,7 +948,7 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
   });
 }
 
-/* ---------------- 7. CANDLESTICK / EQUITY CANVAS HELPERS ---------------- */
+/* ---------------- CANDLESTICK / EQUITY / MONTE CARLO CANVAS HELPERS ---------------- */
 function resizeCanvasToParent(canvas) {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
@@ -1354,21 +960,14 @@ function resizeCanvasToParent(canvas) {
 }
 function renderCandlestick(candles) {
   const canvas = document.getElementById('candle-canvas');
-  const captionEl = document.getElementById('candle-caption');
   const priceEl = document.getElementById('chart-hdr-price');
   const { ctx, w, h } = resizeCanvasToParent(canvas);
   ctx.clearRect(0, 0, w, h);
 
-  if (captionEl) {
-    captionEl.textContent = candles
-      ? `source: data/price_history.jsonl (BTC yes_price ticks), bucketed into real ${CANDLE_BUCKET_SEC}s OHLC candles client-side. Wick = high/low, body = open/close within the bucket.`
-      : 'source: data/price_history.jsonl -- NO DATA yet.';
-  }
-
   if (!candles || candles.length < 2) {
     if (priceEl) priceEl.innerHTML = noData();
     ctx.fillStyle = 'rgba(201,209,217,0.3)';
-    ctx.font = '11px monospace';
+    ctx.font = '13px monospace';
     ctx.fillText(candles ? 'Not enough BTC ticks yet for a candle' : 'NO DATA', 12, h / 2);
     return;
   }
@@ -1377,7 +976,7 @@ function renderCandlestick(candles) {
   const lastUp = last.close >= last.open;
   if (priceEl) { priceEl.textContent = last.close.toFixed(3); priceEl.className = 'chart-hdr-price num ' + (lastUp ? 'up' : 'down'); }
 
-  const pad = { t: 10, r: 46, b: 20, l: 4 };
+  const pad = { t: 14, r: 52, b: 20, l: 4 };
   const allPrices = candles.flatMap(c => [c.high, c.low]);
   const min = Math.min(...allPrices), max = Math.max(...allPrices);
   const span = (max - min) || 0.01;
@@ -1388,8 +987,8 @@ function renderCandlestick(candles) {
   const y = v => pad.t + (1 - (v - min) / span) * plotH;
 
   ctx.strokeStyle = 'rgba(201,209,217,0.06)';
-  ctx.fillStyle = 'rgba(201,209,217,0.3)';
-  ctx.font = '9px monospace';
+  ctx.fillStyle = 'rgba(201,209,217,0.35)';
+  ctx.font = '11px monospace';
   for (let i = 0; i <= 3; i++) {
     const gy = pad.t + (i / 3) * plotH;
     ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy); ctx.stroke();
@@ -1409,7 +1008,7 @@ function renderCandlestick(candles) {
   });
 
   ctx.fillStyle = lastUp ? '#39d353' : '#f85149';
-  ctx.font = 'bold 11px monospace';
+  ctx.font = 'bold 12px monospace';
   ctx.fillText(last.close.toFixed(3), pad.l + plotW + 4, y(last.close) + 3);
 }
 function renderEquityCurve(m) {
@@ -1421,7 +1020,7 @@ function renderEquityCurve(m) {
   if (!m || !m.curve || !m.curve.length) {
     if (pctEl) pctEl.innerHTML = '';
     ctx.fillStyle = 'rgba(201,209,217,0.3)';
-    ctx.font = '11px monospace';
+    ctx.font = '13px monospace';
     ctx.fillText(m ? 'Awaiting closed trades...' : 'NO DATA', 12, h / 2);
     return;
   }
@@ -1429,11 +1028,10 @@ function renderEquityCurve(m) {
   const allTimePct = computeAllTimeReturnPct(m.totalPnl);
   if (pctEl) {
     pctEl.textContent = (allTimePct >= 0 ? '+' : '') + allTimePct.toFixed(0) + '%';
-    pctEl.className = 'num ' + (allTimePct >= 0 ? 'up' : 'down');
-    pctEl.style.fontSize = '11px'; pctEl.style.fontWeight = '800';
+    pctEl.className = 'pnl-hdr-pct num ' + (allTimePct >= 0 ? 'up' : 'down');
   }
 
-  const pad = 22;
+  const pad = 26;
   const curve = m.curve;
   const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
   const span = (max - min) || 1;
@@ -1466,82 +1064,11 @@ function renderEquityCurve(m) {
   ctx.stroke(); ctx.shadowBlur = 0;
 
   ctx.fillStyle = lineColor;
-  ctx.font = 'bold 11px monospace';
-  ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length})`, w - pad - 100, pad - 4);
+  ctx.font = 'bold 12px monospace';
+  ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length})`, w - pad - 100, pad - 6);
 }
 
-/* ---------------- 8. CORRELATION MAP (additional detail) ---------------- */
-function corrColor(r) {
-  if (r == null) return 'rgba(201,209,217,0.04)';
-  const abs = Math.min(1, Math.abs(r));
-  const alpha = 0.22 + abs * 0.62;
-  return r >= 0 ? `rgba(57,211,83,${alpha.toFixed(2)})` : `rgba(248,81,73,${alpha.toFixed(2)})`;
-}
-function corrTextColor(r) {
-  if (r == null) return 'var(--text-muted)';
-  const abs = Math.min(1, Math.abs(r));
-  if (abs > 0.4) return '#05070A';
-  return r >= 0 ? 'var(--green)' : 'var(--red)';
-}
-const SPOT_CORR_MIN_RETURNS = 10;
-function pearsonCorrelation(seriesA, seriesB) {
-  const n = Math.min(seriesA.length, seriesB.length);
-  if (n < 2) return null;
-  const retA = [], retB = [];
-  for (let i = 1; i < n; i++) {
-    retA.push(seriesA[i] - seriesA[i - 1]);
-    retB.push(seriesB[i] - seriesB[i - 1]);
-  }
-  if (retA.length < SPOT_CORR_MIN_RETURNS) return null;
-  const meanA = retA.reduce((s, v) => s + v, 0) / retA.length;
-  const meanB = retB.reduce((s, v) => s + v, 0) / retB.length;
-  let cov = 0, varA = 0, varB = 0;
-  for (let i = 0; i < retA.length; i++) {
-    cov += (retA[i] - meanA) * (retB[i] - meanB);
-    varA += (retA[i] - meanA) ** 2;
-    varB += (retB[i] - meanB) ** 2;
-  }
-  if (varA === 0 || varB === 0) return null;
-  return cov / Math.sqrt(varA * varB);
-}
-function computeSolBtcSpotCorrelation(biasHistory) {
-  if (!biasHistory || !biasHistory.length) return { corr: null, n: 0 };
-  const usable = biasHistory.filter(r => has(r.btc_price) && has(r.sol_price));
-  const recent = usable.slice(-60);
-  return { corr: pearsonCorrelation(recent.map(r => r.btc_price), recent.map(r => r.sol_price)), n: recent.length };
-}
-function renderCorrelation(liveStatus, biasHistory) {
-  const wrap = document.getElementById('corr-body');
-  const r = liveStatus ? liveStatus.btc_eth_correlation : null;
-  const rTxt = has(r) ? (r >= 0 ? '+' : '') + r.toFixed(3) : null;
-
-  let html = `<div style="font-size:9px;color:var(--text-muted);">POLYMARKET CONTRACT-PRICE CORRELATION</div>`;
-  html += `<div class="corr-grid">
-    <div></div><div class="corr-head">BTC</div><div class="corr-head">ETH</div>
-    <div class="corr-row-label">BTC</div>
-    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
-    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
-    <div class="corr-row-label">ETH</div>
-    <div class="corr-cell" style="background:${corrColor(r)};color:${corrTextColor(r)}">${rTxt != null ? rTxt : noData()}</div>
-    <div class="corr-cell" style="background:${corrColor(1)};color:${corrTextColor(1)}">1.00</div>
-  </div>`;
-  if (liveStatus) {
-    html += `<div style="font-size:9px;color:var(--text-muted);margin-top:4px;">source: live_status.json, last update ${fmtClock(liveStatus.updated_at)}</div>`;
-  }
-
-  const sol = computeSolBtcSpotCorrelation(biasHistory);
-  html += `<div style="font-size:9px;color:var(--text-muted);margin-top:12px;border-top:1px solid var(--grid);padding-top:8px;">COINGECKO SPOT-PRICE CORRELATION (different series)</div>`;
-  if (has(sol.corr)) {
-    const solTxt = (sol.corr >= 0 ? '+' : '') + sol.corr.toFixed(3);
-    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value" style="color:${corrTextColor(sol.corr) === '#05070A' ? (sol.corr >= 0 ? 'var(--green)' : 'var(--red)') : corrTextColor(sol.corr)}">${solTxt}</span></div>`;
-    html += `<div style="font-size:9px;color:var(--text-muted);">n=${sol.n} samples (~60s cadence)</div>`;
-  } else {
-    html += `<div class="metric-row"><span class="label">SOL &times; BTC (spot)</span><span class="value">${noData(sol.n ? 'BUILDING HISTORY' : 'NO DATA')}</span></div>`;
-  }
-  wrap.innerHTML = html;
-}
-
-/* ---------------- 9. ROBUSTNESS: BY ASSET, TRAILING 1D/3D/7D %-RETURN ---------------- */
+/* ---------------- SECTION 5: ROBUSTNESS: BY ASSET, TRAILING 1D/3D/7D %-RETURN ---------------- */
 function computeRobustnessByAsset(trades) {
   if (!trades) return null;
   const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null && t.close_ts);
@@ -1557,7 +1084,7 @@ function computeRobustnessByAsset(trades) {
       const pnl = subset.reduce((s, t) => s + t.pnl_usd, 0);
       return { n: subset.length, pct: computeAllTimeReturnPct(pnl) };
     });
-    return { asset, cells, total: subsetAll.length };
+    return { asset, cells };
   });
   return { rows, windows };
 }
@@ -1579,10 +1106,10 @@ function renderRobustnessGrid(trades) {
     }).join('');
     return `<div class="rb-row"><div class="rb-cell rb-label">${row.asset}</div>${cells}</div>`;
   }).join('');
-  wrap.innerHTML = header + rows + `<div class="chart-caption" style="border-top:none;padding-left:0;">%-return per asset over trailing 1/3/7 days, relative to the same $100 notional base used for APY. &mdash; means no closed trades in that window (never fabricated as 0%).</div>`;
+  wrap.innerHTML = header + rows + `<div class="rb-caption">%-return per asset over trailing 1/3/7 days, per $100 notional. &mdash; means no closed trades in that window.</div>`;
 }
 
-/* ---------------- 10. MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ---------------- */
+/* ---------------- MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ---------------- */
 const MC_PATHS = 7000;
 function computeMonteCarlo(m) {
   if (!m || !m.wins.length || !m.losses.length) return null;
@@ -1609,15 +1136,14 @@ function renderMonteCarlo(portfolio) {
     statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
     const { ctx, w, h } = resizeCanvasToParent(canvas);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(201,209,217,0.3)'; ctx.font = '11px monospace';
+    ctx.fillStyle = 'rgba(201,209,217,0.3)'; ctx.font = '13px monospace';
     ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
     return;
   }
   statsEl.innerHTML = `
-    <div class="mc-stat"><div class="mc-label">Simulated Over</div><div class="mc-value num">${mc.n} trades &times; ${MC_PATHS} paths</div></div>
     <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
-    <div class="mc-stat"><div class="mc-label">5th %ile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
-    <div class="mc-stat hi"><div class="mc-label">P &lt; 0.010 (99% VaR)</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
+    <div class="mc-stat"><div class="mc-label">5th %ile</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
+    <div class="mc-stat hi"><div class="mc-label">P &lt; 0.010</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
   `;
   const { ctx, w, h } = resizeCanvasToParent(canvas);
   ctx.clearRect(0, 0, w, h);
@@ -1645,12 +1171,12 @@ function renderMonteCarlo(portfolio) {
     ctx.beginPath(); ctx.moveTo(zeroX, pad); ctx.lineTo(zeroX, h - pad); ctx.stroke();
     ctx.setLineDash([]);
   }
-  ctx.fillStyle = 'rgba(201,209,217,0.35)'; ctx.font = '9px monospace';
+  ctx.fillStyle = 'rgba(201,209,217,0.35)'; ctx.font = '11px monospace';
   ctx.fillText(fmtUsd(min), pad, h - 8);
   ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
 }
 
-/* ---------------- 11. LIVE FEED (scrolling, BUY/SELL badges) ---------------- */
+/* ---------------- SECTION 6: LIVE FEED (scrolling, BUY/SELL badges) ---------------- */
 function buildLiveFeedEvents(trades) {
   if (!trades) return null;
   const events = [];
@@ -1673,227 +1199,31 @@ function renderLiveFeed(trades) {
   track.innerHTML = rowsHtml + rowsHtml;
 }
 
-/* ---------------- 12. DECISION TIMELINE (additional detail) ---------------- */
-function tlNode(name, cls, label) {
-  return `<div class="tl-node ${cls}"><span class="tl-dot"></span><span class="name">${name}</span><span class="state">${label}</span></div><div class="tl-arrow">&#9660;</div>`;
-}
-let _lastSeenSignalTs = undefined;
-function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
-  const wrap = document.getElementById('timeline-body');
-  const parts = [];
-
-  if (!liveStatus) {
-    parts.push(tlNode('MARKET DATA', 'nodata', 'NO DATA'));
-    parts.push(tlNode('FEATURES', 'nodata', 'NO DATA'));
-  } else {
-    const age = fmtAge(liveStatus.updated_at);
-    const fresh = age != null && age < STALE_AFTER_MS;
-    parts.push(tlNode('MARKET DATA', fresh ? 'active' : 'waiting', fresh ? 'ACTIVE' : 'STALE'));
-    if (!fresh) {
-      parts.push(tlNode('FEATURES', 'waiting', 'STALE'));
-    } else if (has(liveStatus.btc_eth_correlation)) {
-      parts.push(tlNode('FEATURES', 'active', 'ACTIVE'));
-    } else {
-      parts.push(tlNode('FEATURES', 'waiting', 'WARMING UP'));
-    }
-  }
-
-  if (!combinerStatus) {
-    parts.push(tlNode('SIGNAL COMBINER', 'nodata', 'NO DATA'));
-  } else {
-    const age = fmtAge(combinerStatus.updated_at);
-    const fresh = age != null && age < STALE_AFTER_MS;
-    parts.push(tlNode('SIGNAL COMBINER', fresh ? 'active' : 'blocked', fresh ? 'ACTIVE' : 'INACTIVE'));
-  }
-
-  if (!state) {
-    parts.push(tlNode('RISK CHECK', 'nodata', 'NO DATA'));
-  } else {
-    const stopped = !!state.system_stopped;
-    parts.push(tlNode('RISK CHECK', stopped ? 'blocked' : 'active', stopped ? 'BLOCKED' : 'PASS'));
-  }
-
-  if (!state || !state.last_signal_ts) {
-    parts.push(tlNode('SIGNAL', state ? 'waiting' : 'nodata', state ? 'WAITING' : 'NO DATA'));
-  } else {
-    const anyRecent = Object.values(state.last_signal_ts).some(ts => {
-      const age = fmtAge(ts); return age != null && age < 5 * 60 * 1000;
-    });
-    parts.push(tlNode('SIGNAL', anyRecent ? 'active' : 'waiting', anyRecent ? 'RECENT' : 'WAITING'));
-  }
-
-  if (!trades) {
-    parts.push(tlNode('TRADE', 'nodata', 'NO DATA'));
-  } else {
-    const openCount = trades.filter(t => t.status === 'open').length;
-    parts.push(tlNode('TRADE', openCount > 0 ? 'active' : 'waiting', openCount > 0 ? openCount + ' OPEN' : 'FLAT'));
-  }
-
-  wrap.innerHTML = `<div class="timeline">${parts.slice(0, -1).join('')}</div><div class="tl-flow-dot" id="tl-flow-dot"></div>`;
-
-  const latestTs = (state && state.last_signal_ts)
-    ? Object.values(state.last_signal_ts).sort().slice(-1)[0]
-    : null;
-  if (latestTs && _lastSeenSignalTs !== undefined && latestTs !== _lastSeenSignalTs) {
-    const dot = document.getElementById('tl-flow-dot');
-    dot.classList.remove('run'); void dot.offsetWidth;
-    dot.classList.add('run');
-  }
-  _lastSeenSignalTs = latestTs;
-}
-
-/* ---------------- 13. AI REASONING (additional detail) ---------------- */
-function renderReasoning(trades, onlineStatus) {
-  const wrap = document.getElementById('reasoning-body');
-  const withReason = trades ? trades.filter(t => t.signal_reason).sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts)) : [];
-  const last = withReason[0];
-
-  let html = '';
-  if (!last) {
-    html += `<div class="reason-line"><div class="reason-label">Last Signal Reason</div><div>${noData('NO RECENT SIGNAL')}</div></div>`;
-  } else {
-    html += `
-      <div class="reason-line"><div class="reason-label">${last.asset} &middot; ${last.direction} &middot; ${fmtClock(last.open_ts)}</div>
-        <div class="reason-quote">"${last.signal_reason}"</div></div>
-      <div class="reason-line"><div class="reason-label">Entry Price</div><div class="reason-value num">${last.entry_price.toFixed(3)}</div></div>
-      <div class="reason-line"><div class="reason-label">Confidence Score</div><div class="reason-value num">${(last.signal_confidence * 100).toFixed(1)}%</div></div>
-      <div class="reason-line"><div class="reason-label">Source</div><div class="reason-value">${last.signal_source}</div></div>
-    `;
-  }
-
-  html += `<div class="reason-line" style="margin-top:10px;border-top:1px solid var(--grid);padding-top:8px;">
-    <div class="reason-label">Multi-Scenario Probability</div>`;
-  if (onlineStatus && onlineStatus.is_warmed_up && onlineStatus.fitted) {
-    html += `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Model is live, but only outputs a single P(YES win) scalar &mdash; no multi-scenario breakdown exists to show.</div>`;
-  } else {
-    const status = onlineStatus ? `warmup ${onlineStatus.n_updates}/${onlineStatus.warmup_trades}` : 'status unknown';
-    html += `<div style="margin-top:4px;">${noData('NO DATA — model in warmup (' + status + ')')}</div>`;
-  }
-  html += `</div>`;
-  wrap.innerHTML = html;
-}
-
-/* ---------------- 14. LIVE TRADE TABLE (additional detail) ---------------- */
-function renderTradeTable(trades, state) {
-  const posBody = document.getElementById('positions-body');
-  const tradesBody = document.getElementById('trades-body');
-  if (!trades) {
-    posBody.innerHTML = `<tr><td class="empty-row">${noData()}</td></tr>`;
-    tradesBody.innerHTML = `<tr><td class="empty-row">${noData()}</td></tr>`;
-    return;
-  }
-  trades = scopeTradesToSession(trades, state).scoped;
-
-  const open = trades.filter(t => t.status === 'open').sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts));
-  posBody.innerHTML = open.length ? open.map(t => `
-    <tr class="open">
-      <td>${t.asset}</td><td>${t.direction}</td>
-      <td class="num">${t.entry_price.toFixed(3)}</td>
-      <td>${fmtClock(t.open_ts)}</td>
-      <td class="num pnl">$${t.size_usd.toFixed(2)}</td>
-    </tr>`).join('') : `<tr><td class="empty-row">No open positions</td></tr>`;
-
-  const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null)
-    .sort((a, b) => new Date(b.close_ts) - new Date(a.close_ts)).slice(0, 20);
-  tradesBody.innerHTML = closed.length ? closed.map(t => `
-    <tr class="${t.result === 'WIN' ? 'win' : 'loss'}">
-      <td>${fmtClock(t.close_ts)}</td><td>${t.asset}</td><td>${t.direction}</td>
-      <td class="num">${t.entry_price.toFixed(3)}</td>
-      <td>${t.result}</td>
-      <td class="num pnl">${fmtUsd(t.pnl_usd)}</td>
-    </tr>`).join('') : `<tr><td class="empty-row">No closed trades yet</td></tr>`;
-}
-
-/* ---------------- 15. SIGNAL COMBINER PER-SIGNAL BREAKDOWN (additional detail) ---------------- */
-function scanning(label) { return `<span class="scanning">${label || 'SCANNING...'}</span>`; }
-function signalCell(sig) {
-  if (!sig || !has(sig.fired)) return noData();
-  if (!sig.fired) return `<span style="color:var(--text-muted);">no fire</span>`;
-  return `<span class="up">${(sig.confidence * 100).toFixed(0)}%</span> <span style="color:var(--text-muted);font-size:9px;">${sig.reason || ''}</span>`;
-}
-function renderSignalStats(stats) {
-  const strip = document.getElementById('signal-stats-strip');
-  if (!stats) {
-    strip.innerHTML = '';
-    return;
-  }
-  const labels = { order_book: 'Order Book', momentum: 'Momentum', volume: 'Volume' };
-  const html = Object.keys(labels).map(name => {
-    const s = stats[name] || { fired_today: 0, last_fired_at: null };
-    return `<span style="margin-right:22px;"><b style="color:var(--text-primary);">${labels[name]}</b> `
-      + `<span class="num">${s.fired_today || 0}</span>&times; today &middot; last fired `
-      + `${s.last_fired_at ? fmtClock(s.last_fired_at) : '<span style="color:var(--text-muted);">never today</span>'}</span>`;
-  }).join('');
-  strip.innerHTML = `<div style="font-size:10px;color:var(--text-secondary);padding:5px 12px;border-bottom:1px solid var(--grid);">${html}</div>`;
-}
-function renderSignalCombiner(status) {
-  const body = document.getElementById('signal-combiner-body');
-  renderSignalStats(status ? status.signal_stats : null);
-  if (!status) {
-    body.innerHTML = `<tr><td colspan="6" class="empty-row">${noData()}</td></tr>`;
-    return;
-  }
-  const assets = Object.keys(status).filter(k => !['updated_at', 'signal_stats', 'signal_stats_date'].includes(k));
-  if (!assets.length) {
-    body.innerHTML = `<tr><td colspan="6" class="empty-row">${noData('NO MARKETS POLLED YET')}</td></tr>`;
-    return;
-  }
-  body.innerHTML = assets.map(asset => {
-    const s = status[asset];
-    const blocked = s.correlation_filter_blocked;
-    const priceFiltered = s.price_out_of_band;
-    const combinedCell = blocked
-      ? `<span class="down">BLOCKED</span>`
-      : priceFiltered
-      ? `<span style="color:var(--gold);">OUT OF PRICE BAND</span>`
-      : (has(s.combined_confidence) ? `<span class="${s.fired ? 'up' : ''}">${(s.combined_confidence * 100).toFixed(0)}%${s.fired ? ' FIRE' : ''}</span>` : scanning());
-    return `<tr class="${s.fired ? 'win' : ''}">
-      <td class="plain">${asset}</td>
-      <td class="plain">${priceFiltered ? '<span style="color:var(--gold);">skipped</span>' : signalCell(s.order_book)}</td>
-      <td class="plain">${priceFiltered ? '<span style="color:var(--gold);">skipped</span>' : signalCell(s.momentum)}</td>
-      <td class="plain">${priceFiltered ? '<span style="color:var(--gold);">skipped</span>' : signalCell(s.volume)}</td>
-      <td class="plain">${blocked ? '<span class="down">BLOCKED</span>' : '<span class="up">clear</span>'}</td>
-      <td class="plain">${combinedCell}</td>
-    </tr>`;
-  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the yes_price band in config/settings.py SIGNAL_COMBINER_MIN/MAX_YES_PRICE.</td></tr>`;
-}
-
 /* =============================================================================
    REFRESH LOOP
    ============================================================================= */
 async function refresh() {
-  const [trades, state, onlineStatus, liveStatus, lastQuantFeature, btcTicks, marketBias, exchangeStatus,
-         latency, fearGreed, macroEvents, biasHistory, combinerStatus, apiStats, executionCycle, stats] = await Promise.all([
-    loadTrades(), loadState(), loadOnlineModelStatus(), loadLiveStatus(), loadLastQuantFeature(),
-    loadPriceHistoryTicks('BTC'), loadLastMarketBias(), loadExchangeStatus(),
-    loadLatency(), loadFearGreed(), loadMacroEvents(), loadMarketBiasHistory(),
-    loadSignalCombinerStatus(), loadApiStats(), loadExecutionCycle(), loadStats(),
+  const [trades, state, liveStatus, btcTicks, marketBias, combinerStatus, executionCycle, stats] = await Promise.all([
+    loadTrades(), loadState(), loadLiveStatus(),
+    loadPriceHistoryTicks('BTC'), loadLastMarketBias(),
+    loadSignalCombinerStatus(), loadExecutionCycle(), loadStats(),
   ]);
   const candles = computeOhlcCandles(btcTicks, CANDLE_BUCKET_SEC, CANDLE_COUNT);
-  renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
+  renderHeader(state, liveStatus);
   renderTicker(marketBias);
   const portfolio = renderPortfolio(trades, state);
   renderLiqRisk(state);
   renderStatGrid(stats, portfolio);
-  renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
   renderBiggestWin(portfolio);
-  renderExecutionCycle(executionCycle, trades);
+  renderExecutionCycle(executionCycle);
   renderNextTick();
-  _lastKnownState = state;
-  renderNextSignalCountdown();
   renderTreePace(portfolio, state, trades);
-  renderTreeMiniChart(portfolio);
   renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades);
   renderCandlestick(candles);
-  renderCorrelation(liveStatus, biasHistory);
   renderRobustnessGrid(trades);
   renderMonteCarlo(portfolio);
   renderEquityCurve(portfolio);
   renderLiveFeed(trades);
-  renderDecisionTimeline(liveStatus, state, trades, combinerStatus);
-  renderReasoning(trades, onlineStatus);
-  renderTradeTable(trades, state);
-  renderSignalCombiner(combinerStatus);
 }
 
 document.getElementById('reset-session-btn').addEventListener('click', async () => {
@@ -1923,7 +1253,6 @@ setInterval(refresh, REFRESH_MS);
 setInterval(() => {
   document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
   renderNextTick();
-  renderNextSignalCountdown();
 }, 1000);
 </script>
 </body>
