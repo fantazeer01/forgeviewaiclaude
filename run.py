@@ -12,7 +12,7 @@ from config.settings import (
     MARKET_POLL_INTERVAL_SEC,
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
-    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG, EXTREME_REVERSION_SIZE_USD,
+    QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -121,16 +121,14 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             minutes_remaining=market.get("minutes_remaining", 5.0),
             is_extreme_reversion=combined_signal.is_extreme_reversion,
         )
-        # Extreme-reversion trades are a brand new, unbacktested strategy --
-        # do NOT let them inherit kelly_size()'s aggressive $5-$25 BET_SIZES
-        # scale, which was calibrated for the proven continuation signal.
-        # Flat, small size instead, independent of confidence. See
-        # EXTREME_REVERSION_SIZE_USD in config/settings.py for the numbers
-        # that prompted this (0/4 wins, -$55 on these trades specifically).
-        if combined_signal.is_extreme_reversion:
-            size_usd = EXTREME_REVERSION_SIZE_USD
-        else:
-            size_usd = online_model.kelly_size(combined_signal.confidence)
+        # REVERTED (2026-07-06): extreme-reversion trades briefly used a flat
+        # $5 size instead of kelly_size(), to cap risk on this brand-new
+        # strategy while it had zero track record. Reverted per request --
+        # NO and YES trades now both size off kelly_size()'s confidence
+        # tiers uniformly, regardless of zone. is_extreme_reversion is kept
+        # on the signal/trade for reporting (which zone a trade came from),
+        # just no longer used for sizing.
+        size_usd = online_model.kelly_size(combined_signal.confidence)
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
                                  size_usd=size_usd, detail=f"sized at ${size_usd:.2f}")
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)
