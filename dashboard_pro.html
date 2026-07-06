@@ -9,27 +9,31 @@
      RULE OF THIS FILE: every widget shows REAL data or an explicit "NO DATA"
      tag. Nothing here is randomly generated or fabricated. See the header
      comment in the <script> block for exactly which files back which panel.
+     Any panel element from the reference layout that has no real backing
+     metric in this codebase (a synthetic "horizon score", undefined PUBT/RISK/
+     STAT columns, "cheap tail" markers for a strategy retired in D-003) is
+     deliberately omitted rather than invented.
      ========================================================================== */
   :root {
-    --bg:        #0a0e14;
-    --panel:     #10161D;
-    --border:    rgba(255,255,255,0.09);
-    --border-hi: rgba(255,255,255,0.18);
-    --grid:      rgba(255,255,255,0.05);
+    --bg:        #0c0e0f;
+    --panel:     #161b22;
+    --border:    #21262d;
+    --border-hi: #30363d;
+    --grid:      rgba(201,209,217,0.07);
 
-    --text-primary:   #E7EDF3;
-    --text-secondary: #8C99A6;
-    --text-muted:     #4E5A66;
+    --text-primary:   #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-muted:     #6e7681;
 
-    --green:  #00FF41;
-    --red:    #FF3B3B;
-    --cyan:   #00E5FF;
-    --purple: #A855F7;
-    --yellow: #FFC94D;
+    --green:  #39d353;
+    --red:    #f85149;
+    --gold:   #e3b341;
+    --purple: #6e40c9;
+    --cyan:   #58a6ff;
 
-    /* on-cream (warm card) accent variants -- the neon dark-surface hues above
+    /* on-cream (warm card) accent variants -- the dark-surface hues above
        fall below 3:1 on a light background, so the cream card gets its own
-       darker steps of the same hues rather than reusing the neon ones. */
+       darker steps of the same hues rather than reusing the dark-mode ones. */
     --cream-bg:     #F5F0E8;
     --cream-border: rgba(26,26,22,0.12);
     --cream-grid:   rgba(26,26,22,0.08);
@@ -37,14 +41,15 @@
     --cream-muted:  #6B6459;
     --cream-green:  #1F7A3D;
     --cream-red:    #B4232A;
+    --cream-gold:   #8A6D1E;
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0;
     background: var(--bg);
     color: var(--text-primary);
-    font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Courier New", monospace;
-    font-size: 12px;
+    font-family: 'Courier New', ui-monospace, Consolas, monospace;
+    font-size: 11.5px;
   }
   .num { font-variant-numeric: tabular-nums; }
   .up   { color: var(--green); }
@@ -53,7 +58,7 @@
   .no-data {
     display: inline-block;
     color: var(--text-muted);
-    border: 1px dashed rgba(255,255,255,0.16);
+    border: 1px dashed var(--border-hi);
     border-radius: 4px;
     padding: 2px 8px;
     font-size: 10px;
@@ -61,77 +66,74 @@
   }
   .real-tag {
     font-size: 8.5px; letter-spacing: 0.08em; color: var(--green);
-    border: 1px solid rgba(0,255,65,0.35); border-radius: 3px; padding: 1px 5px;
-  }
-  .soon-tag {
-    font-size: 8.5px; letter-spacing: 0.08em; color: var(--yellow);
-    border: 1px solid rgba(255,201,77,0.4); border-radius: 3px; padding: 1px 5px;
+    border: 1px solid rgba(57,211,83,0.35); border-radius: 3px; padding: 1px 5px;
   }
   .scanning {
-    display: inline-block;
-    color: var(--cyan);
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    animation: scanPulse 1.6s ease-in-out infinite;
+    display: inline-block; color: var(--cyan); font-size: 10px;
+    letter-spacing: 0.06em; animation: scanPulse 1.6s ease-in-out infinite;
   }
   @keyframes scanPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-  /* ---- header / top strip ---- */
+  /* ---- 1. top header bar ---- */
   #header-bar {
-    display: flex; align-items: center; gap: 16px;
-    height: 36px; padding: 0 14px;
-    background: #05070A;
+    display: flex; align-items: center; gap: 14px;
+    height: 30px; padding: 0 12px;
+    background: #090a0b;
     border-bottom: 1px solid var(--border);
-    font-size: 11px;
+    font-size: 10.5px;
   }
-  #header-bar .brand { font-weight: 800; letter-spacing: 0.06em; color: var(--cyan); flex-shrink: 0; }
-  #header-bar .brand .wallet-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); margin-right:7px; }
+  #header-bar .brand { font-weight: 700; letter-spacing: 0.05em; color: var(--text-primary); flex-shrink: 0; }
+  #header-bar .brand .live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); margin-right:6px; }
+  #header-bar .tagline { color: var(--gold); flex-shrink: 0; letter-spacing: 0.04em; }
+  #header-bar .subtitle { color: var(--text-secondary); flex-shrink: 0; letter-spacing: 0.03em; }
   #header-bar .sep { color: var(--text-muted); flex-shrink: 0; }
   #header-bar b { color: var(--text-primary); }
-  #header-bar .hdr-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; flex-wrap: nowrap; }
+  #header-bar .hdr-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; flex-wrap: nowrap; margin-left: auto; }
   .status-run { color: var(--green); }
   .status-stop { color: var(--red); }
-  .exch-ok { color: var(--green); }
-  .exch-error { color: var(--red); }
-
   .quant-mode-badge {
-    display: inline-block; padding: 2px 8px;
-    border: 1px solid var(--purple); border-radius: 4px;
-    color: var(--purple); font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
-    box-shadow: 0 0 8px rgba(168,85,247,0.35);
+    display: inline-block; padding: 1px 7px;
+    border: 1px solid var(--purple); border-radius: 3px;
+    color: var(--purple); font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em;
     flex-shrink: 0;
   }
 
+  /* ---- 2. live ticker strip ---- */
+  #ticker-bar {
+    display: flex; align-items: center; height: 24px; padding: 0 12px;
+    background: #0a0c0d; border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
   #ticker-wrap { flex: 1; overflow: hidden; white-space: nowrap; height: 100%; display: flex; align-items: center; min-width: 40px; }
   #ticker-track { display: inline-block; animation: tickerScroll 24s linear infinite; }
   @keyframes tickerScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-  .ticker-item { font-size: 11px; margin: 0 20px; }
+  .ticker-item { font-size: 10.5px; margin: 0 18px; }
   .ticker-item b { color: var(--text-primary); margin-right: 5px; }
   .ticker-sep { color: var(--text-muted); margin: 0 8px; }
+  .live-pill { color: var(--green); font-weight: 800; letter-spacing: 0.05em; flex-shrink:0; margin-right: 14px; }
+  .live-pill .live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 5px var(--green); margin-right:6px; }
 
   .bias-tag {
-    display: inline-block; padding: 3px 10px; border-radius: 4px;
-    font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+    display: inline-block; padding: 2px 9px; border-radius: 3px;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
   }
   .bias-tag.bullish { color: #05070A; background: var(--green); }
   .bias-tag.bearish { color: #05070A; background: var(--red); }
-  .bias-tag.neutral { color: var(--text-primary); background: rgba(255,255,255,0.12); }
-  .spot-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: 11px; }
-  .spot-row .price { font-weight: 700; }
+  .bias-tag.neutral { color: var(--text-primary); background: var(--border-hi); }
 
-  /* ---- overall layout: vertical stack of full-bleed rows ---- */
+  /* ---- layout ---- */
   .terminal { max-width: 1900px; margin: 0 auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-  .row1 { display: grid; grid-template-columns: 2fr 3fr; gap: 12px; align-items: stretch; }
-  .row1-right { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .row1 { display: grid; grid-template-columns: 35fr 65fr; gap: 12px; align-items: stretch; }
+  .row1-right { display: grid; grid-template-columns: 40fr 60fr; gap: 12px; min-height: 0; }
   .row4 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .row-extra-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .col-stack { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
   @media (max-width: 1100px) {
-    .row1, .row4, .row-extra-2col { grid-template-columns: 1fr; }
+    .row1, .row1-right, .row4, .row-extra-2col { grid-template-columns: 1fr; }
   }
 
   .section-label {
-    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
+    font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
     padding: 2px 2px 0; display: flex; align-items: center; gap: 8px;
   }
   .section-label::after { content: ''; flex: 1; height: 1px; background: var(--grid); }
@@ -139,142 +141,139 @@
   .panel {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 6px;
     display: flex; flex-direction: column;
     min-height: 0; overflow: hidden;
   }
   .panel-head {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    padding: 7px 11px; border-bottom: 1px solid var(--border); flex-shrink: 0;
   }
   .panel-title {
-    font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--text-secondary); font-weight: 700;
   }
-  .panel-body { padding: 10px 12px; flex: 1; min-height: 0; overflow: auto; }
+  .panel-title .glyph { color: var(--gold); margin-right: 5px; }
+  .panel-body { padding: 9px 11px; flex: 1; min-height: 0; overflow: auto; }
   .panel-body.nopad { padding: 0; }
 
   /* ---- portfolio (warm cream card) ---- */
-  #portfolio-panel.panel-cream {
-    background: var(--cream-bg); border-color: var(--cream-border);
-  }
+  #portfolio-panel.panel-cream { background: var(--cream-bg); border-color: var(--cream-border); }
   #portfolio-panel.panel-cream .panel-head { border-bottom-color: var(--cream-border); }
   #portfolio-panel.panel-cream .panel-title { color: var(--cream-muted); }
   #portfolio-panel.panel-cream .panel-body { color: var(--cream-text); }
   #portfolio-panel.panel-cream .up   { color: var(--cream-green); }
   #portfolio-panel.panel-cream .down { color: var(--cream-red); }
-  #portfolio-panel.panel-cream .metric-row { border-top-color: var(--cream-grid); }
-  #portfolio-panel.panel-cream .metric-row .label { color: var(--cream-muted); }
-  #portfolio-panel.panel-cream .metric-row .value { color: var(--cream-text); }
-  #portfolio-panel.panel-cream .section-divider { color: var(--cream-muted); border-top-color: var(--cream-grid); }
   #portfolio-panel.panel-cream .no-data { color: var(--cream-muted); border-color: rgba(26,26,22,0.25); }
-  #portfolio-panel.panel-cream .pace-sub { color: var(--cream-muted); }
-  #portfolio-panel.panel-cream .risk-gauge-track { background: rgba(26,26,22,0.10); }
+  #portfolio-panel.panel-cream .real-tag { color: var(--cream-green); border-color: rgba(31,122,61,0.4); }
   #portfolio-panel.panel-cream .reset-session-btn { color: var(--cream-muted); border-color: rgba(26,26,22,0.3); }
   #portfolio-panel.panel-cream .reset-session-btn:hover { color: var(--cream-text); border-color: var(--cream-green); }
-  #portfolio-panel.panel-cream .session-tag { color: #0E6E7C; border-color: rgba(14,110,124,0.4); }
-  #portfolio-panel.panel-cream .real-tag { color: var(--cream-green); border-color: rgba(31,122,61,0.4); }
 
-  .hero { font-size: 30px; font-weight: 800; }
-  .metric-list { margin-top: 10px; display: flex; flex-direction: column; }
-  .metric-row {
-    display: flex; justify-content: space-between; align-items: baseline;
-    padding: 4px 0; border-top: 1px solid var(--grid);
-  }
-  .metric-row .label { color: var(--text-secondary); font-size: 10.5px; }
-  .metric-row .value { font-weight: 700; }
-  .section-divider { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 12px 0 2px; border-top: 1px solid var(--grid); padding-top: 8px; }
+  .wallet-line { font-size: 10px; color: var(--cream-muted); letter-spacing: 0.02em; display:flex; align-items:center; justify-content:space-between; }
+  .wallet-tag { font-size: 8.5px; color: var(--cream-green); border: 1px solid rgba(31,122,61,0.35); border-radius: 3px; padding: 1px 5px; letter-spacing: 0.05em; }
+  .hero { font-size: 32px; font-weight: 800; margin-top: 4px; }
+  .hero-sub { font-size: 10.5px; color: var(--cream-muted); letter-spacing: 0.02em; margin-top: 2px; margin-bottom: 10px; }
+  .triple-stat { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0 10px; padding: 8px 0; border-top: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
+  .triple-stat .ts-cell { text-align: center; }
+  .triple-stat .ts-label { font-size: 8.5px; color: var(--cream-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .triple-stat .ts-value { font-size: 15px; font-weight: 800; color: var(--cream-text); margin-top: 2px; }
 
-  /* ---- risk gauge ---- */
-  .risk-gauge-track { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 4px; overflow: hidden; }
-  .risk-gauge-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width 0.6s ease; }
+  .liq-risk-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .liq-risk-label { font-size: 9.5px; color: var(--cream-muted); letter-spacing: 0.05em; flex-shrink: 0; }
+  .liq-risk-segs { display: flex; gap: 2px; flex: 1; }
+  .liq-risk-segs .seg { flex: 1; height: 7px; border-radius: 1px; background: rgba(26,26,22,0.10); }
+  .liq-risk-segs .seg.filled { background: var(--seg-color, var(--cream-green)); }
+  .liq-risk-tag { font-size: 8.5px; font-weight: 800; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 3px; flex-shrink: 0; }
 
-  /* ---- pace ---- */
-  .pace-hero { font-size: 20px; font-weight: 800; }
-  .pace-sub { font-size: 9.5px; color: var(--text-muted); margin-top: 2px; }
+  .stat-grid2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-top: 10px; border-top: 1px solid var(--cream-grid); }
+  .stat-grid2 .sg-cell { padding: 7px 4px; border-right: 1px solid var(--cream-grid); border-bottom: 1px solid var(--cream-grid); }
+  .stat-grid2 .sg-cell:nth-child(3n) { border-right: none; }
+  .stat-grid2 .sg-label { font-size: 8px; color: var(--cream-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .stat-grid2 .sg-value { font-size: 12.5px; font-weight: 800; color: var(--cream-text); margin-top: 2px; }
 
-  /* ---- session reset ---- */
   .reset-session-btn {
-    font-family: inherit; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
+    font-family: inherit; font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase;
     color: var(--text-secondary); background: transparent; border: 1px solid var(--border-hi);
     border-radius: 3px; padding: 3px 7px; cursor: pointer;
   }
-  .reset-session-btn:hover { color: var(--text-primary); border-color: var(--cyan); }
   .reset-session-btn:disabled { opacity: 0.5; cursor: default; }
-  .session-tag {
-    font-size: 8.5px; letter-spacing: 0.08em; color: var(--cyan);
-    border: 1px solid rgba(0,229,255,0.4); border-radius: 3px; padding: 1px 5px;
-  }
 
-  /* ---- AI signal panel ---- */
-  .warmup-track { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 10px; overflow: hidden; }
-  .warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); transition: width 0.6s ease; }
-  .sig-asset-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-top: 1px solid var(--grid); font-size: 11px; }
-  .pill { font-size: 9.5px; padding: 2px 8px; border-radius: 20px; border: 1px solid currentColor; letter-spacing: 0.03em; }
-  .pill.ready { color: var(--green); }
-  .pill.cooldown { color: var(--yellow); }
+  /* ---- biggest win callout ---- */
+  .bw-star { color: var(--gold); }
+  .bw-mult { font-size: 34px; font-weight: 800; color: var(--green); line-height: 1; margin: 10px 0 6px; }
+  .bw-mult.down { color: var(--red); }
+  .bw-row { display: flex; justify-content: space-between; padding: 3px 0; border-top: 1px solid var(--grid); font-size: 10.5px; }
+  .bw-row .label { color: var(--text-muted); }
+  .bw-row .value { font-weight: 700; }
 
-  /* ---- top callout (biggest win / sharpe) ---- */
-  .callout-row { display: flex; gap: 26px; flex-wrap: wrap; }
-  .callout-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .callout-value { font-size: 22px; font-weight: 800; margin-top: 2px; }
-  .callout-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; max-width: 260px; }
+  /* ---- BTC chart header price ---- */
+  .chart-hdr-price { font-size: 13px; font-weight: 800; }
 
   /* ---- execution cycle ---- */
   .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 14px; }
-  .exec-step {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
-    position: relative; z-index: 1;
-  }
+  .exec-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative; z-index: 1; }
   .exec-step .dot {
-    width: 32px; height: 32px; border-radius: 50%;
+    width: 28px; height: 28px; border-radius: 50%;
     border: 2px solid var(--border-hi); background: var(--panel);
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; color: var(--text-muted); font-weight: 800;
+    font-size: 11px; color: var(--text-muted); font-weight: 800;
     transition: all 0.3s ease;
   }
-  .exec-step .label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
-  .exec-step .detail { font-size: 10px; color: var(--text-muted); max-width: 130px; text-align: center; min-height: 13px; }
-  .exec-step.done .dot { border-color: rgba(0,255,65,0.4); color: var(--green); background: rgba(0,255,65,0.06); }
+  .exec-step .label { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+  .exec-step .detail { font-size: 9px; color: var(--text-muted); max-width: 130px; text-align: center; min-height: 12px; }
+  .exec-step.done .dot { border-color: rgba(57,211,83,0.4); color: var(--green); background: rgba(57,211,83,0.06); }
   .exec-step.done .label { color: var(--text-secondary); }
   .exec-step.current .dot {
-    border-color: var(--purple); color: #05070A; background: var(--purple);
-    box-shadow: 0 0 14px rgba(168,85,247,0.6);
+    border-color: var(--purple); color: #fff; background: var(--purple);
+    box-shadow: 0 0 12px rgba(110,64,201,0.6);
     animation: execPulse 1.3s ease-in-out infinite;
   }
   .exec-step.current .label { color: var(--purple); }
   .exec-step.current .detail { color: var(--text-primary); }
-  @keyframes execPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
-  .exec-connector { flex: 0 0 auto; width: 30px; height: 2px; background: var(--border); margin: 0 -4px 20px; position: relative; }
-  .exec-connector.done { background: rgba(0,255,65,0.4); }
-  #next-tick-countdown { font-size: 9.5px; color: var(--text-muted); }
+  @keyframes execPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+  .exec-connector { flex: 0 0 auto; width: 28px; height: 2px; background: var(--border); margin: 0 -4px 18px; }
+  .exec-connector.done { background: rgba(57,211,83,0.4); }
+  #next-tick-countdown, #exec-fill-price { font-size: 9.5px; color: var(--text-muted); }
 
   /* ---- strategy decision tree ---- */
-  #tree-edge-line { font-size: 10.5px; color: var(--text-secondary); padding: 7px 14px; border-bottom: 1px solid var(--grid); }
-  #tree-edge-line b { color: var(--text-primary); }
+  .tree-top-strip { display: flex; align-items: stretch; border-bottom: 1px solid var(--grid); }
+  .tree-mini-chart { width: 160px; flex-shrink: 0; padding: 6px 10px; border-right: 1px solid var(--grid); }
+  .tree-mini-chart canvas { display: block; width: 100%; height: 40px; }
+  .tree-mini-chart .mini-label { font-size: 8px; color: var(--text-muted); letter-spacing: 0.06em; }
+  .tree-edge-conf { flex: 1; text-align: center; padding: 8px 0; }
+  .tree-edge-conf .ec-label { font-size: 9px; color: var(--text-muted); letter-spacing: 0.1em; }
+  .tree-edge-conf .ec-value { font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .tree-edge-conf .ec-detail { font-size: 9.5px; color: var(--text-secondary); margin-top: 2px; }
+  .tree-pace-box { width: 170px; flex-shrink: 0; padding: 6px 10px; border-left: 1px solid var(--grid); text-align: right; }
+  .tree-pace-box .pace-label { font-size: 8px; color: var(--text-muted); letter-spacing: 0.06em; }
+  .tree-pace-box .pace-value { font-size: 15px; font-weight: 800; }
+  .tree-pace-box .next-value { font-size: 9.5px; color: var(--text-muted); margin-top: 4px; }
   .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
   .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
-  .tree-node-label { font-size: 13px; font-weight: 700; fill: var(--text-secondary); font-family: ui-monospace, monospace; text-anchor: middle; }
-  .tree-node-sub { font-size: 10px; fill: var(--text-muted); font-family: ui-monospace, monospace; text-anchor: middle; }
+  .tree-node-label { font-size: 11.5px; font-weight: 700; fill: var(--text-secondary); font-family: 'Courier New', monospace; text-anchor: middle; }
+  .tree-node-sub { font-size: 9px; fill: var(--text-muted); font-family: 'Courier New', monospace; text-anchor: middle; }
   .tree-edge { stroke: var(--border-hi); stroke-width: 1.5; fill: none; }
   .tree-flow-dot { filter: drop-shadow(0 0 4px var(--green)); }
-
-  /* ---- correlation map ---- */
-  .corr-grid { display: grid; grid-template-columns: 44px repeat(2, 1fr); gap: 4px; margin-top: 6px; }
-  .corr-cell { padding: 8px 6px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; }
-  .corr-head { font-size: 9.5px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
-  .corr-row-label { font-size: 9.5px; color: var(--text-secondary); display: flex; align-items: center; }
+  .tree-fill-box {
+    position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    background: var(--panel); border: 1.5px solid var(--gold); border-radius: 5px;
+    padding: 6px 16px; text-align: center; white-space: nowrap;
+    box-shadow: 0 0 14px rgba(227,179,65,0.18);
+  }
+  .tree-fill-box .ff-main { font-size: 13px; font-weight: 800; }
+  .tree-fill-box .ff-sub { font-size: 9px; color: var(--text-secondary); letter-spacing: 0.03em; margin-top: 2px; }
 
   /* ---- robustness grid ---- */
-  .rb-row { display: grid; grid-template-columns: 60px repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
-  .rb-cell { text-align: center; padding: 7px 4px; border-radius: 4px; font-size: 10.5px; font-weight: 700; }
-  .rb-label { color: var(--text-secondary); font-weight: 400; font-size: 9.5px; text-align: left; background: none !important; padding-left: 2px; }
+  .rb-row { display: grid; grid-template-columns: 76px repeat(3, 1fr); gap: 4px; margin-bottom: 4px; }
+  .rb-cell { text-align: center; padding: 8px 4px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .rb-label { color: var(--text-secondary); font-weight: 400; font-size: 9.5px; text-align: left; background: none !important; padding-left: 2px; display:flex; align-items:center; }
   .rb-head .rb-cell { font-size: 8.5px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
 
   /* ---- monte carlo ---- */
-  .mc-stats { display: flex; gap: 16px; padding: 8px 12px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); }
-  .mc-stat .mc-label { font-size: 8.5px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .mc-stat .mc-value { font-size: 14px; font-weight: 800; }
+  .mc-stats { display: flex; gap: 14px; padding: 7px 11px; flex-wrap: wrap; border-bottom: 1px solid var(--grid); }
+  .mc-stat .mc-label { font-size: 8px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .mc-stat .mc-value { font-size: 13px; font-weight: 800; }
+  .mc-stat.hi .mc-value { color: var(--red); }
 
   /* ---- live feed ---- */
   .feed-wrap { flex: 1; overflow: hidden; position: relative; min-height: 0; }
@@ -284,90 +283,76 @@
   .feed-row { display: flex; gap: 10px; align-items: center; padding: 5px 14px; font-size: 10.5px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   .feed-time { color: var(--text-muted); flex-shrink: 0; }
   .feed-badge {
-    flex-shrink: 0; display: inline-block; min-width: 42px; text-align: center;
+    flex-shrink: 0; display: inline-block; min-width: 40px; text-align: center;
     font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
     padding: 2px 7px; border-radius: 3px;
   }
-  .feed-badge.badge-open { color: #05070A; background: var(--cyan); }
-  .feed-badge.badge-win  { color: #05070A; background: var(--green); }
-  .feed-badge.badge-loss { color: #05070A; background: var(--red); }
+  .feed-badge.badge-buy  { color: #05070A; background: var(--green); }
+  .feed-badge.badge-sell { color: #05070A; background: var(--red); }
 
-  /* ---- decision timeline ---- */
+  /* ---- decision timeline / AI reasoning (additional detail) ---- */
   .timeline { display: flex; flex-direction: column; gap: 2px; }
-  .tl-node {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 8px; border-radius: 5px; border: 1px solid var(--border);
-    font-size: 10.5px; position: relative;
-  }
+  .tl-node { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px; border: 1px solid var(--border); font-size: 10px; position: relative; }
   .tl-node .name { flex: 1; letter-spacing: 0.03em; color: var(--text-secondary); }
-  .tl-node .state { font-weight: 700; font-size: 10px; letter-spacing: 0.04em; }
-  .tl-node.active { border-color: rgba(0,255,65,0.4); box-shadow: 0 0 10px rgba(0,255,65,0.12) inset; }
+  .tl-node .state { font-weight: 700; font-size: 9.5px; letter-spacing: 0.04em; }
+  .tl-node.active { border-color: rgba(57,211,83,0.4); box-shadow: 0 0 10px rgba(57,211,83,0.12) inset; }
   .tl-node.active .state { color: var(--green); }
-  .tl-node.waiting .state { color: var(--yellow); }
-  .tl-node.blocked { border-color: rgba(255,59,59,0.4); }
+  .tl-node.waiting .state { color: var(--gold); }
+  .tl-node.blocked { border-color: rgba(248,81,73,0.4); }
   .tl-node.blocked .state { color: var(--red); }
   .tl-node.nodata .state { color: var(--text-muted); }
-  .tl-arrow { text-align: center; color: var(--text-muted); font-size: 10px; line-height: 1; }
+  .tl-arrow { text-align: center; color: var(--text-muted); font-size: 9px; line-height: 1; }
   .tl-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   #timeline-body { position: relative; }
-  .tl-flow-dot {
-    position: absolute; left: 3px; width: 9px; height: 9px; border-radius: 50%;
-    background: var(--cyan); box-shadow: 0 0 10px var(--cyan), 0 0 3px #fff;
-    opacity: 0; pointer-events: none; z-index: 5;
-  }
+  .tl-flow-dot { position: absolute; left: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px var(--cyan), 0 0 3px #fff; opacity: 0; pointer-events: none; z-index: 5; }
   .tl-flow-dot.run { animation: tl-flow 1.6s ease-in-out 1; }
-  @keyframes tl-flow {
-    0%   { top: 0%;   opacity: 0; }
-    8%   { opacity: 1; }
-    92%  { opacity: 1; }
-    100% { top: 96%;  opacity: 0; }
-  }
-
-  /* ---- AI reasoning ---- */
+  @keyframes tl-flow { 0% { top: 0%; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { top: 96%; opacity: 0; } }
   .reason-line { margin-bottom: 8px; }
-  .reason-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-  .reason-value { font-size: 13px; font-weight: 700; margin-top: 2px; }
-  .reason-quote {
-    font-size: 12px; color: var(--cyan); margin-top: 2px;
-    border-left: 2px solid var(--cyan); padding-left: 8px;
-  }
+  .reason-label { font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
+  .reason-value { font-size: 12px; font-weight: 700; margin-top: 2px; }
+  .reason-quote { font-size: 11px; color: var(--cyan); margin-top: 2px; border-left: 2px solid var(--cyan); padding-left: 8px; }
 
-  /* ---- trade table ---- */
-  table.dense { width: 100%; border-collapse: collapse; font-size: 11px; }
-  table.dense thead th {
-    position: sticky; top: 0; background: var(--panel);
-    text-align: left; font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase;
-    color: var(--text-muted); padding: 6px 8px; border-bottom: 1px solid var(--border);
-  }
+  .metric-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--grid); }
+  .metric-row .label { color: var(--text-secondary); font-size: 10px; }
+  .metric-row .value { font-weight: 700; }
+  .sig-asset-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-top: 1px solid var(--grid); font-size: 10.5px; }
+  .pill { font-size: 9px; padding: 2px 8px; border-radius: 20px; border: 1px solid currentColor; letter-spacing: 0.03em; }
+  .pill.ready { color: var(--green); }
+  .pill.cooldown { color: var(--gold); }
+  .warmup-track { position: relative; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 6px 0 10px; overflow: hidden; }
+  .warmup-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); transition: width 0.6s ease; }
+  .corr-grid { display: grid; grid-template-columns: 40px repeat(2, 1fr); gap: 4px; margin-top: 6px; }
+  .corr-cell { padding: 7px 6px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 11px; }
+  .corr-head { font-size: 9px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
+  .corr-row-label { font-size: 9px; color: var(--text-secondary); display: flex; align-items: center; }
+
+  table.dense { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  table.dense thead th { position: sticky; top: 0; background: var(--panel); text-align: left; font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); padding: 6px 8px; border-bottom: 1px solid var(--border); }
   table.dense tbody td { padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   table.dense tbody tr.win td.pnl { color: var(--green); }
   table.dense tbody tr.loss td.pnl { color: var(--red); }
-  table.dense tbody tr.open td.pnl { color: var(--yellow); }
-  .empty-row { color: var(--text-muted); text-align: center; padding: 16px 0; }
-
-  .sub-panel-title {
-    font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
-    padding: 8px 12px 2px;
-  }
+  table.dense tbody tr.open td.pnl { color: var(--gold); }
+  .empty-row { color: var(--text-muted); text-align: center; padding: 14px 0; }
+  .sub-panel-title { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 8px 12px 2px; }
   #signal-combiner-table tbody td.plain { color: var(--text-primary); }
-  #signal-combiner-table tbody tr.win { background: rgba(0,255,65,0.06); }
+  #signal-combiner-table tbody tr.win { background: rgba(57,211,83,0.06); }
 
-  /* ---- candlestick / equity canvases ---- */
   .chart-wrap { position: relative; flex: 1; min-height: 0; }
   .chart-wrap canvas { display: block; width: 100%; height: 100%; }
-  .chart-caption {
-    font-size: 9px; color: var(--text-muted); padding: 4px 12px 8px; border-top: 1px solid var(--grid);
-  }
+  .chart-caption { font-size: 8.5px; color: var(--text-muted); padding: 4px 11px 7px; border-top: 1px solid var(--grid); }
 </style>
 </head>
 <body>
 
 <div id="header-bar">
-  <span class="brand"><span class="wallet-dot"></span>FORGEVIEWAI // QUANT TERMINAL</span>
+  <span class="brand"><span class="live-dot"></span>FORGEVIEWAI // QUANT</span>
+  <span class="sep">·</span>
+  <span class="tagline">MARKOV &middot; KELLY &middot; SELF-LEARN</span>
+  <span class="sep">·</span>
+  <span class="subtitle">BTC/ETH/SOL 5M POLYMARKET DASHBOARD</span>
   <span id="hdr-quant-mode-wrap"></span>
-  <div id="ticker-wrap"><div id="ticker-track"></div></div>
   <div class="hdr-right">
-    <span>TIME <b id="hdr-time" class="num">--:--:--</b></span>
+    <span>UTC <b id="hdr-time" class="num">--:--:--</b></span>
     <span class="sep">|</span>
     <span>STATUS <b id="hdr-status">--</b></span>
     <span class="sep">|</span>
@@ -377,9 +362,14 @@
   </div>
 </div>
 
+<div id="ticker-bar">
+  <span class="live-pill"><span class="live-dot"></span>LIVE</span>
+  <div id="ticker-wrap"><div id="ticker-track"></div></div>
+</div>
+
 <div class="terminal">
 
-  <!-- ================= ROW 1: PORTFOLIO (40%, cream) | BIGGEST WIN + BTC CHART (60%) ================= -->
+  <!-- ================= ROW 1: PORTFOLIO (35%, cream) | BIGGEST WIN (40%) + BTC CHART (60%) (65%) ================= -->
   <div class="row1">
     <div class="panel panel-cream" id="portfolio-panel">
       <div class="panel-head">
@@ -390,31 +380,35 @@
         </span>
       </div>
       <div class="panel-body">
+        <div class="wallet-line">
+          <span>FORGEVIEWAI &middot; PAPER TRADING</span>
+          <span class="wallet-tag">REAL DATA</span>
+        </div>
         <div class="hero num" id="pf-total-pnl">--</div>
-        <div id="pf-session-sub" class="pace-sub" style="margin-bottom:6px;"></div>
-        <div id="pf-metrics" class="metric-list"></div>
-        <div class="section-divider">Risk (Daily Loss Cap Used)</div>
-        <div id="risk-gauge-body"></div>
-        <div class="section-divider">Pace</div>
-        <div id="pace-body"></div>
-        <div class="section-divider">Advanced Stats <span style="text-transform:none;letter-spacing:0;">(data/stats.json, all-time)</span></div>
-        <div id="advanced-stats-body"></div>
+        <div id="pf-hero-sub" class="hero-sub"></div>
+        <div id="pf-triple-stat"></div>
+        <div id="liq-risk-body"></div>
+        <div id="stat-grid-body"></div>
+        <div id="pf-session-sub" class="hero-sub" style="margin-top:8px;"></div>
       </div>
     </div>
 
     <div class="row1-right">
-      <div class="panel" style="flex:0 0 auto;">
+      <div class="panel">
         <div class="panel-head">
-          <div class="panel-title">Biggest Win &middot; Sharpe</div>
+          <div class="panel-title"><span class="glyph">&#9733;</span>Biggest Win</div>
           <span class="real-tag">REAL</span>
         </div>
-        <div class="panel-body" id="top-callout-body"></div>
+        <div class="panel-body" id="bw-body"></div>
       </div>
 
-      <div class="panel" style="flex:1; min-height:280px;">
+      <div class="panel">
         <div class="panel-head">
-          <div class="panel-title">BTC 5-Min Chart</div>
-          <span class="real-tag">REAL</span>
+          <div class="panel-title"><span class="glyph">&#9632;</span>BTC / USD &middot; 5-Min</div>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span id="chart-hdr-price" class="chart-hdr-price num"></span>
+            <span class="real-tag">REAL</span>
+          </span>
         </div>
         <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
         <div class="chart-caption" id="candle-caption"></div>
@@ -423,12 +417,13 @@
   </div>
 
   <!-- ================= ROW 2: EXECUTION CYCLE (full width) ================= -->
-  <div class="panel" style="height:150px;">
+  <div class="panel" style="height:110px;">
     <div class="panel-head">
       <div class="panel-title">Execution Cycle</div>
       <span style="display:flex;align-items:center;gap:10px;">
-        <span id="next-signal-countdown" style="font-size:9.5px;color:var(--text-muted);"></span>
+        <span id="next-signal-countdown" style="font-size:9px;color:var(--text-muted);"></span>
         <span id="next-tick-countdown"></span>
+        <span id="exec-fill-price"></span>
         <span class="real-tag">REAL</span>
       </span>
     </div>
@@ -436,55 +431,70 @@
   </div>
 
   <!-- ================= ROW 3: STRATEGY DECISION TREE (full width, large) ================= -->
-  <div class="panel" style="height:420px;">
+  <div class="panel" style="height:400px;">
     <div class="panel-head">
       <div class="panel-title">Strategy Decision Tree</div>
       <span class="real-tag">REAL</span>
     </div>
-    <div id="tree-edge-line"></div>
+    <div class="tree-top-strip">
+      <div class="tree-mini-chart">
+        <div class="mini-label">LIVE PNL (ALL-TIME CURVE)</div>
+        <canvas id="tree-mini-canvas"></canvas>
+      </div>
+      <div class="tree-edge-conf">
+        <div class="ec-label">EDGE CONF (BTC)</div>
+        <div class="ec-value" id="tree-edge-value">--</div>
+        <div class="ec-detail" id="tree-edge-detail"></div>
+      </div>
+      <div class="tree-pace-box">
+        <div class="pace-label">PACE</div>
+        <div class="pace-value num" id="tree-pace-value">--</div>
+        <div class="next-value" id="tree-next-value"></div>
+      </div>
+    </div>
     <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
   </div>
 
   <!-- ================= ROW 4: ROBUSTNESS | MONTE CARLO | PNL GROWTH ================= -->
   <div class="row4">
-    <div class="panel" style="height:280px;">
+    <div class="panel" style="height:270px;">
       <div class="panel-head">
-        <div class="panel-title">Robustness &middot; Win Rate by Day &times; Asset</div>
+        <div class="panel-title"><span class="glyph">&#9632;</span>Robustness &middot; By Asset (1D / 3D / 7D)</div>
         <span class="real-tag">REAL</span>
       </div>
       <div class="panel-body" id="robustness-body"></div>
     </div>
 
-    <div class="panel" style="height:280px;">
+    <div class="panel" style="height:270px;">
       <div class="panel-head">
-        <div class="panel-title">Monte Carlo &middot; 7000 Paths (Real Win Rate / Avg Win / Avg Loss)</div>
+        <div class="panel-title"><span class="glyph">~</span>Monte Carlo &middot; 7,000 Simulated Paths</div>
         <span class="real-tag">REAL</span>
       </div>
       <div class="mc-stats" id="mc-stats"></div>
       <div class="chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
     </div>
 
-    <div class="panel" style="height:280px;">
+    <div class="panel" style="height:270px;">
       <div class="panel-head">
-        <div class="panel-title">PnL Growth</div>
-        <span class="real-tag">REAL</span>
+        <div class="panel-title"><span class="glyph">&#9642;</span>PnL Growth &middot; All-Time</div>
+        <span id="pnl-growth-pct" class="num" style="font-size:11px;font-weight:800;"></span>
       </div>
       <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
     </div>
   </div>
 
   <!-- ================= BOTTOM: POLYMARKET BOT LIVE FEED (full width) ================= -->
-  <div class="panel" style="height:190px;">
+  <div class="panel" style="height:180px;">
     <div class="panel-head">
-      <div class="panel-title">Polymarket Bot Live Feed</div>
+      <div class="panel-title"><span class="glyph">&#9642;</span>Polymarket Bot &middot; Live Feed</div>
       <span class="real-tag">REAL</span>
     </div>
     <div class="feed-wrap"><div class="feed-track" id="feed-track"></div></div>
   </div>
 
   <!-- ================= ADDITIONAL DETAIL (beyond the reference layout) -------
-       Everything above matches the requested COINMAN2-style layout exactly.
-       The panels below are extra real-data detail built up over the project's
+       The seven sections above match the requested reference layout. The
+       panels below are extra real-data detail built up over the project's
        life (AI signal reasoning, correlation, decision timeline, live trade
        tables, per-signal breakdown) -- kept so no existing functionality is
        lost, just placed after the primary reference rows. ================= -->
@@ -492,14 +502,14 @@
 
   <div class="row-extra-2col">
     <div class="col-stack">
-      <div class="panel" style="height:260px;">
+      <div class="panel" style="height:250px;">
         <div class="panel-head">
           <div class="panel-title">AI Signal Panel</div>
           <span class="real-tag">REAL</span>
         </div>
         <div class="panel-body" id="ai-signal-body"></div>
       </div>
-      <div class="panel" style="height:300px;">
+      <div class="panel" style="height:280px;">
         <div class="panel-head">
           <div class="panel-title">Correlation Map</div>
           <span class="real-tag">REAL</span>
@@ -508,14 +518,14 @@
       </div>
     </div>
     <div class="col-stack">
-      <div class="panel" style="height:280px;">
+      <div class="panel" style="height:260px;">
         <div class="panel-head">
           <div class="panel-title">Decision Timeline</div>
           <span class="real-tag">REAL</span>
         </div>
         <div class="panel-body" id="timeline-body"></div>
       </div>
-      <div class="panel" style="height:280px;">
+      <div class="panel" style="height:270px;">
         <div class="panel-head">
           <div class="panel-title">AI Reasoning</div>
           <span class="real-tag">REAL</span>
@@ -567,157 +577,90 @@
    -----------------------------------------------------------------------------
    data/paper_trades.jsonl        real trades: asset, direction, entry, result,
                                    PnL, open/close timestamps, signal_reason,
-                                   signal_confidence  (deduped by trade_id).
-                                   Backs Portfolio, Biggest Win/Sharpe, Pace,
-                                   Robustness grid, PnL Growth, Live Feed,
-                                   Live Trades table, Monte Carlo inputs.
+                                   signal_confidence, size_usd (deduped by
+                                   trade_id). Backs Portfolio, Biggest Win,
+                                   Robustness, PnL Growth, Live Feed, Live
+                                   Trades table, Monte Carlo inputs, and the
+                                   client-computed all-time %-return and avg
+                                   hold-time figures (see computeAllTimeReturnPct
+                                   / computeAvgHoldMinutes below).
    data/state.json                daily_loss_usd, loss_streak, system_stopped,
                                    last_signal_ts per asset, session_start,
-                                   session_start_clean.
-                                   Backs header STATUS, Risk Gauge, Decision
-                                   Timeline. Pace intentionally does NOT use
-                                   session_start/hours_running here -- that
-                                   resets on every bot restart and inflates
-                                   pace. It uses the earliest open_ts across
-                                   paper_trades.jsonl instead (or
-                                   session_start_clean, see below).
+                                   session_start_clean. Backs header STATUS,
+                                   LIQ RISK gauge, Decision Timeline. Pace uses
+                                   the earliest open_ts across paper_trades.jsonl
+                                   (or session_start_clean after a reset), never
+                                   session_start/hours_running -- that resets on
+                                   every bot restart and inflates pace.
    session_start_clean            NOT written by the bot. Written by
                                    scripts/dashboard_server.py's
                                    POST /api/reset-session, called by the
-                                   "Reset Session" button in the Portfolio
-                                   panel. When set, Portfolio/Pace/Biggest
-                                   Win/Decision Tree all scope to trades with
-                                   open_ts >= session_start_clean ("SESSION
-                                   STATS (since reset)" label) -- purely a
-                                   display cutoff, paper_trades.jsonl is never
+                                   "Reset Session" button. Purely a display
+                                   cutoff -- paper_trades.jsonl is never
                                    modified. Requires the dashboard to be
-                                   served via scripts/dashboard_server.py
-                                   (plain `python -m http.server` can't accept
-                                   the POST).
-   data/online_model_status.json  small export written by
-                                   core/online_model.py (OnlineQuantModel.save()
-                                   / _load()) every time the model updates or
-                                   loads. The trained model itself lives in
-                                   data/online_model_state.pkl, a Python pickle
-                                   a browser cannot parse -- this file mirrors
-                                   just n_updates / warmup_trades / fitted /
-                                   is_warmed_up as JSON so the dashboard can
-                                   read real warmup progress without a backend.
-   data/stats.json                 Written by core/stats_calculator.py
-                                   (StatsCalculator.export(), called from
-                                   run.py every STATS_EXPORT_INTERVAL_SEC=60s)
-                                   from data/paper_trades.jsonl: sharpe_ratio,
-                                   avg_rr, apy_pct, best_day_pnl,
-                                   max/current_win_streak. Backs Portfolio's
-                                   "Advanced Stats" section. apy_pct is a
-                                   rate-of-return figure relative to a
-                                   notional $100 capital base, NOT tied to
-                                   any real tracked balance.
-   data/live_status.json          small export written by run.py every
-                                   poll tick (right after computing
-                                   LiveFeatureCollector.extract()) with the
-                                   current btc_eth_correlation value. That
-                                   field does NOT exist in
-                                   data/quant_features.jsonl (that file is the
-                                   OLDER shadow QuantFeatureExtractor's output,
-                                   a different feature set) -- this is the
-                                   correct real source for it. Also carries
-                                   quant_only_mode (mirrors
-                                   config.settings.QUANT_ONLY_MODE) -- feeds
-                                   the header's QUANT MODE badge.
-   data/quant_features.jsonl      used for "last signal confidence": the
-                                   most recent entry's model_probability (the
-                                   older shadow quant model's logged
-                                   confidence at signal time).
+                                   served via scripts/dashboard_server.py.
+   data/online_model_status.json  n_updates / warmup_trades / fitted /
+                                   is_warmed_up, written by
+                                   core/online_model.py on every update/load.
+   data/stats.json                 sharpe_ratio, avg_rr, apy_pct, best_day_pnl,
+                                   max/current_win_streak -- written by
+                                   core/stats_calculator.py every 60s.
+                                   apy_pct/all-time %-return are relative to a
+                                   notional $100 capital base (same constant as
+                                   config.settings.STATS_APY_NOTIONAL_CAPITAL_USD),
+                                   NOT tied to any real tracked balance.
+   data/live_status.json          per-tick btc_eth_correlation + quant_only_mode,
+                                   written by run.py right after
+                                   LiveFeatureCollector.extract().
+   data/quant_features.jsonl      used only for "last signal confidence" (the
+                                   older shadow model's logged confidence).
    data/price_history.jsonl       real per-tick yes_price samples for BTC/ETH/
-                                   SOL, ~5s cadence, logged by run.py every poll.
-                                   Bucketed client-side into real OHLC candles
-                                   (open/high/low/close per time bucket) for
-                                   the BTC 5-Min Chart -- see computeOhlcCandles.
+                                   SOL, ~5s cadence. Bucketed client-side into
+                                   real OHLC candles (open/high/low/close per
+                                   time bucket) for the BTC 5-Min Chart -- see
+                                   computeOhlcCandles.
    data/market_bias.jsonl         written by run.py every 60s via
-                                   core/market_bias.py (CoinGecko's free,
-                                   no-key API -- a real, independent external
-                                   source, not Polymarket's own prices).
-                                   Last entry's btc_price/btc_24h_change/
-                                   eth_price/eth_24h_change/sol_price/
-                                   sol_24h_change/market_bias feed the header
-                                   ticker and the AI Signal Panel. The SAME
-                                   bias value gates YES signals in
-                                   signals/repricing_signal.py when BEARISH.
-   data/exchange_status.json      written by run.py every 60s from
-                                   MarketFetcher.ping() (a lightweight real
-                                   GET against Polymarket's Gamma API) --
-                                   feeds the header bar's EXCHANGE field.
-   data/latency.json              written by core/market_fetcher.py
-                                   after EVERY real Polymarket HTTP call
-                                   (MarketFetcher._timed_get wraps every
-                                   session.get in the class) -- avg_ms/
-                                   p99_ms/last_ms over a rolling 200-call
-                                   window. Feeds the header bar's LATENCY
-                                   field. Not used by any trading decision.
-   data/api_stats.json            written by core/market_fetcher.py
-                                   every API_STATS_EXPORT_INTERVAL_SEC (60s)
-                                   from the same _timed_get call-counter as
-                                   latency.json above -- calls_last_minute is
-                                   a genuine rolling-60s count of real
-                                   Polymarket HTTP calls, calls_total is the
-                                   lifetime counter since this process
-                                   started. Feeds the header bar's API field.
-   data/fear_greed.json           written by run.py every 15 min from
-                                   alternative.me's free Fear & Greed Index
-                                   API (core/market_bias.py
-                                   FearGreedFetcher) -- feeds AI Signal
-                                   Panel's Macro Sentiment field.
-   data/macro_events.json         written by run.py every hour from
-                                   ForexFactory's free weekly economic
-                                   calendar (core/macro_events.py) --
-                                   next/latest 3 high-impact USD events.
-                                   Feeds AI Signal Panel's event list.
-   data/market_bias.jsonl (full   Correlation Map's SOL x BTC section reads
-   history, not just last entry)  the FULL file (not just the last entry)
-                                   to compute a real rolling Pearson
-                                   correlation of BTC/SOL spot-price
-                                   returns client-side -- a different,
-                                   clearly-labeled metric from the
-                                   Polymarket contract-price correlation
-                                   above it (different underlying series,
-                                   not directly comparable).
-   data/execution_cycle.json      written by run.py at each real stage
-                                   of the scan->detect->validate->size->fill
-                                   pipeline (_export_execution_cycle), plus a
-                                   separate settle event when a trade closes.
-                                   Feeds the Execution Cycle panel, the
-                                   Strategy Decision Tree's SIZE/FILL nodes,
-                                   and the NEXT TICK countdown (which is a
-                                   real countdown against the real, documented
-                                   MARKET_POLL_INTERVAL_SEC config value, not a
-                                   fabricated timer). This is a live pointer to
-                                   the single most-recent stage reached across
-                                   any market, not a per-trade history -- most
-                                   ticks only ever reach "scan" (no signal that
-                                   tick), which is the honest common case.
+                                   core/market_bias.py (CoinGecko spot prices +
+                                   24h change + a bearish/bullish/neutral bias
+                                   label). Feeds the ticker and AI Signal Panel.
+   data/exchange_status.json, data/latency.json, data/api_stats.json
+                                   written by core/market_fetcher.py from real
+                                   Polymarket HTTP calls -- feed the header
+                                   bar's STATUS/LATENCY/API fields.
+   data/fear_greed.json, data/macro_events.json
+                                   external real feeds (alternative.me,
+                                   ForexFactory) -- feed the AI Signal Panel.
+   data/execution_cycle.json      real stage of the scan->detect->validate->
+                                   size->fill pipeline, written by run.py at
+                                   each stage. Feeds Execution Cycle, the
+                                   Strategy Decision Tree's SIZE/FILL nodes and
+                                   fill box, and the NEXT tick countdown (a
+                                   real countdown against the documented
+                                   MARKET_POLL_INTERVAL_SEC, not fabricated).
    data/signal_combiner_status.json  Per-asset order_book/momentum/volume
                                    signal state + combined confidence, written
-                                   every tick by core/signal_combiner.py.
-                                   Feeds the Signal Combiner breakdown table
-                                   and the Strategy Decision Tree's branch
-                                   nodes/edge-confidence line (BTC shown).
+                                   every tick by core/signal_combiner.py. Feeds
+                                   the Signal Combiner table and the Decision
+                                   Tree's EDGE CONF readout / branch nodes.
    -----------------------------------------------------------------------------
-   Things the reference layout showed that we have no real source for (e.g. a
-   leverage/liquidation-risk gauge -- this project trades simple Polymarket
-   binary contracts with no margin or liquidation mechanic at all) are marked
-   with a yellow "COMING SOON" tag rather than faked. Nothing here is invented.
+   Things the reference layout showed with no real backing metric in this
+   codebase -- a synthetic "HORIZON 79/100" score, undefined PUBT/RISK/STAT
+   columns, "CHEAP TAIL"/"TAIL TRADE" markers for the extreme-price NO-direction
+   strategy retired in docs/polymarket/DECISIONS.md D-003, and a real on-chain
+   wallet address (this is a paper-trading bot with no wallet) -- are
+   deliberately omitted or relabeled honestly rather than invented.
    ============================================================================= */
 
 const REFRESH_MS = 5000;
-const TRACKED_ASSETS = ['BTC', 'ETH']; // SOL is explicitly out of scope (config REPRICING_FROZEN.assets)
-const SIGNAL_COOLDOWN_SEC = 120; // mirrors config/settings.py -- keep in sync if that changes
-const MAX_DAILY_LOSS_USD = 1000.0; // mirrors config/settings.py -- keep in sync if that changes
+const TRACKED_ASSETS = ['BTC', 'ETH'];
+const SIGNAL_COOLDOWN_SEC = 120;
+const MAX_DAILY_LOSS_USD = 1000.0;
 const MAX_LOSS_STREAK = 50;
-const MARKET_POLL_INTERVAL_SEC = 3; // mirrors config/settings.py MARKET_POLL_INTERVAL_SEC
-const STALE_AFTER_MS = 15000; // how old a telemetry file's timestamp can be before we call it stale, not "active"
-const CANDLE_BUCKET_SEC = 60; // 1-minute OHLC buckets built from ~5s-cadence price_history.jsonl ticks
-const CANDLE_COUNT = 60; // last 60 buckets = last hour
+const MARKET_POLL_INTERVAL_SEC = 3;
+const STALE_AFTER_MS = 15000;
+const CANDLE_BUCKET_SEC = 60;
+const CANDLE_COUNT = 60;
+const NOTIONAL_CAPITAL_USD = 100.0; // mirrors config.settings.STATS_APY_NOTIONAL_CAPITAL_USD
 
 async function fetchNoCache(path) {
   const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
@@ -736,9 +679,6 @@ async function fetchJsonl(path) {
     return out;
   } catch (e) { return null; }
 }
-// Same as fetchJsonl, but only parses the LAST `maxLines` non-empty lines --
-// price_history.jsonl grows forever at ~3 ticks/5s across 3 assets, so parsing
-// the whole file client-side on every 5s refresh would get slower over time.
 async function fetchJsonlTail(path, maxLines) {
   try {
     const text = await (await fetchNoCache(path)).text();
@@ -761,13 +701,13 @@ function has(v) { return v !== null && v !== undefined && !(typeof v === 'number
 function fmtUsd(n, decimals) {
   decimals = decimals == null ? 2 : decimals;
   const sign = n > 0 ? '+' : (n < 0 ? '-' : '');
-  return sign + '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return sign + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 function fmtClock(iso) {
   if (!iso) return '--:--:--';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '--:--:--';
-  return d.toLocaleTimeString(undefined, { hour12: false });
+  return d.toLocaleTimeString('en-US', { hour12: false });
 }
 function fmtAge(iso) {
   if (!iso) return null;
@@ -775,11 +715,6 @@ function fmtAge(iso) {
   if (isNaN(d.getTime())) return null;
   return Date.now() - d.getTime();
 }
-// session_start_clean (set by the "Reset Session" button, POST /api/reset-session)
-// is a pure display cutoff -- never mutates paper_trades.jsonl. Every panel that
-// claims to show "session" stats must scope through this same helper so the
-// cutoff can't drift between panels (this was the bug in the Live Trades table:
-// it ignored the cutoff Portfolio/Pace already used).
 function scopeTradesToSession(trades, state) {
   const sessionStartClean = state && state.session_start_clean;
   const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
@@ -822,8 +757,6 @@ async function loadLastQuantFeature() {
   }
   return null;
 }
-// Last CANDLE_COUNT*CANDLE_BUCKET_SEC/5 ticks is plenty of raw samples to build
-// CANDLE_COUNT real 1-min OHLC buckets from ~5s-cadence ticks; padded generously.
 async function loadPriceHistoryTicks(asset) {
   const rows = await fetchJsonlTail('data/price_history.jsonl', 6000);
   if (!rows) return null;
@@ -859,7 +792,7 @@ async function loadSignalCombinerStatus() { return await fetchJson('data/signal_
 
 /* ---------------- 1. HEADER + TICKER ---------------- */
 function renderHeader(state, exchangeStatus, latency, liveStatus, apiStats) {
-  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
+  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
   const statusEl = document.getElementById('hdr-status');
   const latEl = document.getElementById('hdr-latency');
   const apiEl = document.getElementById('hdr-api-calls');
@@ -882,8 +815,6 @@ function renderHeader(state, exchangeStatus, latency, liveStatus, apiStats) {
   const stopped = !!state.system_stopped;
   statusEl.textContent = stopped ? 'STOPPED' : 'RUNNING';
   statusEl.className = stopped ? 'status-stop' : 'status-run';
-  // exchangeStatus is not shown in the (space-constrained) header anymore but
-  // still exists as a real signal -- surfaced instead via title tooltip.
   if (exchangeStatus && has(exchangeStatus.status)) {
     statusEl.title = `Exchange: ${exchangeStatus.status} (checked ${fmtClock(exchangeStatus.checked_at)})`;
   }
@@ -891,7 +822,7 @@ function renderHeader(state, exchangeStatus, latency, liveStatus, apiStats) {
 function tickerItem(label, price, chg, decimals) {
   if (!has(price)) return `<span class="ticker-item"><b>${label}</b>${noData()}</span>`;
   const chgTxt = has(chg) ? ` <span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : '';
-  return `<span class="ticker-item"><b>${label}</b>$${price.toLocaleString(undefined, { maximumFractionDigits: decimals })}${chgTxt}</span>`;
+  return `<span class="ticker-item"><b>${label}</b>$${price.toLocaleString('en-US', { maximumFractionDigits: decimals })}${chgTxt}</span>`;
 }
 function renderTicker(marketBias) {
   const track = document.getElementById('ticker-track');
@@ -903,10 +834,10 @@ function renderTicker(marketBias) {
   ].join('<span class="ticker-sep">&bull;</span>');
   const bias = has(marketBias.market_bias) ? `<span class="ticker-item">BIAS <b style="color:${marketBias.market_bias === 'BULLISH' ? 'var(--green)' : marketBias.market_bias === 'BEARISH' ? 'var(--red)' : 'var(--text-secondary)'};">${marketBias.market_bias}</b></span><span class="ticker-sep">&bull;</span>` : '';
   const block = bias + items + '<span class="ticker-sep">&bull;</span>';
-  track.innerHTML = block + block; // duplicated once for a seamless scroll loop
+  track.innerHTML = block + block;
 }
 
-/* ---------------- 2. PORTFOLIO + RISK GAUGE + PACE ---------------- */
+/* ---------------- 2. PORTFOLIO ---------------- */
 function computePortfolio(trades) {
   const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
   const wins = closed.filter(t => t.pnl_usd > 0);
@@ -937,148 +868,109 @@ function computePortfolio(trades) {
   const earliestTradeMs = sortedClosed.length ? new Date(sortedClosed[0].close_ts).getTime() : null;
   const historyDays = earliestTradeMs != null ? (now - earliestTradeMs) / (24 * 3600 * 1000) : null;
 
+  const holdMinutes = closed.filter(t => t.open_ts && t.close_ts).map(t => (new Date(t.close_ts) - new Date(t.open_ts)) / 60000);
+  const avgHoldMinutes = holdMinutes.length ? holdMinutes.reduce((s, v) => s + v, 0) / holdMinutes.length : null;
+
   return {
     closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, avgRR, profitFactor, expectancy, maxDD,
-    weeklyPnl, monthlyPnl, historyDays,
+    weeklyPnl, monthlyPnl, historyDays, avgHoldMinutes,
   };
+}
+// All-time %-return relative to the same $100 notional base
+// core/stats_calculator.py uses for APY -- non-annualized, so it is directly
+// comparable to totalPnl in dollars (a $30 all-time PnL == +30%).
+function computeAllTimeReturnPct(totalPnl) { return (totalPnl / NOTIONAL_CAPITAL_USD) * 100; }
+function computePace(portfolio, state, trades) {
+  if (!portfolio || !trades || !trades.length) return null;
+  const sessionStartClean = state && state.session_start_clean;
+  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
+  let startMs, basisLabel;
+  if (cutMs && !isNaN(cutMs)) {
+    startMs = cutMs; basisLabel = 'since reset';
+  } else {
+    const openTimes = trades.map(t => new Date(t.open_ts).getTime()).filter(ms => !isNaN(ms));
+    if (!openTimes.length) return null;
+    startMs = Math.min(...openTimes); basisLabel = 'since first trade ever';
+  }
+  const hoursRunning = (Date.now() - startMs) / 3600000;
+  if (!(hoursRunning > 0)) return { pace: null, hoursRunning: 0, basisLabel, startMs };
+  return { pace: portfolio.totalPnl / hoursRunning, hoursRunning, basisLabel, startMs };
 }
 function renderPortfolio(trades, state) {
   const heroEl = document.getElementById('pf-total-pnl');
   const titleEl = document.getElementById('pf-panel-title');
-  const subEl = document.getElementById('pf-session-sub');
+  const heroSubEl = document.getElementById('pf-hero-sub');
+  const sessionSubEl = document.getElementById('pf-session-sub');
   if (!trades) {
     heroEl.innerHTML = noData();
-    document.getElementById('pf-metrics').innerHTML = '';
+    document.getElementById('pf-triple-stat').innerHTML = '';
     return null;
   }
   const { scoped, cutMs } = scopeTradesToSession(trades, state);
   if (titleEl) titleEl.textContent = cutMs ? 'SESSION STATS (since reset)' : 'Portfolio';
-  if (subEl) {
-    subEl.innerHTML = cutMs
-      ? `reset at ${fmtClock(state.session_start_clean)} &middot; ${trades.length - scoped.length} earlier trade(s) hidden, still in paper_trades.jsonl`
-      : '';
-  }
   const m = computePortfolio(scoped);
   animateNumber(heroEl, m.totalPnl, v => fmtUsd(v));
   heroEl.classList.toggle('up', m.totalPnl >= 0);
   heroEl.classList.toggle('down', m.totalPnl < 0);
 
-  const rows = [
-    ['Win Rate', m.closed.length ? (m.winRate * 100).toFixed(1) + '%' : null],
-    ['Total Trades', String(m.closed.length)],
-    ['Wins / Losses', m.wins.length + ' / ' + m.losses.length],
-    ['Avg Win', m.wins.length ? fmtUsd(m.avgWin) : null],
-    ['Avg Loss', m.losses.length ? fmtUsd(-m.avgLoss) : null],
-    ['Avg R/R', m.avgRR == null ? null : m.avgRR.toFixed(2)],
-    ['Max Drawdown', m.closed.length ? fmtUsd(-m.maxDD) : null],
-    ['Profit Factor', m.profitFactor == null ? null : (isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : '&infin;')],
-    ['Expectancy/Trade', m.expectancy == null ? null : fmtUsd(m.expectancy)],
-    ['Weekly PnL (7d)', m.weeklyPnl == null ? null : fmtUsd(m.weeklyPnl)],
-    ['Monthly PnL (30d)', m.monthlyPnl == null ? null : fmtUsd(m.monthlyPnl)],
-  ];
-  document.getElementById('pf-metrics').innerHTML = rows.map(([label, val]) => `
-    <div class="metric-row">
-      <span class="label">${label}</span>
-      <span class="value num">${val != null ? val : noData()}</span>
-    </div>
-  `).join('') + (m.historyDays != null && m.historyDays < 30
-    ? `<div style="font-size:9.5px;color:var(--cream-muted);margin-top:6px;">trade history spans only ${m.historyDays.toFixed(1)} days, so weekly/monthly figures may equal (or nearly equal) the all-time total</div>` : '');
+  const allTimePct = computeAllTimeReturnPct(m.totalPnl);
+  const daysTxt = m.historyDays != null ? m.historyDays.toFixed(1) : '?';
+  heroSubEl.innerHTML = m.closed.length
+    ? `ALL-TIME PNL &middot; ${daysTxt} DAYS &middot; <span class="${allTimePct >= 0 ? 'up' : 'down'}">${allTimePct >= 0 ? '+' : ''}${allTimePct.toFixed(1)}%</span>`
+    : noData('NO CLOSED TRADES YET');
+
+  document.getElementById('pf-triple-stat').innerHTML = `
+    <div class="triple-stat">
+      <div class="ts-cell"><div class="ts-label">Trades</div><div class="ts-value">${m.closed.length}</div></div>
+      <div class="ts-cell"><div class="ts-label">Win Rate</div><div class="ts-value">${m.closed.length ? (m.winRate * 100).toFixed(0) + '%' : '--'}</div></div>
+      <div class="ts-cell"><div class="ts-label">Avg R/R</div><div class="ts-value">${m.avgRR == null ? '--' : m.avgRR.toFixed(2)}</div></div>
+    </div>`;
+
+  sessionSubEl.innerHTML = cutMs
+    ? `reset at ${fmtClock(state.session_start_clean)} &middot; ${trades.length - scoped.length} earlier trade(s) hidden, still in paper_trades.jsonl`
+    : (m.historyDays != null && m.historyDays < 30
+      ? `trade history spans only ${m.historyDays.toFixed(1)} days, so recent-period figures may closely track the all-time total`
+      : '');
   return m;
 }
-function renderRiskGauge(state) {
-  const wrap = document.getElementById('risk-gauge-body');
+function renderLiqRisk(state) {
+  const wrap = document.getElementById('liq-risk-body');
   if (!state || !has(state.daily_loss_usd)) { wrap.innerHTML = noData(); return; }
   const used = state.daily_loss_usd;
-  const remaining = Math.max(0, MAX_DAILY_LOSS_USD - used);
   const pct = Math.min(100, (used / MAX_DAILY_LOSS_USD) * 100);
-  const color = pct >= 80 ? 'var(--cream-red)' : (pct >= 50 ? '#8A6D1E' : 'var(--cream-green)');
-  const streak = state.loss_streak || 0;
-  const streakPct = Math.min(100, (streak / MAX_LOSS_STREAK) * 100);
-  const streakColor = streakPct >= 80 ? 'var(--cream-red)' : (streakPct >= 50 ? '#8A6D1E' : 'var(--cream-green)');
-  const fmtPlain = n => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const filledSegs = Math.round(pct / 10);
+  const color = pct >= 80 ? 'var(--cream-red)' : (pct >= 50 ? 'var(--cream-gold)' : 'var(--cream-green)');
+  const tag = pct >= 80 ? 'DANGER' : (pct >= 50 ? 'WARNING' : 'SAFE');
+  const segs = Array.from({ length: 10 }, (_, i) => `<div class="seg ${i < filledSegs ? 'filled' : ''}" style="--seg-color:${color};"></div>`).join('');
   wrap.innerHTML = `
-    <div class="risk-gauge-track"><div class="risk-gauge-fill" style="width:${pct.toFixed(1)}%;background:${color};"></div></div>
-    <div style="font-size:11px;font-weight:700;color:${color};">${fmtPlain(remaining)} remaining <span style="color:var(--cream-muted);font-weight:400;font-size:9.5px;">of ${fmtPlain(MAX_DAILY_LOSS_USD)} cap &middot; ${fmtPlain(used)} used (${pct.toFixed(1)}%)</span></div>
-    <div style="font-size:9px;color:var(--cream-muted);margin-top:2px;">This project has no leverage/margin, so there's no real liquidation-risk gauge to show &mdash; this is the real equivalent: remaining budget before today's hard daily-loss cap auto-stops trading.</div>
-    <div class="metric-row" style="margin-top:8px;"><span class="label">Loss Streak</span><span class="value num" style="color:${streakColor};">${streak} / ${MAX_LOSS_STREAK}</span></div>
-  `;
-}
-function renderPace(portfolio, state, trades) {
-  const wrap = document.getElementById('pace-body');
-  if (!portfolio || !trades || !trades.length) {
-    wrap.innerHTML = noData();
-    return;
-  }
-  // Pace's basis is the earliest point that could have produced portfolio.totalPnl:
-  //  - after a "Reset Session" click, portfolio is scoped to trades opened after
-  //    session_start_clean, so pace must use that same cutoff as its start time.
-  //  - otherwise it's the FIRST trade ever opened, not session_start -- session_start
-  //    resets to ~now on every bot restart, which made pace spike absurdly high
-  //    (e.g. $2,218/hr) right after a restart divided all-time PnL by a tiny hours count.
-  const sessionStartClean = state && state.session_start_clean;
-  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
-  let startMs, basisLabel;
-  if (cutMs && !isNaN(cutMs)) {
-    startMs = cutMs;
-    basisLabel = 'since reset';
-  } else {
-    const openTimes = trades.map(t => new Date(t.open_ts).getTime()).filter(ms => !isNaN(ms));
-    if (!openTimes.length) {
-      wrap.innerHTML = noData();
-      return;
-    }
-    startMs = Math.min(...openTimes);
-    basisLabel = 'since first trade ever';
-  }
-  const hoursRunning = (Date.now() - startMs) / 3600000;
-  if (!(hoursRunning > 0)) {
-    wrap.innerHTML = noData('SESSION JUST STARTED');
-    return;
-  }
-  const pace = portfolio.totalPnl / hoursRunning;
-  const daily = pace * 24, weekly = pace * 24 * 7;
-  const startLabel = new Date(startMs).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-  wrap.innerHTML = `
-    <div class="pace-hero num ${pace >= 0 ? 'up' : 'down'}">${fmtUsd(pace)}/hr</div>
-    <div class="pace-sub">over ${hoursRunning.toFixed(1)}h ${basisLabel} (${startLabel})</div>
-    <div class="metric-list">
-      <div class="metric-row"><span class="label">Projected Daily</span><span class="value num ${daily >= 0 ? 'up' : 'down'}">${fmtUsd(daily)}</span></div>
-      <div class="metric-row"><span class="label">Projected Weekly</span><span class="value num ${weekly >= 0 ? 'up' : 'down'}">${fmtUsd(weekly)}</span></div>
+    <div class="liq-risk-row">
+      <span class="liq-risk-label">LIQ RISK</span>
+      <div class="liq-risk-segs">${segs}</div>
+      <span class="liq-risk-label num">${filledSegs}/10</span>
+      <span class="liq-risk-tag" style="color:${color};border:1px solid ${color};">${tag}</span>
     </div>
-    <div class="pace-sub" style="margin-top:6px;">Linear extrapolation from realized PnL ${basisLabel === 'since reset' ? 'since the last session reset' : 'over total calendar time since the first trade ever'} &mdash; stable across bot restarts (unlike a session-runtime basis).</div>
+    <div style="font-size:8.5px;color:var(--cream-muted);">No leverage/margin in this project (simple Polymarket binary contracts) -- this tracks the real daily-loss cap instead: ${fmtUsd(-used)} used of ${fmtUsd(-MAX_DAILY_LOSS_USD)} hard stop.</div>
   `;
 }
-function renderAdvancedStats(stats) {
-  const wrap = document.getElementById('advanced-stats-body');
-  if (!stats || !stats.n_trades) {
-    wrap.innerHTML = noData();
-    return;
-  }
-  const rows = [
-    ['Sharpe Ratio', stats.sharpe_ratio == null ? null : stats.sharpe_ratio.toFixed(2)],
-    ['Avg R/R', stats.avg_rr == null ? null : stats.avg_rr.toFixed(2)],
-    ['APY', stats.apy_pct == null ? null :
-      `<span class="${stats.apy_pct >= 0 ? 'up' : 'down'}">${stats.apy_pct >= 0 ? '+' : ''}${stats.apy_pct.toFixed(1)}%</span>`],
-    ['Best Day', stats.best_day_pnl == null ? null :
-      `<span class="${stats.best_day_pnl >= 0 ? 'up' : 'down'}">${fmtUsd(stats.best_day_pnl)}</span>`],
-    ['Max Win Streak', String(stats.max_win_streak)],
-    ['Current Win Streak', stats.current_win_streak > 0
-      ? `<span class="up">${stats.current_win_streak}</span>` : String(stats.current_win_streak)],
+function renderStatGrid(stats, portfolio) {
+  const wrap = document.getElementById('stat-grid-body');
+  if (!stats || !stats.n_trades) { wrap.innerHTML = `<div style="margin-top:8px;">${noData()}</div>`; return; }
+  const holdTxt = portfolio && has(portfolio.avgHoldMinutes) ? portfolio.avgHoldMinutes.toFixed(1) + 'm' : '--';
+  const cells = [
+    ['Sharpe', stats.sharpe_ratio == null ? '--' : stats.sharpe_ratio.toFixed(2)],
+    ['APY', stats.apy_pct == null ? '--' : `${stats.apy_pct >= 0 ? '+' : ''}${stats.apy_pct.toFixed(0)}%`],
+    ['Best Day', stats.best_day_pnl == null ? '--' : fmtUsd(stats.best_day_pnl)],
+    ['Hold', holdTxt],
+    ['Wins', String((portfolio && portfolio.wins.length) || 0)],
+    ['Win Rate', portfolio && portfolio.closed.length ? (portfolio.winRate * 100).toFixed(1) + '%' : '--'],
   ];
-  wrap.innerHTML = `
-    <div class="metric-list">
-      ${rows.map(([label, val]) => `
-        <div class="metric-row">
-          <span class="label">${label}</span>
-          <span class="value num">${val != null ? val : noData()}</span>
-        </div>
-      `).join('')}
-    </div>
-    <div class="pace-sub" style="margin-top:6px;">APY is % return per $100 notionally risked, annualized from ${stats.days_running != null ? stats.days_running.toFixed(2) : '?'}d running -- not tied to any real tracked capital balance (this bot doesn't have one; trades are flat $5-$25 stakes). n=${stats.n_trades} resolved trades. Updated ${fmtClock(stats.updated_at)}.</div>
-  `;
+  wrap.innerHTML = `<div class="stat-grid2">${cells.map(([l, v]) => `
+    <div class="sg-cell"><div class="sg-label">${l}</div><div class="sg-value">${v}</div></div>
+  `).join('')}</div>
+  <div style="font-size:8px;color:var(--cream-muted);margin-top:6px;">APY/all-time %-return are per $100 notionally risked (this bot has no real tracked capital balance; stakes are flat $5-$25). n=${stats.n_trades} resolved trades. Updated ${fmtClock(stats.updated_at)}.</div>`;
 }
 
-/* ---------------- 3. AI SIGNAL PANEL ---------------- */
+/* ---------------- 3. AI SIGNAL PANEL (additional detail) ---------------- */
 function assetCooldown(state, asset) {
   const lastTsMap = (state && state.last_signal_ts) || {};
   const ts = lastTsMap[asset];
@@ -1093,7 +985,7 @@ function fearGreedColor(classification) {
   if (c === 'fear') return '#FF9457';
   if (c.includes('extreme greed')) return 'var(--green)';
   if (c === 'greed') return '#7CE87A';
-  return 'var(--text-secondary)'; // neutral
+  return 'var(--text-secondary)';
 }
 function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents) {
   const wrap = document.getElementById('ai-signal-body');
@@ -1103,7 +995,7 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, 
     const pct = Math.min(100, (onlineStatus.n_updates / onlineStatus.warmup_trades) * 100);
     html += `
       <div style="font-size:10px;color:var(--text-secondary);">MODEL WARMUP &mdash; ${onlineStatus.n_updates}/${onlineStatus.warmup_trades} trades
-        &middot; <b style="color:${onlineStatus.is_warmed_up ? 'var(--green)' : 'var(--yellow)'}">${onlineStatus.is_warmed_up ? 'LIVE' : 'WARMUP'}</b></div>
+        &middot; <b style="color:${onlineStatus.is_warmed_up ? 'var(--green)' : 'var(--gold)'}">${onlineStatus.is_warmed_up ? 'LIVE' : 'WARMUP'}</b></div>
       <div class="warmup-track"><div class="warmup-fill" style="width:${pct.toFixed(1)}%"></div></div>
     `;
   } else {
@@ -1113,8 +1005,8 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, 
   if (lastQuantFeature) {
     const pct = (lastQuantFeature.model_probability * 100).toFixed(1);
     html += `<div style="font-size:10px;color:var(--text-secondary);margin-top:4px;">LAST SIGNAL CONFIDENCE (shadow model, ${lastQuantFeature.asset})</div>
-      <div style="font-size:16px;font-weight:800;color:var(--cyan);">${pct}%</div>
-      <div style="font-size:9.5px;color:var(--text-muted);">${fmtClock(lastQuantFeature.timestamp)}</div>`;
+      <div style="font-size:15px;font-weight:800;color:var(--cyan);">${pct}%</div>
+      <div style="font-size:9px;color:var(--text-muted);">${fmtClock(lastQuantFeature.timestamp)}</div>`;
   } else {
     html += `<div style="margin-top:6px;">LAST SIGNAL CONFIDENCE ${noData()}</div>`;
   }
@@ -1143,7 +1035,7 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, 
   if (macroEvents && Array.isArray(macroEvents.events) && macroEvents.events.length) {
     const e = macroEvents.events[0];
     const d = new Date(e.date);
-    const dateTxt = isNaN(d.getTime()) ? e.date : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const dateTxt = isNaN(d.getTime()) ? e.date : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     html += `<div class="sig-asset-row" style="font-size:10px;"><span>Next Event</span><span style="color:var(--text-primary);text-align:right;">${dateTxt} &middot; ${e.title}</span></div>`;
   } else if (macroEvents && Array.isArray(macroEvents.events)) {
     html += `<div class="sig-asset-row"><span>Events</span>${noData('NONE FOUND')}</div>`;
@@ -1154,55 +1046,54 @@ function renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, 
   wrap.innerHTML = html;
 }
 
-/* ---------------- 4. BIGGEST WIN / SHARPE CALLOUT ---------------- */
-function computeBiggestWinAndSharpe(m) {
-  if (!m || !m.closed.length) return null;
-  const biggestWin = m.wins.length ? m.wins.reduce((a, b) => (b.pnl_usd > a.pnl_usd ? b : a)) : null;
+/* ---------------- 4. BIGGEST WIN CALLOUT ---------------- */
+function computeBiggestWin(m) {
+  if (!m || !m.wins.length) return null;
+  const bw = m.wins.reduce((a, b) => (b.pnl_usd > a.pnl_usd ? b : a));
+  const multiplier = bw.size_usd > 0 ? bw.pnl_usd / bw.size_usd : null;
   const pnls = m.closed.map(t => t.pnl_usd);
   const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
   const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
   const std = Math.sqrt(variance);
-  const sharpe = std > 0 ? mean / std : null; // per-trade, deliberately NOT annualized -- see caption
-  return { biggestWin, sharpe };
+  const sharpe = std > 0 ? mean / std : null;
+  return { bw, multiplier, sharpe };
 }
-function renderTopCallout(portfolio) {
-  const wrap = document.getElementById('top-callout-body');
-  const c = computeBiggestWinAndSharpe(portfolio);
-  if (!c) { wrap.innerHTML = noData(); return; }
-  const bw = c.biggestWin;
+function renderBiggestWin(portfolio) {
+  const wrap = document.getElementById('bw-body');
+  const c = computeBiggestWin(portfolio);
+  if (!c) { wrap.innerHTML = noData(portfolio ? 'NO WINNING TRADES YET' : 'NO DATA'); return; }
+  const bw = c.bw;
   wrap.innerHTML = `
-    <div class="callout-row">
-      <div>
-        <div class="callout-label">Biggest Win</div>
-        <div class="callout-value up">${bw ? fmtUsd(bw.pnl_usd) : noData()}</div>
-        <div class="callout-sub">${bw ? `${bw.asset} entry ${bw.entry_price.toFixed(3)} &middot; ${fmtClock(bw.close_ts)}` : 'no winning trades yet'}</div>
-      </div>
-      <div>
-        <div class="callout-label">Sharpe (per-trade)</div>
-        <div class="callout-value">${has(c.sharpe) ? c.sharpe.toFixed(2) : noData()}</div>
-        <div class="callout-sub">mean&#247;stdev of all ${portfolio.closed.length} closed trades' PnL, unannualized &mdash; history spans only ~${portfolio.historyDays ? portfolio.historyDays.toFixed(1) : '?'}d, too short to annualize meaningfully</div>
-      </div>
-    </div>`;
+    <div class="bw-mult num">${c.multiplier != null ? 'X' + c.multiplier.toFixed(1) : noData()}</div>
+    <div style="font-size:9px;color:var(--text-muted);margin-bottom:8px;">PnL &divide; stake on this trade (${fmtUsd(bw.pnl_usd)} on a ${fmtUsd(bw.size_usd, 2).replace('+','')} stake)</div>
+    <div class="bw-row"><span class="label">Entry Price</span><span class="value num">${bw.entry_price.toFixed(3)}</span></div>
+    <div class="bw-row"><span class="label">Market</span><span class="value">${bw.asset} &middot; ${bw.direction}</span></div>
+    <div class="bw-row"><span class="label">Date</span><span class="value num">${fmtClock(bw.close_ts)}</span></div>
+    <div class="bw-row"><span class="label">Sharpe (per-trade, all closed)</span><span class="value num">${has(c.sharpe) ? c.sharpe.toFixed(2) : noData()}</span></div>
+  `;
 }
 
 /* ---------------- 5. EXECUTION CYCLE + NEXT TICK ---------------- */
 const EXEC_STAGES = ['scan', 'detect', 'validate', 'size', 'fill', 'settle'];
 let _lastTickAtMs = null;
-function renderExecutionCycle(cycle) {
+function renderExecutionCycle(cycle, trades) {
   const wrap = document.getElementById('exec-cycle-body');
+  const fillPriceEl = document.getElementById('exec-fill-price');
   if (!cycle || !cycle.stage) {
     wrap.innerHTML = noData();
     _lastTickAtMs = null;
+    if (fillPriceEl) fillPriceEl.textContent = '';
     return;
   }
   _lastTickAtMs = new Date(cycle.updated_at).getTime();
   const idx = EXEC_STAGES.indexOf(cycle.stage);
   const age = fmtAge(cycle.updated_at);
-  // fill/settle events are naturally sparse (a real trade doesn't open every
-  // tick), so this panel uses a wider staleness window than the 15s
-  // STALE_AFTER_MS other freshness-based widgets use for constantly-ticking
-  // telemetry -- otherwise every real fill would look "stale" within seconds.
   const fresh = age != null && age < STALE_AFTER_MS * 8;
+  if (fillPriceEl) {
+    const lastTrade = trades && trades.length
+      ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
+    fillPriceEl.textContent = lastTrade ? `FILL ${lastTrade.entry_price.toFixed(3)}` : '';
+  }
   let row = '<div class="exec-cycle-row">';
   EXEC_STAGES.forEach((stage, i) => {
     if (i > 0) row += `<div class="exec-connector ${fresh && i <= idx ? 'done' : ''}"></div>`;
@@ -1210,7 +1101,7 @@ function renderExecutionCycle(cycle) {
     const isDone = fresh && i < idx;
     const cls = isCurrent ? 'current' : (isDone ? 'done' : '');
     row += `<div class="exec-step ${cls}">
-      <div class="dot">${i + 1}</div>
+      <div class="dot">${String(i + 1).padStart(2, '0')}</div>
       <div class="label">${stage}</div>
       <div class="detail">${isCurrent ? (cycle.detail || '') : ''}</div>
     </div>`;
@@ -1220,11 +1111,16 @@ function renderExecutionCycle(cycle) {
 }
 function renderNextTick() {
   const el = document.getElementById('next-tick-countdown');
-  if (!el) return;
-  if (_lastTickAtMs == null) { el.textContent = ''; return; }
+  const treeNextEl = document.getElementById('tree-next-value');
+  if (_lastTickAtMs == null) {
+    if (el) el.textContent = '';
+    if (treeNextEl) treeNextEl.textContent = '';
+    return;
+  }
   const elapsedSec = (Date.now() - _lastTickAtMs) / 1000;
   const remain = Math.max(0, MARKET_POLL_INTERVAL_SEC - (elapsedSec % MARKET_POLL_INTERVAL_SEC));
-  el.textContent = `next tick ~${remain.toFixed(0)}s`;
+  if (el) el.textContent = `next tick ~${remain.toFixed(0)}s`;
+  if (treeNextEl) treeNextEl.textContent = `NEXT: ${remain.toFixed(0)}s`;
 }
 let _lastKnownState = null;
 function renderNextSignalCountdown() {
@@ -1245,9 +1141,22 @@ function renderNextSignalCountdown() {
     el.innerHTML = '';
   }
 }
+function renderTreePace(portfolio, state, trades) {
+  const valEl = document.getElementById('tree-pace-value');
+  if (!valEl) return;
+  const p = computePace(portfolio, state, trades);
+  if (!p || p.pace == null) { valEl.innerHTML = noData(); return; }
+  valEl.textContent = fmtUsd(p.pace) + '/hr';
+  valEl.className = 'pace-value num ' + (p.pace >= 0 ? 'up' : 'down');
+}
 
 /* ---------------- 6. STRATEGY DECISION TREE (animated SVG) ---------------- */
-const TREE_NODES = {
+// Logical (base) node layout in a 1050x340 design space. The actual <svg>
+// viewBox is recomputed every render from the wrapper's real aspect ratio
+// (see renderDecisionTree) and node x-coordinates are scaled to fill it --
+// otherwise preserveAspectRatio="meet" letterboxes a fixed 1050:340 viewBox
+// inside a much wider panel, leaving large empty margins on both sides.
+const TREE_NODES_BASE = {
   tick:       { x: 55,  y: 168, label: 'TICK' },
   scan:       { x: 200, y: 168, label: 'SCAN' },
   classify:   { x: 350, y: 168, label: 'CLASSIFY' },
@@ -1259,6 +1168,10 @@ const TREE_NODES = {
   fill:       { x: 860, y: 168, label: 'FILL' },
   pnl:        { x: 980, y: 168, label: 'P&L' },
 };
+// TREE_BASE_H is taller than the node layout actually needs (nodes top out
+// around y=338) so the bottom ~25% of the coordinate space is always clear
+// for the .tree-fill-box HTML overlay to sit in without covering a node.
+const TREE_BASE_W = 1050, TREE_BASE_H = 460;
 const TREE_EDGES = [
   ['tick', 'scan'], ['scan', 'classify'],
   ['classify', 'repricing'], ['classify', 'order_book'], ['classify', 'momentum'], ['classify', 'volume'],
@@ -1267,8 +1180,9 @@ const TREE_EDGES = [
 ];
 let _lastSeenTreeFillTs = undefined;
 const _lastSeenBranchFireTs = { order_book: undefined, momentum: undefined, volume: undefined };
+let _currentTreeNodes = TREE_NODES_BASE; // updated to the scaled layout on every renderDecisionTree call
 function buildFlowPath(...nodeKeys) {
-  return 'M ' + nodeKeys.map(k => `${TREE_NODES[k].x} ${TREE_NODES[k].y}`).join(' L ');
+  return 'M ' + nodeKeys.map(k => `${_currentTreeNodes[k].x} ${_currentTreeNodes[k].y}`).join(' L ');
 }
 function triggerFlowDot(pathStr, durSec) {
   const motion = document.getElementById('tree-flow-motion');
@@ -1281,20 +1195,49 @@ function triggerFlowDot(pathStr, durSec) {
   motion.beginElement();
   opacityAnim.beginElement();
 }
-function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus) {
+function renderTreeMiniChart(portfolio) {
+  const canvas = document.getElementById('tree-mini-canvas');
+  if (!canvas) return;
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+  if (!portfolio || !portfolio.curve || portfolio.curve.length < 2) {
+    ctx.fillStyle = 'rgba(201,209,217,0.3)'; ctx.font = '9px monospace';
+    ctx.fillText(portfolio ? 'building...' : 'NO DATA', 4, h / 2);
+    return;
+  }
+  const curve = portfolio.curve;
+  const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
+  const span = (max - min) || 1;
+  const x = i => (i / (curve.length - 1)) * w;
+  const y = v => h - ((v - min) / span) * h;
+  const positive = curve[curve.length - 1] >= 0;
+  ctx.beginPath();
+  curve.forEach((v, i) => i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v)));
+  ctx.strokeStyle = positive ? '#39d353' : '#f85149'; ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades) {
   const wrap = document.getElementById('tree-svg-wrap');
-  const edgeLine = document.getElementById('tree-edge-line');
+  const edgeValueEl = document.getElementById('tree-edge-value');
+  const edgeDetailEl = document.getElementById('tree-edge-detail');
   const btcStatus = combinerStatus ? combinerStatus.BTC : null;
 
+  if (btcStatus && has(btcStatus.combined_confidence) && !btcStatus.correlation_filter_blocked && !btcStatus.price_out_of_band) {
+    const pct = btcStatus.combined_confidence * 100;
+    edgeValueEl.textContent = pct.toFixed(1) + '%';
+    edgeValueEl.className = 'ec-value ' + (btcStatus.fired ? 'up' : '');
+    edgeValueEl.style.color = btcStatus.fired ? '' : 'var(--text-primary)';
+  } else {
+    edgeValueEl.innerHTML = noData();
+  }
   if (btcStatus) {
     const fmtSig = s => (s && s.fired) ? `<span class="up">${(s.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted);">--</span>';
     const combinedText = btcStatus.correlation_filter_blocked ? '<span class="down">BLOCKED</span>'
-      : btcStatus.price_out_of_band ? '<span style="color:var(--yellow);">OUT OF BAND</span>'
-      : has(btcStatus.combined_confidence) ? `<span class="${btcStatus.fired ? 'up' : ''}">${(btcStatus.combined_confidence * 100).toFixed(0)}%</span>`
-      : '<span style="color:var(--cyan);">scanning</span>';
-    edgeLine.innerHTML = `EDGE CONF (BTC) &middot; Order Book: ${fmtSig(btcStatus.order_book)} &nbsp; Momentum: ${fmtSig(btcStatus.momentum)} &nbsp; Volume: ${fmtSig(btcStatus.volume)} &nbsp; Combined: ${combinedText}`;
+      : btcStatus.price_out_of_band ? '<span style="color:var(--gold);">OUT OF BAND</span>'
+      : 'Order Book ' + fmtSig(btcStatus.order_book) + ' &middot; Momentum ' + fmtSig(btcStatus.momentum) + ' &middot; Volume ' + fmtSig(btcStatus.volume);
+    edgeDetailEl.innerHTML = combinedText;
   } else {
-    edgeLine.innerHTML = noData();
+    edgeDetailEl.innerHTML = noData();
   }
 
   const liveFresh = !!(liveStatus && (() => { const a = fmtAge(liveStatus.updated_at); return a != null && a < STALE_AFTER_MS; })());
@@ -1314,58 +1257,80 @@ function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatu
     pnl: !!(portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length > 0),
   };
 
-  let svg = `<svg viewBox="0 0 1050 360" preserveAspectRatio="xMidYMid meet">`;
+  // Recompute the viewBox from the wrapper's real aspect ratio so the tree
+  // fills the panel edge-to-edge instead of letterboxing inside a fixed
+  // 1050:340 box (this panel is much wider than that in practice).
+  const rectW = wrap.clientWidth || TREE_BASE_W, rectH = wrap.clientHeight || TREE_BASE_H;
+  const viewBoxW = TREE_BASE_H * (rectW / rectH);
+  const xScale = viewBoxW / TREE_BASE_W;
+  const scaledNodes = {};
+  Object.entries(TREE_NODES_BASE).forEach(([k, n]) => { scaledNodes[k] = { x: n.x * xScale, y: n.y, label: n.label }; });
+  _currentTreeNodes = scaledNodes;
+
+  let svg = `<svg viewBox="0 0 ${viewBoxW.toFixed(0)} ${TREE_BASE_H}" preserveAspectRatio="xMidYMid meet">`;
   TREE_EDGES.forEach(([a, b]) => {
-    const n1 = TREE_NODES[a], n2 = TREE_NODES[b];
+    const n1 = scaledNodes[a], n2 = scaledNodes[b];
     const isRepricingEdge = a === 'repricing' || b === 'repricing';
     const lit = active[a] && active[b];
     const dash = isRepricingEdge ? ' stroke-dasharray="3,3"' : '';
-    svg += `<line class="tree-edge" x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" stroke="${lit ? 'rgba(0,255,65,0.55)' : 'var(--border-hi)'}"${dash}/>`;
+    svg += `<line class="tree-edge" x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" stroke="${lit ? 'rgba(57,211,83,0.55)' : 'var(--border-hi)'}"${dash}/>`;
   });
-  Object.entries(TREE_NODES).forEach(([key, n]) => {
+  Object.entries(scaledNodes).forEach(([key, n]) => {
     const isActive = active[key];
     const isPnl = key === 'pnl';
     const isRepricing = key === 'repricing';
-    const r = isPnl ? 36 : 24;
-    const fill = isActive ? 'rgba(0,255,65,0.15)' : '#10161D';
-    const stroke = isActive ? '#00FF41' : 'rgba(255,255,255,0.18)';
+    const r = isPnl ? 34 : 23;
+    const fill = isActive ? 'rgba(57,211,83,0.15)' : '#161b22';
+    const stroke = isActive ? '#39d353' : '#30363d';
     const dash = isRepricing ? ' stroke-dasharray="3,3"' : '';
     svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"${dash}/>`;
     if (isPnl) {
       const last = (portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length)
         ? portfolio.sortedClosed[portfolio.sortedClosed.length - 1] : null;
       const pnlText = last ? fmtUsd(last.pnl_usd) : 'NO DATA';
-      const pnlColor = last ? (last.pnl_usd >= 0 ? '#00FF41' : '#FF3B3B') : '#4E5A66';
-      svg += `<text x="${n.x}" y="${n.y - 4}" text-anchor="middle" fill="${pnlColor}" font-size="15" font-weight="800" font-family="ui-monospace, monospace">${pnlText}</text>`;
-      svg += `<text x="${n.x}" y="${n.y + 14}" class="tree-node-sub">last trade</text>`;
+      const pnlColor = last ? (last.pnl_usd >= 0 ? '#39d353' : '#f85149') : '#6e7681';
+      svg += `<text x="${n.x}" y="${n.y - 4}" text-anchor="middle" fill="${pnlColor}" font-size="14" font-weight="800" font-family="'Courier New', monospace">${pnlText}</text>`;
+      svg += `<text x="${n.x}" y="${n.y + 13}" class="tree-node-sub">last trade</text>`;
     } else {
-      svg += `<text x="${n.x}" y="${n.y + r + 16}" class="tree-node-label">${n.label}</text>`;
-      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 29}" class="tree-node-sub" style="fill:var(--yellow);">(disabled, shadow only)</text>`;
+      svg += `<text x="${n.x}" y="${n.y + r + 15}" class="tree-node-label">${n.label}</text>`;
+      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 27}" class="tree-node-sub" style="fill:var(--gold);">(disabled, shadow only)</text>`;
     }
   });
-  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="6.5" fill="#00FF41" opacity="0">`
+  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="6" fill="#39d353" opacity="0">`
        + `<animateMotion id="tree-flow-motion" path="${buildFlowPath('tick', 'pnl')}" dur="1.8s" begin="indefinite" fill="freeze"/>`
        + `<animate id="tree-flow-opacity" attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.9;1" dur="1.8s" begin="indefinite" fill="freeze"/>`
        + `</circle>`;
   svg += `</svg>`;
   wrap.innerHTML = svg;
 
-  // Only animate the traveling dot on a genuinely new FILL event (a real
-  // trade actually opened), never decoratively or on a timer -- mirrors the
-  // Decision Timeline's flow-dot discipline.
+  // Real-data fill box: last trade's actual outcome, in the style of the
+  // reference's center "ORDER FILLED" callout. Shows the most recent trade
+  // regardless of age (there is no fabricated "just now" framing).
+  const lastTrade = trades && trades.length
+    ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
+  let fillBoxHtml;
+  if (!lastTrade) {
+    fillBoxHtml = `<div class="tree-fill-box"><div class="ff-main">${noData('AWAITING FIRST SIGNAL')}</div></div>`;
+  } else if (lastTrade.status === 'open') {
+    fillBoxHtml = `<div class="tree-fill-box">
+      <div class="ff-main" style="color:var(--gold);">OPEN &middot; ${lastTrade.asset} ${lastTrade.direction} @ ${lastTrade.entry_price.toFixed(3)}</div>
+      <div class="ff-sub">ORDER FILLED &middot; EXECUTION CONFIRMED &middot; ${fmtClock(lastTrade.open_ts)}</div>
+    </div>`;
+  } else {
+    const pnlColor = lastTrade.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)';
+    fillBoxHtml = `<div class="tree-fill-box">
+      <div class="ff-main" style="color:${pnlColor};">${fmtUsd(lastTrade.pnl_usd)} ORDER ${lastTrade.result}</div>
+      <div class="ff-sub">EXECUTION CONFIRMED &middot; ${lastTrade.asset} ${lastTrade.direction} &middot; ${lastTrade.signal_source}</div>
+    </div>`;
+  }
+  wrap.insertAdjacentHTML('beforeend', fillBoxHtml);
+
   const lastFillTs = (executionCycle && executionCycle.stage === 'fill') ? executionCycle.updated_at : null;
   if (lastFillTs && lastFillTs !== _lastSeenTreeFillTs) {
     const isFirstPaint = _lastSeenTreeFillTs === undefined;
     _lastSeenTreeFillTs = lastFillTs;
-    if (!isFirstPaint) {
-      triggerFlowDot(buildFlowPath('tick', 'pnl'), 1.8);
-    }
+    if (!isFirstPaint) triggerFlowDot(buildFlowPath('tick', 'pnl'), 1.8);
   }
-
-  // Also animate the dot along the specific branch the instant a real signal
-  // fires (per core/signal_combiner.py's signal_stats.*.last_fired_at), so
-  // the dot visibly travels tick -> scan -> classify -> that branch -> size
-  // rather than only lighting up on an eventual fill.
   const signalStats = combinerStatus && combinerStatus.signal_stats;
   ['order_book', 'momentum', 'volume'].forEach(branch => {
     const lastFired = signalStats && signalStats[branch] ? signalStats[branch].last_fired_at : null;
@@ -1387,12 +1352,10 @@ function resizeCanvasToParent(canvas) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { ctx, w, h };
 }
-// Real OHLC candlesticks bucketed from data/price_history.jsonl ticks (see
-// computeOhlcCandles) -- each bar has a genuine open/high/low/close, not one
-// price sample per bar.
 function renderCandlestick(candles) {
   const canvas = document.getElementById('candle-canvas');
   const captionEl = document.getElementById('candle-caption');
+  const priceEl = document.getElementById('chart-hdr-price');
   const { ctx, w, h } = resizeCanvasToParent(canvas);
   ctx.clearRect(0, 0, w, h);
 
@@ -1403,11 +1366,16 @@ function renderCandlestick(candles) {
   }
 
   if (!candles || candles.length < 2) {
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '11px ui-monospace, monospace';
+    if (priceEl) priceEl.innerHTML = noData();
+    ctx.fillStyle = 'rgba(201,209,217,0.3)';
+    ctx.font = '11px monospace';
     ctx.fillText(candles ? 'Not enough BTC ticks yet for a candle' : 'NO DATA', 12, h / 2);
     return;
   }
+
+  const last = candles[candles.length - 1];
+  const lastUp = last.close >= last.open;
+  if (priceEl) { priceEl.textContent = last.close.toFixed(3); priceEl.className = 'chart-hdr-price num ' + (lastUp ? 'up' : 'down'); }
 
   const pad = { t: 10, r: 46, b: 20, l: 4 };
   const allPrices = candles.flatMap(c => [c.high, c.low]);
@@ -1419,9 +1387,9 @@ function renderCandlestick(candles) {
   const bodyW = Math.max(2, Math.min(24, slot * 0.6));
   const y = v => pad.t + (1 - (v - min) / span) * plotH;
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.font = '9px ui-monospace, monospace';
+  ctx.strokeStyle = 'rgba(201,209,217,0.06)';
+  ctx.fillStyle = 'rgba(201,209,217,0.3)';
+  ctx.font = '9px monospace';
   for (let i = 0; i <= 3; i++) {
     const gy = pad.t + (i / 3) * plotH;
     ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy); ctx.stroke();
@@ -1431,7 +1399,7 @@ function renderCandlestick(candles) {
   candles.forEach((c, i) => {
     const x = pad.l + i * slot + slot / 2;
     const up = c.close >= c.open;
-    const color = up ? '#00FF41' : '#FF3B3B';
+    const color = up ? '#39d353' : '#f85149';
     ctx.strokeStyle = color; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(x, y(c.high)); ctx.lineTo(x, y(c.low)); ctx.stroke();
     const bodyTop = y(Math.max(c.open, c.close)), bodyBot = y(Math.min(c.open, c.close));
@@ -1440,22 +1408,29 @@ function renderCandlestick(candles) {
     ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyH);
   });
 
-  const last = candles[candles.length - 1];
-  const lastUp = last.close >= last.open;
-  ctx.fillStyle = lastUp ? '#00FF41' : '#FF3B3B';
-  ctx.font = 'bold 11px ui-monospace, monospace';
+  ctx.fillStyle = lastUp ? '#39d353' : '#f85149';
+  ctx.font = 'bold 11px monospace';
   ctx.fillText(last.close.toFixed(3), pad.l + plotW + 4, y(last.close) + 3);
 }
 function renderEquityCurve(m) {
   const canvas = document.getElementById('equity-canvas');
+  const pctEl = document.getElementById('pnl-growth-pct');
   const { ctx, w, h } = resizeCanvasToParent(canvas);
   ctx.clearRect(0, 0, w, h);
 
   if (!m || !m.curve || !m.curve.length) {
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '11px ui-monospace, monospace';
+    if (pctEl) pctEl.innerHTML = '';
+    ctx.fillStyle = 'rgba(201,209,217,0.3)';
+    ctx.font = '11px monospace';
     ctx.fillText(m ? 'Awaiting closed trades...' : 'NO DATA', 12, h / 2);
     return;
+  }
+
+  const allTimePct = computeAllTimeReturnPct(m.totalPnl);
+  if (pctEl) {
+    pctEl.textContent = (allTimePct >= 0 ? '+' : '') + allTimePct.toFixed(0) + '%';
+    pctEl.className = 'num ' + (allTimePct >= 0 ? 'up' : 'down');
+    pctEl.style.fontSize = '11px'; pctEl.style.fontWeight = '800';
   }
 
   const pad = 22;
@@ -1466,15 +1441,15 @@ function renderEquityCurve(m) {
   const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
   const zeroY = y(0);
 
-  ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(201,209,217,0.15)';
   ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(w - pad, zeroY); ctx.stroke();
   ctx.setLineDash([]);
 
   const positive = curve[curve.length - 1] >= 0;
-  const lineColor = positive ? '#00FF41' : '#FF3B3B';
+  const lineColor = positive ? '#39d353' : '#f85149';
 
   const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
-  grad.addColorStop(0, positive ? 'rgba(0,255,65,0.28)' : 'rgba(255,59,59,0.28)');
+  grad.addColorStop(0, positive ? 'rgba(57,211,83,0.28)' : 'rgba(248,81,73,0.28)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.beginPath();
   ctx.moveTo(x(0), y(curve[0]));
@@ -1491,16 +1466,16 @@ function renderEquityCurve(m) {
   ctx.stroke(); ctx.shadowBlur = 0;
 
   ctx.fillStyle = lineColor;
-  ctx.font = 'bold 11px ui-monospace, monospace';
+  ctx.font = 'bold 11px monospace';
   ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length})`, w - pad - 100, pad - 4);
 }
 
-/* ---------------- 8. CORRELATION MAP ---------------- */
+/* ---------------- 8. CORRELATION MAP (additional detail) ---------------- */
 function corrColor(r) {
-  if (r == null) return 'rgba(255,255,255,0.04)';
+  if (r == null) return 'rgba(201,209,217,0.04)';
   const abs = Math.min(1, Math.abs(r));
   const alpha = 0.22 + abs * 0.62;
-  return r >= 0 ? `rgba(0,255,65,${alpha.toFixed(2)})` : `rgba(255,59,59,${alpha.toFixed(2)})`;
+  return r >= 0 ? `rgba(57,211,83,${alpha.toFixed(2)})` : `rgba(248,81,73,${alpha.toFixed(2)})`;
 }
 function corrTextColor(r) {
   if (r == null) return 'var(--text-muted)';
@@ -1566,53 +1541,45 @@ function renderCorrelation(liveStatus, biasHistory) {
   wrap.innerHTML = html;
 }
 
-/* ---------------- 9. ROBUSTNESS GRID (win rate by day x asset, last 14 UTC days) ---------------- */
-function computeRobustnessGrid(trades) {
+/* ---------------- 9. ROBUSTNESS: BY ASSET, TRAILING 1D/3D/7D %-RETURN ---------------- */
+function computeRobustnessByAsset(trades) {
   if (!trades) return null;
   const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null && t.close_ts);
-  const days = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date();
-    d.setUTCHours(0, 0, 0, 0);
-    d.setUTCDate(d.getUTCDate() - i);
-    days.push(d);
-  }
-  const assets = ['BTC', 'ETH', 'ALL'];
-  const grid = days.map(dayStart => {
-    const dayEndMs = dayStart.getTime() + 24 * 3600 * 1000;
-    const dayTrades = closed.filter(t => {
-      const ts = new Date(t.close_ts).getTime();
-      return ts >= dayStart.getTime() && ts < dayEndMs;
-    });
-    return assets.map(asset => {
-      const subset = asset === 'ALL' ? dayTrades : dayTrades.filter(t => t.asset === asset);
-      if (!subset.length) return { n: 0, winRate: null, pnl: 0 };
-      const wins = subset.filter(t => t.pnl_usd > 0).length;
+  const assets = ['BTC', 'ETH', 'SOL', 'COMBINED'];
+  const windows = [1, 3, 7];
+  const now = Date.now();
+  const rows = assets.map(asset => {
+    const subsetAll = asset === 'COMBINED' ? closed : closed.filter(t => t.asset === asset);
+    const cells = windows.map(days => {
+      const cutMs = now - days * 24 * 3600 * 1000;
+      const subset = subsetAll.filter(t => new Date(t.close_ts).getTime() > cutMs);
+      if (!subset.length) return { n: 0, pct: null };
       const pnl = subset.reduce((s, t) => s + t.pnl_usd, 0);
-      return { n: subset.length, winRate: wins / subset.length, pnl };
+      return { n: subset.length, pct: computeAllTimeReturnPct(pnl) };
     });
+    return { asset, cells, total: subsetAll.length };
   });
-  return { days, assets, grid };
+  return { rows, windows };
 }
 function robustnessCellColor(cell) {
-  if (!cell || cell.n === 0 || cell.winRate == null) return 'rgba(255,255,255,0.03)';
-  const alpha = 0.25 + Math.min(1, cell.n / 10) * 0.5;
-  return cell.winRate >= 0.5 ? `rgba(0,255,65,${alpha.toFixed(2)})` : `rgba(255,59,59,${alpha.toFixed(2)})`;
+  if (!cell || cell.n === 0 || cell.pct == null) return 'rgba(201,209,217,0.03)';
+  const alpha = 0.22 + Math.min(1, cell.n / 10) * 0.5;
+  return cell.pct >= 0 ? `rgba(57,211,83,${alpha.toFixed(2)})` : `rgba(248,81,73,${alpha.toFixed(2)})`;
 }
 function renderRobustnessGrid(trades) {
   const wrap = document.getElementById('robustness-body');
-  const r = computeRobustnessGrid(trades);
+  const r = computeRobustnessByAsset(trades);
   if (!r) { wrap.innerHTML = noData(); return; }
-  const header = '<div class="rb-row rb-head"><div class="rb-cell rb-label"></div>' + r.assets.map(a => `<div class="rb-cell rb-label">${a}</div>`).join('') + '</div>';
-  const rows = r.days.map((d, i) => {
-    const dLabel = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    const cells = r.grid[i].map(cell => {
-      const txt = cell.n ? (cell.winRate * 100).toFixed(0) + '%' : '&mdash;';
-      return `<div class="rb-cell" style="background:${robustnessCellColor(cell)};" title="${cell.n} trades, PnL ${fmtUsd(cell.pnl)}">${txt}</div>`;
+  const header = '<div class="rb-row rb-head"><div class="rb-cell rb-label"></div>'
+    + r.windows.map(d => `<div class="rb-cell rb-label">${d}D%</div>`).join('') + '</div>';
+  const rows = r.rows.map(row => {
+    const cells = row.cells.map(cell => {
+      const txt = cell.n ? (cell.pct >= 0 ? '+' : '') + cell.pct.toFixed(1) + '%' : '&mdash;';
+      return `<div class="rb-cell" style="background:${robustnessCellColor(cell)};" title="${cell.n} closed trade(s)">${txt}</div>`;
     }).join('');
-    return `<div class="rb-row"><div class="rb-cell rb-label">${dLabel}</div>${cells}</div>`;
+    return `<div class="rb-row"><div class="rb-cell rb-label">${row.asset}</div>${cells}</div>`;
   }).join('');
-  wrap.innerHTML = header + rows + `<div class="chart-caption" style="border-top:none;padding-left:0;">Win rate by day &times; asset, last 14 UTC days. Cells with no closed trades that day show &mdash; (never fabricated as 0%). Trade history currently spans only a few days, so most cells here are genuinely empty until more real time passes.</div>`;
+  wrap.innerHTML = header + rows + `<div class="chart-caption" style="border-top:none;padding-left:0;">%-return per asset over trailing 1/3/7 days, relative to the same $100 notional base used for APY. &mdash; means no closed trades in that window (never fabricated as 0%).</div>`;
 }
 
 /* ---------------- 10. MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ---------------- */
@@ -1642,15 +1609,15 @@ function renderMonteCarlo(portfolio) {
     statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
     const { ctx, w, h } = resizeCanvasToParent(canvas);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '11px ui-monospace, monospace';
+    ctx.fillStyle = 'rgba(201,209,217,0.3)'; ctx.font = '11px monospace';
     ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
     return;
   }
   statsEl.innerHTML = `
     <div class="mc-stat"><div class="mc-label">Simulated Over</div><div class="mc-value num">${mc.n} trades &times; ${MC_PATHS} paths</div></div>
     <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
-    <div class="mc-stat"><div class="mc-label">5th Percentile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
-    <div class="mc-stat"><div class="mc-label">P&lt;0.01 (99% VaR)</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
+    <div class="mc-stat"><div class="mc-label">5th %ile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
+    <div class="mc-stat hi"><div class="mc-label">P &lt; 0.010 (99% VaR)</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
   `;
   const { ctx, w, h } = resizeCanvasToParent(canvas);
   ctx.clearRect(0, 0, w, h);
@@ -1669,28 +1636,30 @@ function renderMonteCarlo(portfolio) {
   for (let i = 0; i < BINS; i++) {
     const binStart = min + (i / BINS) * span;
     const barH = (counts[i] / maxCount) * plotH;
-    ctx.fillStyle = binStart >= 0 ? 'rgba(0,255,65,0.55)' : 'rgba(255,59,59,0.55)';
+    ctx.fillStyle = binStart >= 0 ? 'rgba(57,211,83,0.55)' : 'rgba(248,81,73,0.55)';
     ctx.fillRect(pad + i * barW + 1, h - pad - barH, Math.max(1, barW - 2), barH);
   }
   const zeroX = pad + ((0 - min) / span) * plotW;
   if (zeroX >= pad && zeroX <= w - pad) {
-    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(201,209,217,0.25)';
     ctx.beginPath(); ctx.moveTo(zeroX, pad); ctx.lineTo(zeroX, h - pad); ctx.stroke();
     ctx.setLineDash([]);
   }
-  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '9px ui-monospace, monospace';
+  ctx.fillStyle = 'rgba(201,209,217,0.35)'; ctx.font = '9px monospace';
   ctx.fillText(fmtUsd(min), pad, h - 8);
   ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
 }
 
-/* ---------------- 11. LIVE FEED (scrolling, BUY/SELL-style badges) ---------------- */
+/* ---------------- 11. LIVE FEED (scrolling, BUY/SELL badges) ---------------- */
 function buildLiveFeedEvents(trades) {
   if (!trades) return null;
   const events = [];
   trades.forEach(t => {
-    events.push({ ts: t.open_ts, badge: 'open', badgeText: t.direction, text: `${t.asset} ${t.direction} OPENED @ ${t.entry_price.toFixed(3)} ($${t.size_usd.toFixed(2)})`, cls: '' });
+    const badge = t.direction === 'YES' ? 'buy' : 'sell';
+    const badgeText = t.direction === 'YES' ? 'BUY' : 'SELL';
+    events.push({ ts: t.open_ts, badge, badgeText, text: `${t.asset} ${t.direction} OPENED @ ${t.entry_price.toFixed(3)} ($${t.size_usd.toFixed(2)})`, cls: '' });
     if (t.status !== 'open' && t.close_ts && t.pnl_usd != null) {
-      events.push({ ts: t.close_ts, badge: t.result === 'WIN' ? 'win' : 'loss', badgeText: t.result, text: `${t.asset} ${t.result} ${fmtUsd(t.pnl_usd)}`, cls: t.result === 'WIN' ? 'up' : 'down' });
+      events.push({ ts: t.close_ts, badge, badgeText, text: `${t.asset} ${t.result} ${fmtUsd(t.pnl_usd)}`, cls: t.result === 'WIN' ? 'up' : 'down' });
     }
   });
   events.sort((a, b) => new Date(b.ts) - new Date(a.ts));
@@ -1701,10 +1670,10 @@ function renderLiveFeed(trades) {
   const events = buildLiveFeedEvents(trades);
   if (!events || !events.length) { track.innerHTML = noData(); return; }
   const rowsHtml = events.map(e => `<div class="feed-row"><span class="feed-time">${fmtClock(e.ts)}</span><span class="feed-badge badge-${e.badge}">${e.badgeText}</span><span class="${e.cls}">${e.text}</span></div>`).join('');
-  track.innerHTML = rowsHtml + rowsHtml; // duplicated once for a seamless vertical scroll loop
+  track.innerHTML = rowsHtml + rowsHtml;
 }
 
-/* ---------------- 12. DECISION TIMELINE ---------------- */
+/* ---------------- 12. DECISION TIMELINE (additional detail) ---------------- */
 function tlNode(name, cls, label) {
   return `<div class="tl-node ${cls}"><span class="tl-dot"></span><span class="name">${name}</span><span class="state">${label}</span></div><div class="tl-arrow">&#9660;</div>`;
 }
@@ -1773,7 +1742,7 @@ function renderDecisionTimeline(liveStatus, state, trades, combinerStatus) {
   _lastSeenSignalTs = latestTs;
 }
 
-/* ---------------- 13. AI REASONING ---------------- */
+/* ---------------- 13. AI REASONING (additional detail) ---------------- */
 function renderReasoning(trades, onlineStatus) {
   const wrap = document.getElementById('reasoning-body');
   const withReason = trades ? trades.filter(t => t.signal_reason).sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts)) : [];
@@ -1804,7 +1773,7 @@ function renderReasoning(trades, onlineStatus) {
   wrap.innerHTML = html;
 }
 
-/* ---------------- 14. LIVE TRADE TABLE ---------------- */
+/* ---------------- 14. LIVE TRADE TABLE (additional detail) ---------------- */
 function renderTradeTable(trades, state) {
   const posBody = document.getElementById('positions-body');
   const tradesBody = document.getElementById('trades-body');
@@ -1835,7 +1804,7 @@ function renderTradeTable(trades, state) {
     </tr>`).join('') : `<tr><td class="empty-row">No closed trades yet</td></tr>`;
 }
 
-/* ---------------- 15. SIGNAL COMBINER PER-SIGNAL BREAKDOWN ---------------- */
+/* ---------------- 15. SIGNAL COMBINER PER-SIGNAL BREAKDOWN (additional detail) ---------------- */
 function scanning(label) { return `<span class="scanning">${label || 'SCANNING...'}</span>`; }
 function signalCell(sig) {
   if (!sig || !has(sig.fired)) return noData();
@@ -1876,17 +1845,17 @@ function renderSignalCombiner(status) {
     const combinedCell = blocked
       ? `<span class="down">BLOCKED</span>`
       : priceFiltered
-      ? `<span style="color:var(--yellow);">OUT OF PRICE BAND</span>`
+      ? `<span style="color:var(--gold);">OUT OF PRICE BAND</span>`
       : (has(s.combined_confidence) ? `<span class="${s.fired ? 'up' : ''}">${(s.combined_confidence * 100).toFixed(0)}%${s.fired ? ' FIRE' : ''}</span>` : scanning());
     return `<tr class="${s.fired ? 'win' : ''}">
       <td class="plain">${asset}</td>
-      <td class="plain">${priceFiltered ? '<span style="color:var(--yellow);">skipped</span>' : signalCell(s.order_book)}</td>
-      <td class="plain">${priceFiltered ? '<span style="color:var(--yellow);">skipped</span>' : signalCell(s.momentum)}</td>
-      <td class="plain">${priceFiltered ? '<span style="color:var(--yellow);">skipped</span>' : signalCell(s.volume)}</td>
+      <td class="plain">${priceFiltered ? '<span style="color:var(--gold);">skipped</span>' : signalCell(s.order_book)}</td>
+      <td class="plain">${priceFiltered ? '<span style="color:var(--gold);">skipped</span>' : signalCell(s.momentum)}</td>
+      <td class="plain">${priceFiltered ? '<span style="color:var(--gold);">skipped</span>' : signalCell(s.volume)}</td>
       <td class="plain">${blocked ? '<span class="down">BLOCKED</span>' : '<span class="up">clear</span>'}</td>
       <td class="plain">${combinedCell}</td>
     </tr>`;
-  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the yes_price band in config/settings.py SIGNAL_COMBINER_MIN/MAX_YES_PRICE (proven edge is 0.45-0.60 per D-002; temporarily widened to 0.35-0.65 on 2026-07-05 to accumulate fresh session data).</td></tr>`;
+  }).join('') + `<tr><td colspan="6" style="font-size:9px;color:var(--text-muted);border-bottom:none;">last update: ${fmtClock(status.updated_at)}. Combined confidence must exceed 60% to fire (weighted average of only the signals that actually fired, per-signal weights shown in the header). Trades are also skipped entirely outside the yes_price band in config/settings.py SIGNAL_COMBINER_MIN/MAX_YES_PRICE.</td></tr>`;
 }
 
 /* =============================================================================
@@ -1904,16 +1873,17 @@ async function refresh() {
   renderHeader(state, exchangeStatus, latency, liveStatus, apiStats);
   renderTicker(marketBias);
   const portfolio = renderPortfolio(trades, state);
-  renderRiskGauge(state);
-  renderPace(portfolio, state, trades);
-  renderAdvancedStats(stats);
+  renderLiqRisk(state);
+  renderStatGrid(stats, portfolio);
   renderAISignalPanel(onlineStatus, lastQuantFeature, state, marketBias, fearGreed, macroEvents);
-  renderTopCallout(portfolio);
-  renderExecutionCycle(executionCycle);
+  renderBiggestWin(portfolio);
+  renderExecutionCycle(executionCycle, trades);
   renderNextTick();
   _lastKnownState = state;
   renderNextSignalCountdown();
-  renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus);
+  renderTreePace(portfolio, state, trades);
+  renderTreeMiniChart(portfolio);
+  renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades);
   renderCandlestick(candles);
   renderCorrelation(liveStatus, biasHistory);
   renderRobustnessGrid(trades);
@@ -1951,7 +1921,7 @@ new ResizeObserver(() => refresh()).observe(document.getElementById('mc-chart-wr
 refresh();
 setInterval(refresh, REFRESH_MS);
 setInterval(() => {
-  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString(undefined, { hour12: false });
+  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
   renderNextTick();
   renderNextSignalCountdown();
 }, 1000);
