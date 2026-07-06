@@ -26,6 +26,19 @@ sys.path.insert(0, REPO_ROOT)
 from config.settings import STATE_FILE  # noqa: E402
 
 DEFAULT_PORT = 8080
+LOG_FILE = os.path.join(REPO_ROOT, "data", "server.log")
+
+
+def _log_line(msg: str):
+    """All of this server's own logging (startup line + per-request access
+    log) goes here instead of stdout/stderr -- this process has nothing to do
+    with the trading bot's terminal output reaching the browser (this file
+    only serves static files + one JSON POST endpoint, never injects process
+    logs into a response body), but there's no reason for it to spam whatever
+    terminal it happens to be launched from either."""
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    with open(LOG_FILE, "a") as f:
+        f.write(msg + "\n")
 
 
 class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -33,8 +46,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=REPO_ROOT, **kwargs)
 
     def log_message(self, fmt, *args):
-        # keep default stderr logging, just tagged for clarity
-        sys.stderr.write("[dashboard_server] " + (fmt % args) + "\n")
+        _log_line("[dashboard_server] " + (fmt % args))
 
     def do_POST(self):
         if self.path == "/api/reset-session":
@@ -69,7 +81,7 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PORT
     server = http.server.ThreadingHTTPServer(("", port), DashboardRequestHandler)
-    print(f"Serving {REPO_ROOT} on http://localhost:{port} (POST /api/reset-session enabled)")
+    _log_line(f"Serving {REPO_ROOT} on http://localhost:{port} (POST /api/reset-session enabled)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

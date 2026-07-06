@@ -275,7 +275,6 @@
 </style>
 </head>
 <body>
-<div id="debug-log" style="white-space:pre;font-size:9px;"></div>
 
 <!-- ================= SECTION 1: TOP HEADER ================= -->
 <div id="header-bar">
@@ -586,11 +585,6 @@ function animateNumber(el, target, formatter, duration) {
     const t = Math.max(0, Math.min(1, (now - start) / duration));
     const eased = 1 - Math.pow(1 - t, 3);
     const val = prev + (target - prev) * eased;
-    if (el.id === 'mc-path-count') {
-      window.__pcLog = (window.__pcLog || []);
-      window.__pcLog.push(`tok=${myToken} now=${now.toFixed(1)} start=${start.toFixed(1)} t=${t.toFixed(3)} prev=${prev} target=${target} val=${val.toFixed(1)} out=${formatter(val)}`);
-      document.title = 'PCLOG:' + window.__pcLog.slice(-3).join(' | ');
-    }
     el.textContent = formatter(val);
     if (t < 1) requestAnimationFrame(step);
   }
@@ -1362,14 +1356,12 @@ function animateMcHistogram(canvas, finals, targetFracs) {
   requestAnimationFrame(step);
   _mcPrevBarFracs = targetFracs;
 }
-function dbgLog(msg) { const d = document.getElementById('debug-log'); if (d) d.textContent += msg + '\n'; }
 function renderMonteCarlo(portfolio) {
   const statsEl = document.getElementById('mc-stats');
   const canvas = document.getElementById('mc-canvas');
   const p01TagEl = document.getElementById('mc-p01-tag');
   const pathCountEl = document.getElementById('mc-path-count');
   const mc = mcAccumulate(portfolio);
-  dbgLog(`rMC mc=${mc ? mc.count : 'NULL'} totalCount=${_mcTotalCount} preText=${pathCountEl && pathCountEl.textContent}`);
   if (!mc) {
     // A transient portfolio read (e.g. paper_trades.jsonl caught mid-write by
     // the live bot) can briefly look like "no wins" or "no losses" even
@@ -1377,8 +1369,7 @@ function renderMonteCarlo(portfolio) {
     // history (_mcTotalCount > 0), don't blank the panel over a one-tick
     // data hiccup -- just skip this render pass and keep showing the last
     // known-good state. Only show "no data" for a genuinely fresh session.
-    if (_mcTotalCount > 0) { dbgLog('  -> null but totalCount>0, RETURN early'); return; }
-    dbgLog('  -> null, totalCount==0, writing 0');
+    if (_mcTotalCount > 0) { return; }
     statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
     if (p01TagEl) p01TagEl.innerHTML = '';
     if (pathCountEl) pathCountEl.textContent = '0';
@@ -1388,10 +1379,8 @@ function renderMonteCarlo(portfolio) {
     ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
     return;
   }
-  dbgLog(`  -> success, calling animateNumber target=${mc.count}`);
   if (p01TagEl) p01TagEl.textContent = 'P < 0.010';
   if (pathCountEl) animateNumber(pathCountEl, mc.count, v => Math.max(0, Math.round(v)).toLocaleString('en-US'), MC_ANIM_MS);
-  dbgLog(`  -> after animateNumber, text=${pathCountEl && pathCountEl.textContent}`);
   statsEl.innerHTML = `
     <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
     <div class="mc-stat"><div class="mc-label">5th %ile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
