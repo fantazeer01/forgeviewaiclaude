@@ -796,6 +796,14 @@ function renderPortfolio(trades, state) {
     </div>`;
   return m;
 }
+// Thin wrapper used by the Reset Session handler to redraw the Portfolio
+// panel immediately from the server's response, without waiting on
+// refresh()'s next data/state.json fetch -- also keeps _lastPortfolio (read
+// by the equity curve / Monte Carlo resize observers) in sync.
+function rerenderPortfolio(trades, state) {
+  _lastPortfolio = renderPortfolio(trades, state);
+  return _lastPortfolio;
+}
 function renderLiqRisk(state) {
   const wrap = document.getElementById('liq-risk-body');
   if (!state || !has(state.daily_loss_usd)) { wrap.innerHTML = noData(); return; }
@@ -1573,7 +1581,13 @@ document.getElementById('reset-session-btn').addEventListener('click', async () 
   try {
     const res = await fetch('/api/reset-session', { method: 'POST' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
     mcResetAccumulator(); // scoped trades (and thus win_rate/avg_win/avg_loss) just changed
+    // Apply the new session_start_ts straight from the response so the
+    // Portfolio panel updates immediately, instead of only via refresh()'s
+    // next data/state.json fetch.
+    const trades = await loadTrades();
+    rerenderPortfolio(trades, { session_start_ts: data.session_start_ts });
     await refresh(); // re-renders every panel via the normal AJAX cycle -- no location.reload(), page never navigates
     btn.textContent = 'Session reset ✓';
     await new Promise(resolve => setTimeout(resolve, 2000)); // brief confirmation, then restored in finally below

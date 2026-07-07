@@ -4,16 +4,17 @@ one small write endpoint the plain `python -m http.server` can't provide:
 
     POST /api/reset-session
         Sets data/state.json's "session_start_ts" to the current UTC time
-        and returns it as JSON -- nothing else in state.json or anywhere
-        else is touched. This is what the dashboard's "Reset Session" button
-        calls -- it does NOT touch data/paper_trades.jsonl (or any other
-        data file: model weights, price_history.jsonl, no_shadow.jsonl,
-        model_health_log.jsonl, quant_features.jsonl are all untouched), so
-        all history stays fully intact; core/stats_calculator.py's "session"
-        stats.json block just starts scoping to trades opened after this
-        new timestamp (2026-07-08: replaces the old "session_start_clean"
-        field name -- same idea, now also consumed server-side instead of
-        only by dashboard_pro.html's own client-side filtering).
+        and returns {"status": "ok", "session_start_ts": ...} -- nothing
+        else in state.json or anywhere else is touched. This is what the
+        dashboard's "Reset Session" button calls -- it does NOT touch
+        data/paper_trades.jsonl (or any other data file: model weights,
+        price_history.jsonl, no_shadow.jsonl, model_health_log.jsonl,
+        quant_features.jsonl are all untouched), so all history stays fully
+        intact; dashboard_pro.html's own client-side scopeTradesToSession()
+        just starts scoping to trades opened after this new timestamp.
+        The write retries up to 3x with backoff on OSError, since this file
+        is also written by run.py's StateManager and the two os.replace()
+        calls can transiently collide with WinError 5 on Windows.
 
 Run from the repo root (same directory this replaces `python -m http.server`
 for):
@@ -25,6 +26,7 @@ import http.server
 import json
 import os
 import sys
+import time
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
@@ -62,19 +64,32 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_reset_session(self):
         state_path = os.path.join(REPO_ROOT, STATE_FILE)
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         try:
-            on_disk = {}
-            if os.path.exists(state_path):
-                with open(state_path) as f:
-                    on_disk = json.load(f)
-            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            on_disk["session_start_ts"] = now_iso
-            os.makedirs(os.path.dirname(state_path), exist_ok=True)
-            tmp_path = state_path + ".tmp"
-            with open(tmp_path, "w") as f:
-                json.dump(on_disk, f, indent=2)
-            os.replace(tmp_path, state_path)
-            body = json.dumps({"session_start_ts": now_iso}).encode("utf-8")
+            # run.py's own StateManager._save() does the same read-modify-write
+            # + os.replace() dance on this same file -- on Windows, two
+            # processes racing to os.replace() the same target can transiently
+            # collide with WinError 5 (access denied) rather than one just
+            # blocking. Retrying a few times with backoff clears it without
+            # needing real cross-process locking.
+            for attempt in range(3):
+                try:
+                    on_disk = {}
+                    if os.path.exists(state_path):
+                        with open(state_path) as f:
+                            on_disk = json.load(f)
+                    on_disk["session_start_ts"] = now_iso
+                    os.makedirs(os.path.dirname(state_path), exist_ok=True)
+                    tmp_path = state_path + ".tmp"
+                    with open(tmp_path, "w") as f:
+                        json.dump(on_disk, f, indent=2)
+                    os.replace(tmp_path, state_path)
+                    break
+                except OSError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.05 * (2 ** attempt))
+            body = json.dumps({"status": "ok", "session_start_ts": now_iso}).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
