@@ -5,7 +5,7 @@ import os
 from collections import defaultdict
 from typing import Optional
 
-from config.settings import TRADES_LOG, STATS_FILE, STATS_APY_NOTIONAL_CAPITAL_USD, STATE_FILE
+from config.settings import TRADES_LOG, STATS_FILE, STATS_APY_NOTIONAL_CAPITAL_USD
 
 logger = logging.getLogger(__name__)
 
@@ -28,28 +28,23 @@ class StatsCalculator:
     the first and last *resolved* trade, which would understate real
     elapsed time.
 
-    2026-07-08: also exports "alltime" and "session" breakdown blocks.
-    "alltime" mirrors the top-level fields (all resolved trades ever, same
-    numbers, just also grouped under this key for a client that wants both
-    shapes). "session" is scoped to data/state.json's session_start_ts (set
-    once at the bot's first-ever start, or reset by the dashboard's Reset
-    Session button -- see core/state_manager.py -- and deliberately NOT
-    touched on an ordinary bot restart, so restarting run.py doesn't quietly
-    zero out a session someone is watching). "session" counts OPEN trades
-    too (open_ts >= session_start_ts), not just resolved ones, with
-    open_trades reporting how many -- otherwise a session's n_trades/stats
-    would visibly dip to look "wrong" for however long a just-opened trade
-    stays open, then jump back once it resolves, even though nothing
-    actually broke. Open trades contribute 0 to total_pnl_usd (genuinely
-    unrealized) and are excluded from win_rate/avg_pnl_per_trade (both are
-    about realized outcomes, which an open trade doesn't have yet).
+    2026-07-08: also exports an "alltime" breakdown block mirroring the
+    top-level fields (all resolved trades ever, same numbers, just also
+    grouped under this key for a client that wants both shapes).
+
+    2026-07-08 (later same day): a "session" block scoped to
+    data/state.json's session_start_ts briefly lived here too, but was
+    removed -- dashboard_pro.html never read it (it has its own client-side
+    scopeTradesToSession(), which was and remains the single source of
+    truth for the Portfolio panel's session view), so this was a second,
+    unused implementation of the same scoping logic. POST /api/reset-session
+    in scripts/dashboard_server.py still updates state.json's
+    session_start_ts -- the client-side code picks that up directly.
     """
 
-    def __init__(self, trades_log: str = TRADES_LOG, stats_file: str = STATS_FILE,
-                 state_file: str = STATE_FILE):
+    def __init__(self, trades_log: str = TRADES_LOG, stats_file: str = STATS_FILE):
         self.trades_log = trades_log
         self.stats_file = stats_file
-        self.state_file = state_file
 
     def _load_trades(self) -> list[dict]:
         if not os.path.exists(self.trades_log):
@@ -72,17 +67,6 @@ class StatsCalculator:
             logger.error(f"StatsCalculator read error: {e}")
             return []
         return list(by_id.values())
-
-    def _session_start_ts(self) -> Optional[str]:
-        if not os.path.exists(self.state_file):
-            return None
-        try:
-            with open(self.state_file) as f:
-                state = json.load(f)
-            return state.get("session_start_ts") or None
-        except Exception as e:
-            logger.error(f"StatsCalculator state read error: {e}")
-            return None
 
     def compute(self) -> dict:
         trades = self._load_trades()
@@ -123,25 +107,6 @@ class StatsCalculator:
             )
 
         stats["alltime"] = self._resolved_breakdown(resolved)
-
-        session_start_ts = self._session_start_ts()
-        session_trades = (
-            [t for t in trades if t.get("open_ts") and session_start_ts and t["open_ts"] >= session_start_ts]
-            if session_start_ts else []
-        )
-        # session_trades is drawn from `trades` (all statuses) -- filter down
-        # to the resolved subset the same way `resolved` itself was computed.
-        session_resolved = [
-            t for t in session_trades
-            if t.get("status") in ("win", "loss") and t.get("pnl_usd") is not None and t.get("close_ts")
-        ]
-        session_open = [t for t in session_trades if t.get("status") == "open"]
-        session_stats = self._resolved_breakdown(session_resolved)
-        session_stats["open_trades"] = len(session_open)
-        session_stats["n_trades"] = session_stats["n_trades"] + len(session_open)
-        session_stats["session_start_ts"] = session_start_ts
-        stats["session"] = session_stats
-
         return stats
 
     @staticmethod
