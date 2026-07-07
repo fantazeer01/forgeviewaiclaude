@@ -252,3 +252,46 @@ def test_signal_stats_persists_across_new_combiner_instance_same_day(tmp_path):
     with open(status_path) as f:
         data = json.load(f)
     assert data["signal_stats"]["order_book"]["fired_today"] == 1
+
+
+# ---------------- NO mean-reversion carve-out (2026-07-07 resurrection) ----------------
+
+def test_no_signal_fires_on_real_reversion_from_extreme_peak(combiner):
+    combiner.combine(make_market(yes_price=0.97, no_price=0.03), FakeFetcher(top=None), btc_eth_correlation=None)
+    result = combiner.combine(make_market(yes_price=0.83, no_price=0.17), FakeFetcher(top=None), btc_eth_correlation=None)
+    assert result is not None
+    assert result.direction == "NO"
+    assert result.confidence > 0.5
+
+
+def test_no_signal_does_not_fire_without_a_real_peak(combiner):
+    # yes_price=0.90 on the very first tick for this market -- no prior
+    # history, so there's no real peak-to-current drop to detect yet.
+    result = combiner.combine(make_market(yes_price=0.90, no_price=0.10), FakeFetcher(top=None), btc_eth_correlation=None)
+    assert result is None
+
+
+def test_no_signal_disabled_by_kill_switch(combiner, mocker):
+    mocker.patch("core.signal_combiner.NO_TRADING_ENABLED", False)
+    combiner.combine(make_market(yes_price=0.97, no_price=0.03), FakeFetcher(top=None), btc_eth_correlation=None)
+    result = combiner.combine(make_market(yes_price=0.83, no_price=0.17), FakeFetcher(top=None), btc_eth_correlation=None)
+    assert result is None
+
+
+def test_no_signal_status_reflects_fired_not_blocked(combiner):
+    import json
+    combiner.combine(make_market(yes_price=0.97, no_price=0.03), FakeFetcher(top=None), btc_eth_correlation=None)
+    combiner.combine(make_market(yes_price=0.83, no_price=0.17), FakeFetcher(top=None), btc_eth_correlation=None)
+    with open(combiner.status_path) as f:
+        data = json.load(f)
+    assert data["BTC"]["price_out_of_band"] is False
+    assert data["BTC"]["fired"] is True
+    assert data["BTC"]["combined_confidence"] is not None
+
+
+def test_no_signal_still_blocked_below_the_0_80_gate(combiner):
+    # a drop from an extreme peak that lands BELOW NO_REVERSION_MIN_YES_PRICE
+    # (0.80) is still just an out-of-band block, not a NO trade.
+    combiner.combine(make_market(yes_price=0.97, no_price=0.03), FakeFetcher(top=None), btc_eth_correlation=None)
+    result = combiner.combine(make_market(yes_price=0.70, no_price=0.30), FakeFetcher(top=None), btc_eth_correlation=None)
+    assert result is None

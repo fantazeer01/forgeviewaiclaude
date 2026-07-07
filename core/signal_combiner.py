@@ -7,6 +7,7 @@ from typing import Optional
 from config.settings import (
     SIGNAL_COMBINER_WEIGHTS, SIGNAL_COMBINER_THRESHOLD, SIGNAL_COMBINER_STATUS_FILE,
     SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE,
+    NO_TRADING_ENABLED, NO_REVERSION_MIN_YES_PRICE,
 )
 from core.repricing_detector import RepricingSignal
 from core.signals.order_book_signal import OrderBookSignalGenerator
@@ -14,6 +15,7 @@ from core.signals.momentum_signal import MomentumSignalGenerator
 from core.signals.volume_signal import VolumeSignalGenerator
 from core.signals.correlation_signal import CorrelationFilter
 from core.signals.price_stability_filter import PriceStabilityFilter
+from core.signals.mean_reversion_no_signal import MeanReversionNoSignalGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +52,20 @@ class SignalCombiner:
     would happily fire on a market at yes_price=0.165 with the same confidence
     as one at 0.50.
 
-    DISABLED (2026-07-06): an "extreme mean-reversion" third path briefly
-    existed here, firing YES below yes_price=0.20 and NO above 0.80 (betting
-    against whichever side the market was overconfident in). Removed after
-    real results: 10.5% win rate over 19 resolved NO-direction trades, net
-    -$139.67 -- not viable. Trading is YES-only again, exclusively within
-    [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]; anything
-    outside that band is simply not traded, full stop.
+    A third path (2026-07-07 resurrection, config.settings.NO_TRADING_ENABLED):
+    an "extreme mean-reversion" NO signal above yes_price=NO_REVERSION_MIN_YES_PRICE
+    (0.80), betting that the market's own near-certainty in YES was overdone
+    and is reverting -- see core/signals/mean_reversion_no_signal.py. This
+    exact shape was disabled 2026-07-06 after real results (10.5% win rate
+    over 19 trades, net -$139.67), reintroduced now that both actual root
+    causes of that failure are fixed (the online model no longer diverges;
+    kelly_size() uses each side's real payout ratio instead of a flat
+    lookup table blind to entry_price). It is checked ONLY when yes_price is
+    already outside [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]
+    and does not participate in the order_book/momentum/volume weighted
+    average above -- either it fires on its own (yes_price high enough,
+    real reversion detected) or the price-out-of-band block below still
+    applies exactly as before.
 
     A third FILTER (2026-07-06 signal quality pass):
     core/signals/price_stability_filter.py's PriceStabilityFilter blocks
@@ -66,19 +75,21 @@ class SignalCombiner:
     anything; a flat market gives them nothing.
     """
 
-    SIGNAL_NAMES = ("order_book", "momentum", "volume")
+    SIGNAL_NAMES = ("order_book", "momentum", "volume", "mean_reversion_no")
 
     def __init__(self, order_book_gen: Optional[OrderBookSignalGenerator] = None,
                  momentum_gen: Optional[MomentumSignalGenerator] = None,
                  volume_gen: Optional[VolumeSignalGenerator] = None,
                  correlation_filter: Optional[CorrelationFilter] = None,
                  price_stability_filter: Optional[PriceStabilityFilter] = None,
+                 mean_reversion_no_gen: Optional[MeanReversionNoSignalGenerator] = None,
                  status_path: str = SIGNAL_COMBINER_STATUS_FILE):
         self.order_book_gen = order_book_gen or OrderBookSignalGenerator()
         self.momentum_gen = momentum_gen or MomentumSignalGenerator()
         self.volume_gen = volume_gen or VolumeSignalGenerator()
         self.correlation_filter = correlation_filter or CorrelationFilter()
         self.price_stability_filter = price_stability_filter or PriceStabilityFilter()
+        self.mean_reversion_no_gen = mean_reversion_no_gen or MeanReversionNoSignalGenerator()
         self.status_path = status_path
         self._status: dict[str, dict] = {}
         self._stats_date = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
@@ -139,6 +150,7 @@ class SignalCombiner:
 
         # feed rolling histories every tick, regardless of whether anything fires
         self.momentum_gen.update(market_id, market["yes_price"])
+        self.mean_reversion_no_gen.update(market_id, market["yes_price"])
         self.price_stability_filter.update(market_id, market["yes_price"])
         if asset == "BTC":
             self.correlation_filter.update_btc_price(market["yes_price"])
@@ -172,6 +184,33 @@ class SignalCombiner:
         # QUANT_ONLY_MODE removed repricing from the trading path entirely.
         price_out_of_band = not (SIGNAL_COMBINER_MIN_YES_PRICE <= yes_price <= SIGNAL_COMBINER_MAX_YES_PRICE)
         if price_out_of_band:
+            # NO mean-reversion carve-out (2026-07-07 resurrection): checked
+            # only in the extreme-high zone this is actually designed for,
+            # never below SIGNAL_COMBINER_MAX_YES_PRICE. Does not touch
+            # order_book/momentum/volume or their weighted average at all --
+            # either this fires on its own, or the block below still applies
+            # exactly as before.
+            if NO_TRADING_ENABLED and yes_price >= NO_REVERSION_MIN_YES_PRICE:
+                no_signal = self.mean_reversion_no_gen.generate(market)
+                self._record_fire("mean_reversion_no", no_signal is not None)
+                if no_signal is not None:
+                    self._status[asset] = {
+                        "order_book": self._signal_summary(None),
+                        "momentum": self._signal_summary(None),
+                        "volume": self._signal_summary(None),
+                        "correlation_filter_blocked": False,
+                        "price_out_of_band": False,
+                        "price_stability_blocked": False,
+                        "combined_confidence": no_signal.confidence,
+                        "fired": True,
+                    }
+                    self._export_status()
+                    logger.info(
+                        f"NO mean-reversion signal fired: {asset} {market_id} "
+                        f"yes_price={yes_price} confidence={no_signal.confidence} "
+                        f"reason={no_signal.reason}"
+                    )
+                    return no_signal
             self._status[asset] = {
                 "order_book": self._signal_summary(None),
                 "momentum": self._signal_summary(None),

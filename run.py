@@ -124,17 +124,26 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         return None
     _export_execution_cycle("validate", asset=market["asset"], market_id=market["market_id"], detail=reason)
     if online_model.is_warmed_up():
-        # Real Kelly fraction (2026-07-07 CRITICAL FIX) computed from the
-        # model's own win_probability AND this market's actual entry_price --
-        # a non-positive fraction (no edge) returns exactly 0.0, and that
-        # means skip the trade entirely, not open it at $0. Checked BEFORE
+        # Real Kelly fraction (2026-07-07 CRITICAL FIX, direction-aware for
+        # NO trades added the same day) computed from the model's own
+        # win_probability AND the ACTUAL side being entered's own price --
+        # win_probability from decide() is always raw P(YES wins) regardless
+        # of direction, so a NO trade needs P(NO)=1-win_probability and
+        # NO's own entry price (no_price = 1-yes_price), or kelly_size()
+        # would be handed the wrong side's price/probability pair entirely.
+        # A non-positive fraction (no edge) returns exactly 0.0, meaning
+        # skip the trade entirely, not open it at $0. Checked BEFORE
         # constructing the RepricingSignal so a no-edge tick doesn't build
         # an object it'll never use.
-        size_usd = online_model.kelly_size(win_probability, market["yes_price"])
+        if direction == "YES":
+            kelly_p, kelly_price = win_probability, market["yes_price"]
+        else:
+            kelly_p, kelly_price = 1.0 - win_probability, market["no_price"]
+        size_usd = online_model.kelly_size(kelly_p, kelly_price)
         if size_usd <= 0:
             logger.debug(
-                f"Kelly fraction non-positive for {market['asset']} "
-                f"(p={win_probability:.3f}, yes_price={market['yes_price']:.3f}) -- no edge, skipping"
+                f"Kelly fraction non-positive for {market['asset']} {direction} "
+                f"(p={kelly_p:.3f}, entry_price={kelly_price:.3f}) -- no edge, skipping"
             )
             return None
         signal = RepricingSignal(

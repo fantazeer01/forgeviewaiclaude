@@ -118,6 +118,53 @@ ONLINE_MODEL_C = 0.1
 # hour of trading (observed cadence is ~20-30 resolutions/hour) without
 # meaningfully adding to the per-update cost.
 ONLINE_MODEL_HEALTH_CHECK_INTERVAL = 10
+
+# ---- model stability monitor (2026-07-07) ----
+# A second, independent check from _run_health_check() above -- that one
+# only probes for the specific saturation signature already seen twice.
+# This one is broader: real recent win rate, real prediction diversity, and
+# raw coefficient magnitude, run less often (every 50 vs every 10) since
+# it needs a meaningful sample of recent predictions to say anything.
+# See OnlineQuantModel._run_stability_monitor().
+STABILITY_CHECK_INTERVAL = 50
+# Win rate is checked over the trailing STABILITY_WIN_RATE_WINDOW resolved
+# examples (drawn from the same history_y used for training -- real and
+# shadow-NO examples mixed, same caveat as everywhere else this history is
+# used). Below this, only a warning is logged -- a losing streak alone
+# isn't proof the MODEL broke (could just be a bad market regime), so it
+# doesn't auto-reset.
+STABILITY_WIN_RATE_WINDOW = 50
+STABILITY_MIN_WIN_RATE = 0.45
+# Diversity is checked over the trailing STABILITY_PREDICTIONS_WINDOW real
+# predict_proba_one() outputs (recorded at the moment of each resolved
+# trade's own update() call, not a synthetic sweep). A healthy model's
+# predictions vary at least this much across genuinely different real
+# examples; below this, that's the same "collapsed to a near-constant
+# output" signature as the saturation check, so THIS one auto-resets.
+STABILITY_PREDICTIONS_WINDOW = 20
+STABILITY_MIN_PREDICTION_STD = 0.05
+# Raw |coefficient| bound -- tighter than the model's own internal workings
+# would need to be "not diverged" (LogisticRegression regularized at C=0.1
+# on standardized features typically stays well under 1.0, see the
+# 2026-07-07 CRITICAL FIX report: max was 0.41), so exceeding this is a
+# real red flag on its own, not just a proxy -- auto-resets.
+STABILITY_COEF_BOUND = 5.0
+MODEL_HEALTH_LOG = "data/model_health_log.jsonl"
+
+# ---- scheduled full retrain (2026-07-07) ----
+# Separate from the continuous per-update refit (every resolved trade
+# already re-fits on the full history, see OnlineQuantModel.update()) --
+# this is a periodic, explicitly health-gated refresh trained on ONLY the
+# trailing RETRAIN_WINDOW examples (not the full up-to-HISTORY_MAX history),
+# so the model can adapt to a regime shift instead of an old, possibly
+# stale, majority of training data dominating forever. The candidate is
+# verified against the same coefficient-bound and prediction-diversity
+# checks as the stability monitor BEFORE being swapped in -- a candidate
+# that fails stays rejected and the live model keeps running unchanged.
+RETRAIN_INTERVAL = 500
+RETRAIN_WINDOW = 500
+MODEL_RETRAIN_LOG = "data/model_retrain_log.jsonl"
+
 # Probability calibration: kept as an extra safety margin against
 # overconfident predictions even with the better-regularized model above --
 # not itself a fix for the coefficient divergence (that was the raw
@@ -272,13 +319,31 @@ SIGNAL_COMBINER_THRESHOLD = 0.60
 SIGNAL_COMBINER_MIN_YES_PRICE = 0.30
 SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 
-# DISABLED (2026-07-06): an "extreme mean-reversion" strategy briefly traded
-# NO above yes_price=0.80 and YES below 0.20 (SIGNAL_COMBINER_EXTREME_LOW/
-# HIGH_YES_PRICE), with a graduated size cap (SIZE_CAP_*) layered on top.
-# Removed after real results: 10.5% win rate over 19 resolved NO-direction
-# trades, net -$139.67 -- not a viable strategy. Everything outside
-# [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE] is simply
-# not traded again, same as before this was ever added.
+# RESURRECTED (2026-07-07): an "extreme mean-reversion" NO strategy at
+# yes_price>0.80 was disabled 2026-07-06 after real results (10.5% win rate
+# over 19 trades, net -$139.67) -- not viable AT THE TIME. Reintroduced now
+# that both of that period's actual root causes are fixed: the online model
+# no longer diverges (core/online_model.py was rewritten from SGDClassifier
+# to LogisticRegression the same day this was disabled), and kelly_size()
+# now uses the real Kelly formula with each side's actual payout ratio
+# instead of a flat lookup table blind to entry_price. Never proven live in
+# this corrected form -- NO_TRADING_ENABLED is a single kill switch back to
+# YES-only [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]
+# behavior if results repeat the old pattern. See
+# core/signals/mean_reversion_no_signal.py for the signal itself.
+NO_TRADING_ENABLED = True
+# Gate: NO is only even considered above this yes_price (the old disabled
+# strategy's own threshold).
+NO_REVERSION_MIN_YES_PRICE = 0.80
+# The rolling window must have seen yes_price reach at least this high
+# before a reversion back down means anything -- otherwise a market that's
+# merely drifted up to, say, 0.82 with no real spike would trigger on noise.
+NO_REVERSION_PEAK_MIN_YES_PRICE = 0.90
+NO_REVERSION_WINDOW_SEC = 90
+# Peak-to-current must have fallen at least this much for the reversion to
+# count as real movement, not noise -- same shape as MOMENTUM_MIN_REVERSAL_STRENGTH's
+# role for the YES-side momentum signal.
+NO_REVERSION_MIN_DROP = 0.05
 
 # Quant-only mode: the repricing detector is fully disabled as a live trading
 # input. Trades require BOTH online_model's own calibrated p > 0.5 AND

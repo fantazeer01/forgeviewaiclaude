@@ -83,6 +83,27 @@ def test_decisive_signal_propagates_from_combiner_into_the_logged_signal(engine,
     assert logged_signal["signal"].decisive_signal == "momentum"
 
 
+def test_no_direction_trade_sized_off_no_side_probability_and_price(engine, warmed_model, mocker):
+    # 2026-07-07 NO-direction resurrection: win_probability from decide() is
+    # always raw P(YES) regardless of direction -- a NO trade must size off
+    # P(NO)=1-win_probability and NO's own entry price (no_price), not
+    # win_probability/yes_price directly, or kelly_size() gets the wrong
+    # side's price/probability pair entirely.
+    mocker.patch.object(warmed_model, "predict_proba_one", return_value=0.1)  # P(YES)=0.1, P(NO)=0.9
+    no_signal = RepricingSignal(
+        asset="BTC", market_id="m1", direction="NO",
+        yes_price=0.85, no_price=0.15, confidence=0.95, reason="mean reversion",
+    )
+    trade = _decide_and_open(
+        engine, warmed_model, make_market(yes_price=0.85, no_price=0.15), no_signal, {}, TelegramReporter(),
+    )
+    assert trade is not None
+    assert trade.direction == "NO"
+    assert trade.entry_price == 0.15
+    assert trade.size_usd == warmed_model.kelly_size(0.9, 0.15)
+    assert trade.size_usd != warmed_model.kelly_size(0.1, 0.85)  # sanity: NOT the YES-side pair
+
+
 def test_warmup_trade_sizes_flat_regardless_of_combiner_confidence(engine, warming_up_model):
     # 2026-07-07 reversal: warm-up trades must NOT use kelly_size() -- a
     # freshly-reset, unproven model shouldn't be sized off real Kelly purely

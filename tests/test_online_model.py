@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from config.settings import ONLINE_MODEL_OWN_THRESHOLD
@@ -446,3 +448,119 @@ def test_saturation_reset_clears_history_and_pending(model, mocker):
     assert model._history_X == []
     assert model._history_y == []
     assert model._pending == {}
+
+
+# ---------------- stability monitor (2026-07-07) ----------------
+
+def test_stability_monitor_runs_every_stability_check_interval_updates(model, mocker, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.online_model.MODEL_HEALTH_LOG", str(tmp_path / "health.jsonl"))
+    spy = mocker.spy(model, "_run_stability_monitor")
+    mocker.patch("core.online_model.STABILITY_CHECK_INTERVAL", 3)
+    for i in range(3):
+        model.update(make_features(yes_price=0.3 + i * 0.05), i % 2)
+    assert spy.call_count == 1  # only on the 3rd update, not every update
+
+
+def test_stability_monitor_logs_report_to_jsonl(model, tmp_path, monkeypatch):
+    log_path = tmp_path / "health.jsonl"
+    monkeypatch.setattr("core.online_model.MODEL_HEALTH_LOG", str(log_path))
+    model.update(make_features(yes_price=0.5), 1)
+    model.update(make_features(yes_price=0.4), 0)
+    model._run_stability_monitor()
+    lines = log_path.read_text().strip().split("\n")
+    assert len(lines) == 1
+    entry = json.loads(lines[0])
+    assert entry["n_updates"] == model.n_updates
+    assert "win_rate" in entry
+    assert "action" in entry
+
+
+def test_stability_monitor_warns_but_does_not_reset_on_low_win_rate(model, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.online_model.MODEL_HEALTH_LOG", str(tmp_path / "health.jsonl"))
+    # 9 losses then 1 win -- win rate 0.1, well under STABILITY_MIN_WIN_RATE (0.45)
+    for i in range(10):
+        model.update(make_features(yes_price=0.3 + i * 0.02), 0 if i < 9 else 1)
+    n_updates_before = model.n_updates
+    model._run_stability_monitor()
+    # low win rate warns, but does not reset -- n_updates/history untouched
+    assert model.n_updates == n_updates_before
+    assert model._history_y != []
+
+
+def test_stability_monitor_resets_on_low_prediction_diversity(model, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.online_model.MODEL_HEALTH_LOG", str(tmp_path / "health.jsonl"))
+    model._recent_predictions = [0.5] * 20  # zero variance -- collapsed predictions
+    model._run_stability_monitor()
+    assert model.model_health == "reset"
+    assert model.n_updates == 0
+
+
+def test_stability_monitor_resets_on_coef_out_of_bound(model, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.online_model.MODEL_HEALTH_LOG", str(tmp_path / "health.jsonl"))
+    model.update(make_features(yes_price=0.5), 1)
+    model.update(make_features(yes_price=0.4), 0)
+    model.clf.coef_[0][0] = 6.0  # exceeds STABILITY_COEF_BOUND (5.0)
+    model._run_stability_monitor()
+    assert model.model_health == "reset"
+    assert model.n_updates == 0
+
+
+# ---------------- scheduled full retrain (2026-07-07) ----------------
+
+def test_scheduled_retrain_runs_every_retrain_interval_updates(model, mocker, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.online_model.MODEL_RETRAIN_LOG", str(tmp_path / "retrain.jsonl"))
+    mocker.patch("core.online_model.STABILITY_CHECK_INTERVAL", 1000)  # avoid interfering
+    mocker.patch("core.online_model.ONLINE_MODEL_HEALTH_CHECK_INTERVAL", 1000)
+    spy = mocker.spy(model, "_run_scheduled_retrain")
+    mocker.patch("core.online_model.RETRAIN_INTERVAL", 4)
+    for i in range(4):
+        model.update(make_features(yes_price=0.3 + i * 0.05), i % 2)
+    assert spy.call_count == 1
+
+
+def test_scheduled_retrain_skips_when_only_one_class_in_window(model, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.online_model.MODEL_RETRAIN_LOG", str(tmp_path / "retrain.jsonl"))
+    monkeypatch.setattr("core.online_model.RETRAIN_WINDOW", 3)
+    clf_before = model.clf
+    model.update(make_features(yes_price=0.5), 1)
+    model.update(make_features(yes_price=0.45), 1)
+    model._run_scheduled_retrain()
+    assert model.clf is clf_before  # untouched
+    assert not (tmp_path / "retrain.jsonl").exists()  # nothing logged either
+
+
+def test_scheduled_retrain_accepts_healthy_candidate_and_swaps(model, tmp_path, monkeypatch):
+    log_path = tmp_path / "retrain.jsonl"
+    monkeypatch.setattr("core.online_model.MODEL_RETRAIN_LOG", str(log_path))
+    for i in range(10):
+        model.update(make_features(yes_price=0.3 + (i % 5) * 0.05), i % 2)
+    old_clf = model.clf
+    model._run_scheduled_retrain()
+    assert model.clf is not old_clf  # swapped
+    entry = json.loads(log_path.read_text().strip().split("\n")[-1])
+    assert entry["accepted"] is True
+    assert len(entry["feature_importance"]) == len(model.feature_names)
+
+
+def test_scheduled_retrain_rejects_unhealthy_candidate_and_keeps_live_model(model, mocker, tmp_path, monkeypatch):
+    log_path = tmp_path / "retrain.jsonl"
+    monkeypatch.setattr("core.online_model.MODEL_RETRAIN_LOG", str(log_path))
+    for i in range(10):
+        model.update(make_features(yes_price=0.3 + (i % 5) * 0.05), i % 2)
+    old_clf = model.clf
+    mocker.patch.object(model, "_check_candidate_diversity", return_value=(False, 0.001))
+    model._run_scheduled_retrain()
+    assert model.clf is old_clf  # rejected, unchanged
+    entry = json.loads(log_path.read_text().strip().split("\n")[-1])
+    assert entry["accepted"] is False
+
+
+def test_feature_importance_ranks_by_absolute_coefficient(model):
+    model.clf.coef_[0] = 0.0
+    idx_a = model.feature_names.index("yes_price")
+    idx_b = model.feature_names.index("no_price")
+    model.clf.coef_[0][idx_a] = 0.9
+    model.clf.coef_[0][idx_b] = -0.1
+    importances = model._feature_importance(model.clf)
+    assert importances[0]["feature"] == "yes_price"
+    assert importances[0]["coef"] == pytest.approx(0.9)

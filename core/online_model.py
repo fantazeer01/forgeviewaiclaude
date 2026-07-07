@@ -18,6 +18,9 @@ from config.settings import (
     ONLINE_MODEL_CALIBRATION_STEEPNESS, ONLINE_MODEL_C,
     ONLINE_MODEL_HEALTH_CHECK_INTERVAL, ONLINE_MODEL_KELLY_BANKROLL_USD,
     ONLINE_MODEL_KELLY_MIN_SIZE_USD, ONLINE_MODEL_KELLY_MAX_SIZE_USD,
+    STABILITY_CHECK_INTERVAL, STABILITY_WIN_RATE_WINDOW, STABILITY_MIN_WIN_RATE,
+    STABILITY_PREDICTIONS_WINDOW, STABILITY_MIN_PREDICTION_STD, STABILITY_COEF_BOUND,
+    MODEL_HEALTH_LOG, RETRAIN_INTERVAL, RETRAIN_WINDOW, MODEL_RETRAIN_LOG,
 )
 from core.kelly_criterion import kelly_fraction, net_odds_from_price
 # ONLINE_MODEL_CALIBRATION_LOWER (0.20) is not imported separately: the
@@ -163,6 +166,11 @@ class OnlineQuantModel:
         self._history_X: list[np.ndarray] = []
         self._history_y: list[int] = []
         self._model_health = "healthy"
+        # Rolling buffer of this model's own predict_proba_one() output at
+        # the moment of each resolved trade (see update()) -- used by
+        # _run_stability_monitor()'s diversity check. Real predictions on
+        # real examples, not a synthetic sweep.
+        self._recent_predictions: list[float] = []
         self._load()
         if not self._fitted:
             self._seed_yes_price_prior()
@@ -239,6 +247,7 @@ class OnlineQuantModel:
         self._pending = {}
         self._history_X = []
         self._history_y = []
+        self._recent_predictions = []
         self._seed_yes_price_prior()
 
     @property
@@ -303,8 +312,20 @@ class OnlineQuantModel:
             self.clf.fit(np.array(self._history_X), np.array(self._history_y))
             self._fitted = True
         self._n_updates += 1
+        # Real prediction on this real, just-resolved example's own features
+        # (post-fit, so it reflects the just-updated model) -- feeds the
+        # stability monitor's diversity check below.
+        p_now = self.predict_proba_one(features)
+        if p_now is not None:
+            self._recent_predictions.append(p_now)
+            if len(self._recent_predictions) > STABILITY_PREDICTIONS_WINDOW:
+                self._recent_predictions = self._recent_predictions[-STABILITY_PREDICTIONS_WINDOW:]
         if self._n_updates % ONLINE_MODEL_HEALTH_CHECK_INTERVAL == 0:
             self._run_health_check()
+        if self._n_updates % STABILITY_CHECK_INTERVAL == 0:
+            self._run_stability_monitor()
+        if self._n_updates % RETRAIN_INTERVAL == 0:
+            self._run_scheduled_retrain()
         self.save()
 
     def _run_health_check(self) -> str:
@@ -346,6 +367,173 @@ class OnlineQuantModel:
         else:
             self._model_health = "healthy"
         return self._model_health
+
+    def _run_stability_monitor(self):
+        """Every STABILITY_CHECK_INTERVAL (50) updates: a broader check than
+        _run_health_check()'s saturation probe above. Three independent
+        signals:
+          - real recent win rate over the trailing STABILITY_WIN_RATE_WINDOW
+            resolved examples -- WARNS only, does not reset (a losing
+            streak alone isn't proof the model itself broke, could just be
+            a bad market regime; auto-resetting on that would be reacting
+            to noise).
+          - real prediction diversity over the trailing
+            STABILITY_PREDICTIONS_WINDOW actual predict_proba_one() outputs
+            recorded at real resolutions (see update()) -- auto-resets,
+            same "collapsed to a near-constant output" signature as the
+            saturation check, just measured on real examples instead of a
+            synthetic sweep.
+          - raw |coefficient| magnitude against STABILITY_COEF_BOUND --
+            auto-resets; at this model's normal scale (observed max ~0.41
+            post-fix) exceeding 5.0 is a red flag on its own, not just a
+            proxy.
+        Always appends a report to MODEL_HEALTH_LOG regardless of outcome."""
+        recent_y = self._history_y[-STABILITY_WIN_RATE_WINDOW:]
+        win_rate = (sum(recent_y) / len(recent_y)) if recent_y else None
+        win_rate_ok = win_rate is None or win_rate > STABILITY_MIN_WIN_RATE
+
+        preds = self._recent_predictions[-STABILITY_PREDICTIONS_WINDOW:]
+        pred_std = float(np.std(preds)) if len(preds) >= 2 else None
+        diversity_ok = pred_std is None or pred_std > STABILITY_MIN_PREDICTION_STD
+
+        if self._fitted and hasattr(self.clf, "coef_"):
+            max_abs_coef = max(float(np.max(np.abs(self.clf.coef_))), float(np.max(np.abs(self.clf.intercept_))))
+        else:
+            max_abs_coef = None
+        coef_ok = max_abs_coef is None or max_abs_coef <= STABILITY_COEF_BOUND
+
+        warnings = []
+        if not win_rate_ok:
+            msg = f"win rate {win_rate:.3f} <= {STABILITY_MIN_WIN_RATE} over last {len(recent_y)} resolved examples"
+            warnings.append(msg)
+            logger.warning(f"OnlineQuantModel stability monitor: {msg}")
+
+        action = "none"
+        if not diversity_ok or not coef_ok:
+            reasons = []
+            if not diversity_ok:
+                reasons.append(f"prediction std {pred_std:.4f} <= {STABILITY_MIN_PREDICTION_STD}")
+            if not coef_ok:
+                reasons.append(f"max abs coef {max_abs_coef:.4f} > {STABILITY_COEF_BOUND}")
+            logger.warning(
+                f"OnlineQuantModel stability monitor: auto-resetting at {self._n_updates} "
+                f"updates ({'; '.join(reasons)})"
+            )
+            self._reset_to_fresh()
+            self._model_health = "reset"
+            action = "reset"
+
+        self._append_jsonl(MODEL_HEALTH_LOG, {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "n_updates": self._n_updates,
+            "win_rate": round(win_rate, 4) if win_rate is not None else None,
+            "win_rate_window": len(recent_y),
+            "win_rate_ok": win_rate_ok,
+            "prediction_std": round(pred_std, 4) if pred_std is not None else None,
+            "prediction_window": len(preds),
+            "diversity_ok": diversity_ok,
+            "max_abs_coef": round(max_abs_coef, 4) if max_abs_coef is not None else None,
+            "coef_ok": coef_ok,
+            "warnings": warnings,
+            "action": action,
+        })
+
+    def _predict_proba_with(self, clf, features: dict) -> float:
+        """Same as predict_proba_one(), but against an arbitrary candidate
+        classifier instead of self.clf -- used to evaluate a retrain
+        candidate's health BEFORE it's swapped in (see
+        _run_scheduled_retrain()), without mutating any live state."""
+        x = self._vectorize(features)
+        x_std = self._standardize(x).reshape(1, -1)
+        p_raw = float(clf.predict_proba(x_std)[0][1])
+        return self._calibrate_proba(p_raw)
+
+    def _check_candidate_diversity(self, clf) -> tuple[bool, float]:
+        base = {name: self._mean[i] for i, name in enumerate(self.feature_names)}
+        outputs = []
+        for yp in SATURATION_PROBE_YES_PRICES:
+            feats = dict(base)
+            feats["yes_price"] = yp
+            if "no_price" in feats:
+                feats["no_price"] = 1.0 - yp
+            outputs.append(self._predict_proba_with(clf, feats))
+        spread = max(outputs) - min(outputs)
+        return spread >= SATURATION_EPSILON, spread
+
+    def _feature_importance(self, clf) -> list[dict]:
+        """Feature importance for a linear model = |coefficient| magnitude,
+        ranked descending -- the direct, standard reading for a logistic
+        regression fit on z-scored features (already on a comparable
+        scale, so no further normalization is needed)."""
+        ranked = sorted(zip(self.feature_names, clf.coef_[0]), key=lambda p: abs(p[1]), reverse=True)
+        return [{"feature": name, "coef": round(float(c), 4)} for name, c in ranked]
+
+    def _run_scheduled_retrain(self):
+        """Every RETRAIN_INTERVAL (500) updates: trains a FRESH classifier
+        from scratch on only the trailing RETRAIN_WINDOW (500) examples --
+        NOT the full up-to-HISTORY_MAX history the continuous per-update
+        refit in update() uses -- so the model can adapt to a regime shift
+        instead of an ever-growing majority of old training data dominating
+        forever. The candidate is verified against the same coefficient-
+        bound and prediction-diversity checks _run_stability_monitor() uses
+        BEFORE being swapped in: self.clf is only ever reassigned after the
+        candidate has already passed every check (atomic switch -- there is
+        no window where a partially-verified model is live). A candidate
+        that fails stays rejected, logged, and the live model keeps running
+        exactly as it was. Feature importance is logged either way."""
+        window_X = self._history_X[-RETRAIN_WINDOW:]
+        window_y = self._history_y[-RETRAIN_WINDOW:]
+        if len(set(window_y)) < 2:
+            logger.info(
+                f"OnlineQuantModel: scheduled retrain skipped at {self._n_updates} updates -- "
+                f"trailing {len(window_y)}-example window has only "
+                f"{len(set(window_y))} outcome class(es) present."
+            )
+            return
+
+        candidate = self._fresh_classifier()
+        candidate.fit(np.array(window_X), np.array(window_y))
+        max_abs_coef = max(float(np.max(np.abs(candidate.coef_))), float(np.max(np.abs(candidate.intercept_))))
+        coef_ok = max_abs_coef <= STABILITY_COEF_BOUND
+        diversity_ok, spread = self._check_candidate_diversity(candidate)
+        accepted = coef_ok and diversity_ok
+        importances = self._feature_importance(candidate)
+
+        self._append_jsonl(MODEL_RETRAIN_LOG, {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "n_updates": self._n_updates,
+            "window_size": len(window_y),
+            "max_abs_coef": round(max_abs_coef, 4),
+            "coef_ok": coef_ok,
+            "diversity_spread": round(spread, 4),
+            "diversity_ok": diversity_ok,
+            "accepted": accepted,
+            "feature_importance": importances,
+        })
+
+        if accepted:
+            self.clf = candidate
+            self._fitted = True
+            top5 = ", ".join(f"{f['feature']}={f['coef']:+.3f}" for f in importances[:5])
+            logger.info(
+                f"OnlineQuantModel: scheduled retrain ACCEPTED at {self._n_updates} updates "
+                f"(window={len(window_y)}, max_abs_coef={max_abs_coef:.4f}). Top features: {top5}"
+            )
+        else:
+            logger.warning(
+                f"OnlineQuantModel: scheduled retrain REJECTED at {self._n_updates} updates "
+                f"(coef_ok={coef_ok}, diversity_ok={diversity_ok}, spread={spread:.4f}) -- "
+                f"keeping the live model unchanged."
+            )
+
+    @staticmethod
+    def _append_jsonl(path: str, entry: dict):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception as e:
+            logger.error(f"OnlineQuantModel jsonl append error ({path}): {e}")
 
     def predict_proba_one(self, features: dict) -> Optional[float]:
         if not self._fitted:
@@ -493,6 +681,7 @@ class OnlineQuantModel:
             "history_X": self._history_X,
             "history_y": self._history_y,
             "model_health": self._model_health,
+            "recent_predictions": self._recent_predictions,
         }
         try:
             with open(tmp_path, "wb") as f:
@@ -559,6 +748,7 @@ class OnlineQuantModel:
             self._history_X = state.get("history_X", [])
             self._history_y = state.get("history_y", [])
             self._model_health = state.get("model_health", "healthy")
+            self._recent_predictions = state.get("recent_predictions", [])
             if persisted_features == target_features:
                 self.feature_names = persisted_features
             elif (len(target_features) > len(persisted_features)
