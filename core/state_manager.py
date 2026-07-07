@@ -20,6 +20,13 @@ class StateManager:
         "stop_reason": "",
         "last_daily_reset": "",
         "session_start": "",
+        # 2026-07-08: replaces the old, dashboard-only "session_start_clean"
+        # field (which was written exclusively by scripts/dashboard_server.py's
+        # POST /api/reset-session, never by this class) -- consolidated so
+        # there's a single, consistent session-boundary timestamp used by
+        # both stats_calculator.py's session/ vs alltime stats.json blocks
+        # and the dashboard's "Reset Session" button.
+        "session_start_ts": "",
     }
 
     def __init__(self, state_file: str = STATE_FILE):
@@ -60,11 +67,28 @@ class StateManager:
                     saved = json.load(f)
                 self.state = {**self.DEFAULT_STATE, **saved}
                 self.state["session_start"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                self._ensure_session_start_ts(saved)
                 return
             except Exception as e:
                 logger.warning(f"StateManager load error: {e}")
         self.state = dict(self.DEFAULT_STATE)
         self.state["session_start"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        self.state["session_start_ts"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        self._save()
+
+    def _ensure_session_start_ts(self, saved: dict):
+        """If session_start_ts isn't already on disk, set it now (and save
+        immediately, since _load()'s normal success path doesn't otherwise
+        call _save()) -- one-time migration (2026-07-08): if the old
+        session_start_clean field is present, reuse ITS value so upgrading
+        doesn't silently reset whatever session the user was already
+        looking at; otherwise (a genuinely first-ever start) use now."""
+        if self.state.get("session_start_ts"):
+            return
+        self.state["session_start_ts"] = (
+            saved.get("session_start_clean")
+            or datetime.datetime.now(datetime.timezone.utc).isoformat()
+        )
         self._save()
 
     def _save(self):

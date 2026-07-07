@@ -5,7 +5,7 @@ import os
 from collections import defaultdict
 from typing import Optional
 
-from config.settings import TRADES_LOG, STATS_FILE, STATS_APY_NOTIONAL_CAPITAL_USD
+from config.settings import TRADES_LOG, STATS_FILE, STATS_APY_NOTIONAL_CAPITAL_USD, STATE_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +27,29 @@ class StatsCalculator:
     ever" basis dashboard_pro.html's Pace panel uses, not the span between
     the first and last *resolved* trade, which would understate real
     elapsed time.
+
+    2026-07-08: also exports "alltime" and "session" breakdown blocks.
+    "alltime" mirrors the top-level fields (all resolved trades ever, same
+    numbers, just also grouped under this key for a client that wants both
+    shapes). "session" is scoped to data/state.json's session_start_ts (set
+    once at the bot's first-ever start, or reset by the dashboard's Reset
+    Session button -- see core/state_manager.py -- and deliberately NOT
+    touched on an ordinary bot restart, so restarting run.py doesn't quietly
+    zero out a session someone is watching). "session" counts OPEN trades
+    too (open_ts >= session_start_ts), not just resolved ones, with
+    open_trades reporting how many -- otherwise a session's n_trades/stats
+    would visibly dip to look "wrong" for however long a just-opened trade
+    stays open, then jump back once it resolves, even though nothing
+    actually broke. Open trades contribute 0 to total_pnl_usd (genuinely
+    unrealized) and are excluded from win_rate/avg_pnl_per_trade (both are
+    about realized outcomes, which an open trade doesn't have yet).
     """
 
-    def __init__(self, trades_log: str = TRADES_LOG, stats_file: str = STATS_FILE):
+    def __init__(self, trades_log: str = TRADES_LOG, stats_file: str = STATS_FILE,
+                 state_file: str = STATE_FILE):
         self.trades_log = trades_log
         self.stats_file = stats_file
+        self.state_file = state_file
 
     def _load_trades(self) -> list[dict]:
         if not os.path.exists(self.trades_log):
@@ -55,6 +73,17 @@ class StatsCalculator:
             return []
         return list(by_id.values())
 
+    def _session_start_ts(self) -> Optional[str]:
+        if not os.path.exists(self.state_file):
+            return None
+        try:
+            with open(self.state_file) as f:
+                state = json.load(f)
+            return state.get("session_start_ts") or None
+        except Exception as e:
+            logger.error(f"StatsCalculator state read error: {e}")
+            return None
+
     def compute(self) -> dict:
         trades = self._load_trades()
         days_running = self._days_running(trades)
@@ -66,32 +95,74 @@ class StatsCalculator:
         n = len(resolved)
 
         if n == 0:
-            return self._stats(n=0, days_running=days_running)
+            stats = self._stats(n=0, days_running=days_running)
+        else:
+            pnls = [t["pnl_usd"] for t in resolved]
+            wins = [p for p in pnls if p > 0]
+            losses = [p for p in pnls if p <= 0]
+            total_pnl = sum(pnls)
+            mean_pnl = total_pnl / n
+            std_pnl = self._stdev(pnls, mean_pnl)
+            sharpe_ratio = (mean_pnl / std_pnl) * (n ** 0.5) if std_pnl > 0 else None
 
-        pnls = [t["pnl_usd"] for t in resolved]
-        wins = [p for p in pnls if p > 0]
-        losses = [p for p in pnls if p <= 0]
-        total_pnl = sum(pnls)
-        mean_pnl = total_pnl / n
-        std_pnl = self._stdev(pnls, mean_pnl)
-        sharpe_ratio = (mean_pnl / std_pnl) * (n ** 0.5) if std_pnl > 0 else None
+            avg_win = sum(wins) / len(wins) if wins else None
+            avg_loss = sum(losses) / len(losses) if losses else None
+            avg_rr = (avg_win / abs(avg_loss)) if avg_win is not None and avg_loss not in (None, 0) else None
 
-        avg_win = sum(wins) / len(wins) if wins else None
-        avg_loss = sum(losses) / len(losses) if losses else None
-        avg_rr = (avg_win / abs(avg_loss)) if avg_win is not None and avg_loss not in (None, 0) else None
+            apy_pct = None
+            if days_running is not None and days_running > 0:
+                apy_pct = (total_pnl / STATS_APY_NOTIONAL_CAPITAL_USD) * (365.0 / days_running) * 100.0
 
-        apy_pct = None
-        if days_running is not None and days_running > 0:
-            apy_pct = (total_pnl / STATS_APY_NOTIONAL_CAPITAL_USD) * (365.0 / days_running) * 100.0
+            max_streak, current_streak = self._win_streaks(resolved)
 
-        max_streak, current_streak = self._win_streaks(resolved)
+            stats = self._stats(
+                n=n, days_running=days_running, total_pnl=total_pnl,
+                sharpe_ratio=sharpe_ratio, avg_rr=avg_rr, apy_pct=apy_pct,
+                best_day_pnl=self._best_day_pnl(resolved),
+                max_win_streak=max_streak, current_win_streak=current_streak,
+            )
 
-        return self._stats(
-            n=n, days_running=days_running, total_pnl=total_pnl,
-            sharpe_ratio=sharpe_ratio, avg_rr=avg_rr, apy_pct=apy_pct,
-            best_day_pnl=self._best_day_pnl(resolved),
-            max_win_streak=max_streak, current_win_streak=current_streak,
+        stats["alltime"] = self._resolved_breakdown(resolved)
+
+        session_start_ts = self._session_start_ts()
+        session_trades = (
+            [t for t in trades if t.get("open_ts") and session_start_ts and t["open_ts"] >= session_start_ts]
+            if session_start_ts else []
         )
+        # session_trades is drawn from `trades` (all statuses) -- filter down
+        # to the resolved subset the same way `resolved` itself was computed.
+        session_resolved = [
+            t for t in session_trades
+            if t.get("status") in ("win", "loss") and t.get("pnl_usd") is not None and t.get("close_ts")
+        ]
+        session_open = [t for t in session_trades if t.get("status") == "open"]
+        session_stats = self._resolved_breakdown(session_resolved)
+        session_stats["open_trades"] = len(session_open)
+        session_stats["n_trades"] = session_stats["n_trades"] + len(session_open)
+        session_stats["session_start_ts"] = session_start_ts
+        stats["session"] = session_stats
+
+        return stats
+
+    @staticmethod
+    def _resolved_breakdown(resolved: list[dict]) -> dict:
+        """n_trades/win_rate/avg_pnl_per_trade computed over RESOLVED trades
+        only -- a caller that also wants open trades counted in n_trades
+        (see "session" above) adds those on top afterward; win_rate and
+        avg_pnl_per_trade stay resolved-only since an open trade has no
+        realized outcome to average in yet."""
+        n = len(resolved)
+        if n == 0:
+            return {"n_trades": 0, "total_pnl_usd": 0.0, "win_rate": None, "avg_pnl_per_trade": None}
+        pnls = [t["pnl_usd"] for t in resolved]
+        total_pnl = sum(pnls)
+        wins = sum(1 for p in pnls if p > 0)
+        return {
+            "n_trades": n,
+            "total_pnl_usd": round(total_pnl, 4),
+            "win_rate": round(wins / n, 4),
+            "avg_pnl_per_trade": round(total_pnl / n, 4),
+        }
 
     @staticmethod
     def _stdev(values: list[float], mean: float) -> float:

@@ -3,11 +3,17 @@ Static file server for dashboard_pro.html / dashboard.html that also exposes
 one small write endpoint the plain `python -m http.server` can't provide:
 
     POST /api/reset-session
-        Sets data/state.json's "session_start_clean" to the current UTC time
-        and returns it as JSON. This is what the dashboard's "Reset Session"
-        button calls -- it does NOT touch data/paper_trades.jsonl, so all
-        historical trades stay intact; the dashboard just starts computing
-        its visible stats from trades opened after this timestamp.
+        Sets data/state.json's "session_start_ts" to the current UTC time
+        and returns it as JSON -- nothing else in state.json or anywhere
+        else is touched. This is what the dashboard's "Reset Session" button
+        calls -- it does NOT touch data/paper_trades.jsonl (or any other
+        data file: model weights, price_history.jsonl, no_shadow.jsonl,
+        model_health_log.jsonl, quant_features.jsonl are all untouched), so
+        all history stays fully intact; core/stats_calculator.py's "session"
+        stats.json block just starts scoping to trades opened after this
+        new timestamp (2026-07-08: replaces the old "session_start_clean"
+        field name -- same idea, now also consumed server-side instead of
+        only by dashboard_pro.html's own client-side filtering).
 
 Run from the repo root (same directory this replaces `python -m http.server`
 for):
@@ -62,13 +68,13 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 with open(state_path) as f:
                     on_disk = json.load(f)
             now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            on_disk["session_start_clean"] = now_iso
+            on_disk["session_start_ts"] = now_iso
             os.makedirs(os.path.dirname(state_path), exist_ok=True)
             tmp_path = state_path + ".tmp"
             with open(tmp_path, "w") as f:
                 json.dump(on_disk, f, indent=2)
             os.replace(tmp_path, state_path)
-            body = json.dumps({"session_start_clean": now_iso}).encode("utf-8")
+            body = json.dumps({"session_start_ts": now_iso}).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))

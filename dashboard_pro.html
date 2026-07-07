@@ -454,17 +454,21 @@
                               Backs Portfolio, Biggest Win, Live Trades, PnL
                               Growth, Live Feed, Monte Carlo inputs, and the
                               client-computed all-time %-return / avg hold time.
-   data/state.json           daily_loss_usd, system_stopped, session_start_clean.
+   data/state.json           daily_loss_usd, system_stopped, session_start_ts.
                               Backs header STATUS, LIQ RISK gauge. Pace uses the
                               earliest open_ts across paper_trades.jsonl (or
-                              session_start_clean after a reset), never
+                              session_start_ts after a reset), never
                               session_start/hours_running -- that resets on
                               every bot restart and inflates pace.
-   session_start_clean       NOT written by the bot -- written by
+   session_start_ts          Set once at the bot's first-ever start (see
+                              core/state_manager.py) and deliberately NOT
+                              touched on later restarts -- only
                               scripts/dashboard_server.py's POST
-                              /api/reset-session (the "Reset Session" button).
-                              Purely a display cutoff; paper_trades.jsonl is
-                              never modified.
+                              /api/reset-session (the "Reset Session" button)
+                              moves it. Purely a display cutoff;
+                              paper_trades.jsonl is never modified. Also
+                              consumed server-side by core/stats_calculator.py
+                              for stats.json's "session" block (2026-07-08).
    data/stats.json           sharpe_ratio, avg_rr, apy_pct, best_day_pnl,
                               max/current_win_streak -- written by
                               core/stats_calculator.py every 60s. apy_pct /
@@ -588,8 +592,8 @@ function fmtAge(iso) {
   return Date.now() - d.getTime();
 }
 function scopeTradesToSession(trades, state) {
-  const sessionStartClean = state && state.session_start_clean;
-  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
+  const sessionStartTs = state && state.session_start_ts;
+  const cutMs = sessionStartTs ? new Date(sessionStartTs).getTime() : null;
   if (!cutMs || isNaN(cutMs)) return { scoped: trades, cutMs: null };
   return { scoped: trades.filter(t => t.open_ts && new Date(t.open_ts).getTime() >= cutMs), cutMs };
 }
@@ -744,8 +748,8 @@ function computePortfolio(trades) {
 function computeAllTimeReturnPct(totalPnl) { return (totalPnl / NOTIONAL_CAPITAL_USD) * 100; }
 function computePace(portfolio, state, trades) {
   if (!portfolio || !trades || !trades.length) return null;
-  const sessionStartClean = state && state.session_start_clean;
-  const cutMs = sessionStartClean ? new Date(sessionStartClean).getTime() : null;
+  const sessionStartTs = state && state.session_start_ts;
+  const cutMs = sessionStartTs ? new Date(sessionStartTs).getTime() : null;
   let startMs;
   if (cutMs && !isNaN(cutMs)) {
     startMs = cutMs;
@@ -1570,7 +1574,9 @@ document.getElementById('reset-session-btn').addEventListener('click', async () 
     const res = await fetch('/api/reset-session', { method: 'POST' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     mcResetAccumulator(); // scoped trades (and thus win_rate/avg_win/avg_loss) just changed
-    await refresh();
+    await refresh(); // re-renders every panel via the normal AJAX cycle -- no location.reload(), page never navigates
+    btn.textContent = 'Session reset ✓';
+    await new Promise(resolve => setTimeout(resolve, 2000)); // brief confirmation, then restored in finally below
   } catch (e) {
     alert('Reset failed: ' + e.message + '\n\nMake sure the dashboard is served by scripts/dashboard_server.py (not plain `python -m http.server`), which is what implements POST /api/reset-session.');
   } finally {
