@@ -21,6 +21,7 @@ from config.settings import (
     STABILITY_CHECK_INTERVAL, STABILITY_WIN_RATE_WINDOW, STABILITY_MIN_WIN_RATE,
     STABILITY_PREDICTIONS_WINDOW, STABILITY_MIN_PREDICTION_STD, STABILITY_COEF_BOUND,
     MODEL_HEALTH_LOG, RETRAIN_INTERVAL, RETRAIN_WINDOW, MODEL_RETRAIN_LOG,
+    MODEL_CHECKPOINT_FILE,
 )
 from core.kelly_criterion import kelly_fraction, net_odds_from_price
 # ONLINE_MODEL_CALIBRATION_LOWER (0.20) is not imported separately: the
@@ -229,14 +230,69 @@ class OnlineQuantModel:
             f"D-002 -- not learned from real data yet"
         )
 
-    def _reset_to_fresh(self):
+    def _save_checkpoint(self) -> bool:
+        """Best-effort snapshot of the CURRENT model state to
+        MODEL_CHECKPOINT_FILE, called from _reset_to_fresh() right before it
+        wipes everything -- for manual forensic inspection/recovery later,
+        NOT automatic warm-starting (see _reset_to_fresh()'s docstring for
+        why). Returns whether anything was actually written: skipped (and
+        returns False) if self._n_updates is still 0, since that means
+        there's nothing real to save yet -- just the seeded prior, which is
+        already fully reproducible from ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT/
+        ONLINE_MODEL_PRIOR_INTERCEPT and needs no checkpoint."""
+        if self._n_updates == 0:
+            return False
+        checkpoint = {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "n_updates": self._n_updates,
+            "feature_names": self.feature_names,
+            "clf": self.clf,
+            "mean": self._mean,
+            "m2": self._m2,
+            "count_vec": self._count_vec,
+            "model_health": self._model_health,
+        }
+        try:
+            os.makedirs(os.path.dirname(MODEL_CHECKPOINT_FILE), exist_ok=True)
+            tmp_path = MODEL_CHECKPOINT_FILE + ".tmp"
+            with open(tmp_path, "wb") as f:
+                pickle.dump(checkpoint, f)
+            os.replace(tmp_path, MODEL_CHECKPOINT_FILE)
+            return True
+        except Exception as e:
+            logger.error(f"OnlineQuantModel checkpoint save error: {e}")
+            return False
+
+    def _reset_to_fresh(self) -> bool:
         """Full reset back to a brand-new model: fresh classifier (current
         C/solver), zeroed standardizer, cleared history/pending,
         n_updates back to 0, then re-seeded with the same yes_price prior a
-        genuinely new instance would get. Used by the saturation health
-        check (_run_health_check) -- this is the automatic equivalent of the
-        manual "delete the pkl and restart" reset performed twice by hand for
-        the two prior divergences."""
+        genuinely new instance would get. Used by both auto-reset paths
+        (_run_health_check()'s saturation probe and
+        _run_stability_monitor()'s diversity/coef checks) -- this is the
+        automatic equivalent of the manual "delete the pkl and restart"
+        reset performed twice by hand for the two prior divergences.
+
+        "Soft reset" (2026-07-08): _save_checkpoint() runs first, snapshotting
+        the about-to-be-wiped state to MODEL_CHECKPOINT_FILE. This is
+        deliberately NOT automatic warm-starting (manually copying the
+        checkpoint's coef_/intercept_ into the new classifier) -- requested,
+        but skipped for two independent reasons: (1) it wouldn't actually
+        persist -- every update() call does a full LogisticRegression.fit()
+        on the accumulated history from scratch (liblinear doesn't support
+        warm_start at all, see the class docstring), so any manually-assigned
+        coef_ would survive only until the next real fit() call (as soon as
+        2 new outcome classes accumulate), then get silently overwritten
+        anyway; and (2) even a persistent warm-start would seed the "fresh"
+        model from the EXACT weights that just triggered the reset (a
+        collapsed/diverged state) -- starting from a known-bad point defeats
+        the purpose of resetting in the first place. The checkpoint is saved
+        purely so a human can inspect or manually recover it later if
+        actually needed; the reset itself proceeds exactly as before.
+
+        Returns whether a checkpoint was actually saved (see
+        _save_checkpoint() -- False if there was nothing real to save yet)."""
+        checkpoint_saved = self._save_checkpoint()
         n = len(self.feature_names)
         self.clf = self._fresh_classifier()
         self._fitted = False
@@ -249,6 +305,7 @@ class OnlineQuantModel:
         self._history_y = []
         self._recent_predictions = []
         self._seed_yes_price_prior()
+        return checkpoint_saved
 
     @property
     def n_updates(self) -> int:
@@ -360,7 +417,8 @@ class OnlineQuantModel:
                 f"OnlineQuantModel: saturation detected (predict_proba spread "
                 f"{spread:.4f} < {SATURATION_EPSILON} across yes_price sweep "
                 f"{SATURATION_PROBE_YES_PRICES}, outputs={[round(o, 4) for o in outputs]}) "
-                f"after {self._n_updates} updates -- auto-resetting to a fresh model."
+                f"after {self._n_updates} updates -- auto-resetting to a fresh model "
+                f"(checkpoint will be saved to {MODEL_CHECKPOINT_FILE} first)."
             )
             self._reset_to_fresh()
             self._model_health = "reset"
@@ -410,6 +468,7 @@ class OnlineQuantModel:
 
         action = "none"
         n_updates_before_reset = None
+        checkpoint_saved = False
         if not diversity_ok or not coef_ok:
             reasons = []
             if not diversity_ok:
@@ -427,7 +486,7 @@ class OnlineQuantModel:
                 f"OnlineQuantModel stability monitor: auto-resetting at {self._n_updates} "
                 f"updates ({'; '.join(reasons)})"
             )
-            self._reset_to_fresh()
+            checkpoint_saved = self._reset_to_fresh()
             self._model_health = "reset"
             action = "reset"
 
@@ -435,6 +494,7 @@ class OnlineQuantModel:
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "n_updates": self._n_updates,
             "n_updates_before_reset": n_updates_before_reset,
+            "checkpoint_saved": checkpoint_saved,
             "win_rate": round(win_rate, 4) if win_rate is not None else None,
             "win_rate_window": len(recent_y),
             "win_rate_ok": win_rate_ok,

@@ -440,7 +440,8 @@ def test_health_check_runs_every_health_check_interval_updates(model, mocker):
     assert spy.call_count == 1  # only on the 3rd update, not every update
 
 
-def test_saturation_reset_clears_history_and_pending(model, mocker):
+def test_saturation_reset_clears_history_and_pending(model, mocker, tmp_path, monkeypatch):
+    monkeypatch.setattr("core.online_model.MODEL_CHECKPOINT_FILE", str(tmp_path / "checkpoint.pkl"))
     model.update(make_features(yes_price=0.5), 1)
     model.record_features("still-open-market", make_features())
     mocker.patch.object(model, "predict_proba_one", return_value=0.21)
@@ -448,6 +449,58 @@ def test_saturation_reset_clears_history_and_pending(model, mocker):
     assert model._history_X == []
     assert model._history_y == []
     assert model._pending == {}
+
+
+# ---------------- soft reset / checkpoint (2026-07-08) ----------------
+
+def test_reset_saves_checkpoint_when_there_is_real_progress(model, tmp_path, monkeypatch):
+    checkpoint_path = tmp_path / "checkpoint.pkl"
+    monkeypatch.setattr("core.online_model.MODEL_CHECKPOINT_FILE", str(checkpoint_path))
+    model.update(make_features(yes_price=0.5), 1)
+    model.update(make_features(yes_price=0.4), 0)
+    saved = model._reset_to_fresh()
+    assert saved is True
+    assert checkpoint_path.exists()
+
+
+def test_reset_skips_checkpoint_on_a_genuinely_fresh_model(model, tmp_path, monkeypatch):
+    checkpoint_path = tmp_path / "checkpoint.pkl"
+    monkeypatch.setattr("core.online_model.MODEL_CHECKPOINT_FILE", str(checkpoint_path))
+    # no update() calls at all -- n_updates is still 0, nothing real to save
+    saved = model._reset_to_fresh()
+    assert saved is False
+    assert not checkpoint_path.exists()
+
+
+def test_checkpoint_contains_the_pre_reset_state(model, tmp_path, monkeypatch):
+    import pickle
+    checkpoint_path = tmp_path / "checkpoint.pkl"
+    monkeypatch.setattr("core.online_model.MODEL_CHECKPOINT_FILE", str(checkpoint_path))
+    model.update(make_features(yes_price=0.5), 1)
+    model.update(make_features(yes_price=0.4), 0)
+    n_updates_before = model.n_updates
+    coef_before = model.clf.coef_.copy()
+    model._reset_to_fresh()
+    with open(checkpoint_path, "rb") as f:
+        checkpoint = pickle.load(f)
+    assert checkpoint["n_updates"] == n_updates_before
+    assert (checkpoint["clf"].coef_ == coef_before).all()
+    assert checkpoint["feature_names"] == model.feature_names
+
+
+def test_reset_does_not_warm_start_the_new_model_from_the_checkpoint(model, tmp_path, monkeypatch):
+    # explicit non-goal, per the 2026-07-08 request: the new model must be
+    # the ordinary seeded-prior fresh start, NOT initialized from the
+    # checkpoint's (just-diverged/collapsed) weights.
+    monkeypatch.setattr("core.online_model.MODEL_CHECKPOINT_FILE", str(tmp_path / "checkpoint.pkl"))
+    model.update(make_features(yes_price=0.5), 1)
+    model.update(make_features(yes_price=0.4), 0)
+    coef_before_reset = model.clf.coef_.copy()
+    model._reset_to_fresh()
+    # the fresh model is the documented seeded prior (zeros except yes_price),
+    # not a copy of the pre-reset coefficients
+    assert not (model.clf.coef_ == coef_before_reset).all()
+    assert model.n_updates == 0
 
 
 # ---------------- stability monitor (2026-07-07) ----------------
@@ -489,6 +542,7 @@ def test_stability_monitor_warns_but_does_not_reset_on_low_win_rate(model, tmp_p
 
 def test_stability_monitor_resets_on_low_prediction_diversity(model, tmp_path, monkeypatch):
     monkeypatch.setattr("core.online_model.MODEL_HEALTH_LOG", str(tmp_path / "health.jsonl"))
+    monkeypatch.setattr("core.online_model.MODEL_CHECKPOINT_FILE", str(tmp_path / "checkpoint.pkl"))
     model._recent_predictions = [0.5] * 20  # zero variance -- collapsed predictions
     model._run_stability_monitor()
     assert model.model_health == "reset"
@@ -497,6 +551,7 @@ def test_stability_monitor_resets_on_low_prediction_diversity(model, tmp_path, m
 
 def test_stability_monitor_resets_on_coef_out_of_bound(model, tmp_path, monkeypatch):
     monkeypatch.setattr("core.online_model.MODEL_HEALTH_LOG", str(tmp_path / "health.jsonl"))
+    monkeypatch.setattr("core.online_model.MODEL_CHECKPOINT_FILE", str(tmp_path / "checkpoint.pkl"))
     model.update(make_features(yes_price=0.5), 1)
     model.update(make_features(yes_price=0.4), 0)
     model.clf.coef_[0][0] = 6.0  # exceeds STABILITY_COEF_BOUND (5.0)

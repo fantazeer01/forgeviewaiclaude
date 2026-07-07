@@ -156,6 +156,17 @@ STABILITY_MIN_PREDICTION_STD = 0.02
 # real red flag on its own, not just a proxy -- auto-resets.
 STABILITY_COEF_BOUND = 5.0
 MODEL_HEALTH_LOG = "data/model_health_log.jsonl"
+# "Soft reset" (2026-07-08): before either auto-reset path
+# (_run_health_check()'s saturation probe or _run_stability_monitor()'s
+# diversity/coef checks) wipes the model, OnlineQuantModel._reset_to_fresh()
+# snapshots the current state here first -- for manual forensic inspection
+# or recovery later, NOT automatic warm-starting (see that method's
+# docstring for why real warm-starting isn't done: liblinear doesn't
+# support it, and even if it did, starting the "fresh" model from the exact
+# weights that just triggered the reset would defeat the point of
+# resetting). Overwritten on every reset -- only the most recent one is
+# kept, this is a forensic snapshot, not a history log.
+MODEL_CHECKPOINT_FILE = "data/model_checkpoint.pkl"
 
 # ---- scheduled full retrain (2026-07-07) ----
 # Separate from the continuous per-update refit (every resolved trade
