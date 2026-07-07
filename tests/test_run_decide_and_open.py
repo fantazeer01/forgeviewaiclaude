@@ -1,5 +1,6 @@
 import pytest
 
+from config.settings import WARMUP_FLAT_SIZE_USD
 from core.dedup_guard import DedupGuard
 from core.online_model import OnlineQuantModel
 from core.paper_trading_engine import PaperTradingEngine
@@ -37,6 +38,12 @@ def warmed_model(tmp_path):
     return model
 
 
+@pytest.fixture
+def warming_up_model(tmp_path):
+    # n_updates stays at 0 (default) < warmup_trades -- is_warmed_up() is False
+    return OnlineQuantModel(state_path=str(tmp_path / "online_model.pkl"), warmup_trades=5)
+
+
 def test_normal_band_signal_uses_kelly_size(engine, warmed_model, mocker):
     mocker.patch.object(warmed_model, "predict_proba_one", return_value=0.9)  # P(YES)=0.9
     combined_signal = RepricingSignal(
@@ -72,3 +79,21 @@ def test_decisive_signal_propagates_from_combiner_into_the_logged_signal(engine,
     )
     assert trade is not None
     assert logged_signal["signal"].decisive_signal == "momentum"
+
+
+def test_warmup_trade_sizes_flat_regardless_of_combiner_confidence(engine, warming_up_model):
+    # 2026-07-07 reversal: warm-up trades must NOT use kelly_size() -- a
+    # freshly-reset, unproven model shouldn't be sized up to $25 (the top
+    # BET_SIZES bucket) purely off combiner confidence during the one period
+    # whose only job is safely accumulating training examples.
+    strong_combiner_signal = RepricingSignal(
+        asset="BTC", market_id="m1", direction="YES",
+        yes_price=0.5, no_price=0.5, confidence=0.95, reason="combined(momentum)=0.95",
+    )
+    trade = _decide_and_open(
+        engine, warming_up_model, make_market(yes_price=0.5, no_price=0.5),
+        strong_combiner_signal, {}, TelegramReporter(),
+    )
+    assert trade is not None
+    assert trade.size_usd == WARMUP_FLAT_SIZE_USD
+    assert trade.size_usd != warming_up_model.kelly_size(0.95)

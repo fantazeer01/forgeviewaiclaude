@@ -389,3 +389,48 @@ def test_live_mode_no_direction_does_not_fire_just_below_threshold(model, mocker
     no_signal = make_repricing_signal(direction="NO", confidence=0.9)
     should_trade, _, _, _ = model.decide(make_features(), no_signal)
     assert should_trade is False
+
+
+# ---------------- saturation health check (2026-07-07) ----------------
+
+def test_health_check_flags_saturated_model_and_resets(model, mocker):
+    # a model whose predict_proba_one() returns the same value regardless of
+    # input is exactly the failure mode observed twice in production (SGD
+    # coefficients diverging into a near-binary step function) -- the health
+    # check must catch this from the OUTPUT behavior itself, not coefficient
+    # magnitude, and reset rather than leave it running degenerate.
+    mocker.patch.object(model, "predict_proba_one", return_value=0.79)
+    health = model._run_health_check()
+    assert health == "reset"
+    assert model.model_health == "reset"
+    assert model.n_updates == 0
+    assert model.is_warmed_up() is False
+
+
+def test_health_check_leaves_healthy_model_alone(model):
+    # the seeded yes_price prior is monotonic in yes_price (see
+    # test_yes_price_prior_is_monotonic_increasing), so a genuine spread
+    # across the saturation probe's yes_price sweep is expected -- no reset.
+    n_updates_before = model.n_updates
+    health = model._run_health_check()
+    assert health == "healthy"
+    assert model.model_health == "healthy"
+    assert model.n_updates == n_updates_before
+
+
+def test_health_check_runs_every_health_check_interval_updates(model, mocker):
+    spy = mocker.spy(model, "_run_health_check")
+    mocker.patch("core.online_model.ONLINE_MODEL_HEALTH_CHECK_INTERVAL", 3)
+    for i in range(3):
+        model.update(make_features(yes_price=0.3 + i * 0.05), i % 2)
+    assert spy.call_count == 1  # only on the 3rd update, not every update
+
+
+def test_saturation_reset_clears_history_and_pending(model, mocker):
+    model.update(make_features(yes_price=0.5), 1)
+    model.record_features("still-open-market", make_features())
+    mocker.patch.object(model, "predict_proba_one", return_value=0.21)
+    model._run_health_check()
+    assert model._history_X == []
+    assert model._history_y == []
+    assert model._pending == {}

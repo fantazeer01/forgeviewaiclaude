@@ -59,14 +59,19 @@ QUANT_MODEL_PATH = "data/quant_model.pkl"
 # table below instead of the Kelly formula.
 KELLY_FRACTION_CAP = 0.25
 ONLINE_MODEL_STATE_FILE = "data/online_model_state.pkl"
-# LOWERED (2026-07-06 urgent fix): was 200. The model diverged to a saturated
-# binary step function (intercept -80, yes_price coef +65 -- predict_proba_one
-# only ever returned ~0.21 or ~0.79, with the crossover around yes_price 0.80,
-# well outside SIGNAL_COMBINER_MAX_YES_PRICE=0.65) after 509 updates, so it was
-# reset (data/online_model_state.pkl.bak has the pre-reset state). 50 gets a
-# fresh model back to live-driven decisions faster; re-evaluate whether that's
-# enough real data once it's warmed up again.
+# 50 real resolved trades before the online model's own prediction is
+# trusted at all (see core/online_model.py.decide()) -- during this window
+# every trade is sized flat at WARMUP_FLAT_SIZE_USD via the signal combiner
+# alone (run.py's warm-up branch), Kelly-style BET_SIZES sizing only turns
+# on once is_warmed_up() is true.
 ONLINE_MODEL_WARMUP_TRADES = 50
+# Flat size for every trade opened during warm-up (2026-07-07), regardless of
+# signal combiner confidence -- Kelly/BET_SIZES sizing is deliberately
+# withheld until the model has actually warmed up and is driving decisions;
+# sizing a fresh, unproven warm-up trade at up to $25 (the top BET_SIZES
+# bucket) was needlessly risky for a period whose only purpose is
+# accumulating training examples, not making good bets yet.
+WARMUP_FLAT_SIZE_USD = 5.0
 ONLINE_MODEL_CONFIDENCE_THRESHOLD = 0.55
 # Simple step-function bet sizing, replacing the old Kelly-criterion formula
 # (which used to need ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
@@ -74,7 +79,8 @@ ONLINE_MODEL_CONFIDENCE_THRESHOLD = 0.55
 # needs none of them: the table's own values ARE the floor/ceiling now).
 # Keyed by signal_combiner confidence (NOT the online model's own calibrated
 # probability) -- core/online_model.py.kelly_size() finds the largest
-# threshold the confidence clears and returns that flat dollar amount.
+# threshold the confidence clears and returns that flat dollar amount. Only
+# used post-warmup -- see WARMUP_FLAT_SIZE_USD above for during warm-up.
 BET_SIZES = {0.60: 5, 0.70: 10, 0.80: 15, 0.90: 25}
 # Once live (post-warmup), a trade now requires BOTH the model's own
 # prediction (calibrated p > ONLINE_MODEL_OWN_THRESHOLD) AND the signal
@@ -82,23 +88,33 @@ BET_SIZES = {0.60: 5, 0.70: 10, 0.80: 15, 0.90: 25}
 # construction only exists when its confidence already exceeds
 # SIGNAL_COMBINER_THRESHOLD) -- see core/online_model.py.decide().
 #
-# RESET BACK TO SPEC (2026-07-06 urgent fix): had been temporarily lowered to
-# 0.3 to work around the same divergence issue described at
-# ONLINE_MODEL_WARMUP_TRADES above -- but 0.3 still wasn't enough once the
-# model fully saturated to a ~0.21/~0.79 step function (0.21 < 0.3 too).
-# Restored to the original 0.5 spec value now that the model itself has been
-# reset: previously a reset was rejected specifically because QUANT_ONLY_MODE's
-# warm-up fallback in run.py was skipped, so a reset model could never
-# re-accumulate training data and would halt trading permanently -- that
-# fallback skip has now been removed (see run.py._decide_and_open), so this
-# failure mode no longer applies.
+# Restored to the 0.5 spec value (2026-07-06) after two rounds of temporary
+# lowering (to work around two separate coefficient-divergence episodes --
+# see core/online_model.py's class docstring for the full history) proved to
+# just chase a moving target as the underlying model kept re-saturating.
+# 2026-07-07: the model was rewritten from SGDClassifier to
+# LogisticRegression(solver="liblinear") specifically because that failure
+# mode can no longer occur (see the docstring), so 0.5 should now be durable
+# rather than needing another temporary drop.
 ONLINE_MODEL_OWN_THRESHOLD = 0.5
 ONLINE_MODEL_COMBINER_THRESHOLD = 0.60
-# Probability calibration: the raw SGDClassifier sigmoid output saturates to
-# ~0.0/1.0 on this project's limited real training data (observed
-# coefficients growing past +/-50 by 234 real updates). Rather than trust
-# that raw output, predict_proba_one() runs it through a tanh-based
-# transform that compresses the full (0,1) range into approximately
+# LogisticRegression's inverse regularization strength (smaller = stronger)
+# -- see core/online_model.py's class docstring for why LogisticRegression
+# replaced SGDClassifier (2026-07-07) and why this needs to be re-applied
+# explicitly in _load() rather than trusted from whatever was pickled.
+ONLINE_MODEL_C = 0.1
+# How often (in resolved-trade updates) OnlineQuantModel._run_health_check()
+# probes predict_proba_one() for saturation (see that method and
+# SATURATION_PROBE_YES_PRICES/SATURATION_EPSILON in core/online_model.py).
+# 10 is frequent enough to catch a real saturation episode within roughly an
+# hour of trading (observed cadence is ~20-30 resolutions/hour) without
+# meaningfully adding to the per-update cost.
+ONLINE_MODEL_HEALTH_CHECK_INTERVAL = 10
+# Probability calibration: kept as an extra safety margin against
+# overconfident predictions even with the better-regularized model above --
+# not itself a fix for the coefficient divergence (that was the raw
+# coefficients, not the calibration; see core/online_model.py). Compresses
+# the classifier's raw sigmoid output into approximately
 # (ONLINE_MODEL_CALIBRATION_LOWER, ONLINE_MODEL_CALIBRATION_UPPER) --
 # asymptotic, so it approaches but never quite reaches those bounds, no
 # matter how extreme the raw prediction is. p_raw=0.5 still maps to exactly

@@ -13,7 +13,7 @@ from config.settings import (
     LIVE_STATUS_FILE, MARKET_BIAS_REFRESH_SEC, MARKET_BIAS_LOG, EXCHANGE_STATUS_FILE,
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
     QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG, SIGNALS_LOG,
-    STATS_EXPORT_INTERVAL_SEC,
+    STATS_EXPORT_INTERVAL_SEC, WARMUP_FLAT_SIZE_USD,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -147,15 +147,17 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         # the call -- it's the combiner alone, model gate bypassed, exactly
         # per decide()'s warmup docstring.
         #
-        # SIZED VIA KELLY TOO (2026-07-06): this previously fell through to
-        # open_trade()'s flat PAPER_TRADE_SIZE_USD default regardless of
-        # confidence, so every warm-up trade was $10 even at combiner
-        # confidence 0.95 -- kelly_size() only ran in the is_warmed_up()
-        # branch above. Same sizing call as that branch now applies here too.
+        # FLAT WARMUP_FLAT_SIZE_USD, NOT KELLY (2026-07-07 reversal): briefly
+        # sized warm-up trades via kelly_size() too (2026-07-06), but that let
+        # a totally unproven, freshly-reset model open $25 trades (the top
+        # BET_SIZES bucket) purely off combiner confidence. Warm-up's only
+        # job is accumulating training examples safely -- confidence-weighted
+        # sizing is reserved for after the model has actually warmed up and
+        # is driving the decision itself (the branch above).
         signal = combined_signal
-        size_usd = online_model.kelly_size(combined_signal.confidence)
+        size_usd = WARMUP_FLAT_SIZE_USD
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
-                                 size_usd=size_usd, detail=f"sized at ${size_usd:.2f}")
+                                 size_usd=size_usd, detail=f"sized at ${size_usd:.2f} (warmup flat)")
         trade = engine.open_trade(signal, source="repricing", size_usd=size_usd)
     if trade:
         _export_execution_cycle("fill", asset=trade.asset, market_id=trade.market_id, trade_id=trade.trade_id,

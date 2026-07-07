@@ -7,7 +7,7 @@ import pickle
 from typing import Optional
 
 import numpy as np
-from sklearn.linear_model import SGDClassifier
+from sklearn.linear_model import LogisticRegression
 
 from config.settings import (
     ONLINE_MODEL_STATE_FILE, ONLINE_MODEL_WARMUP_TRADES,
@@ -15,7 +15,8 @@ from config.settings import (
     ONLINE_MODEL_STATUS_FILE, ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT,
     ONLINE_MODEL_PRIOR_INTERCEPT, ONLINE_MODEL_OWN_THRESHOLD,
     ONLINE_MODEL_COMBINER_THRESHOLD, ONLINE_MODEL_CALIBRATION_UPPER,
-    ONLINE_MODEL_CALIBRATION_STEEPNESS, BET_SIZES,
+    ONLINE_MODEL_CALIBRATION_STEEPNESS, BET_SIZES, ONLINE_MODEL_C,
+    ONLINE_MODEL_HEALTH_CHECK_INTERVAL,
 )
 # ONLINE_MODEL_CALIBRATION_LOWER (0.20) is not imported separately: the
 # tanh-based transform below is symmetric around 0.5 by construction
@@ -26,20 +27,29 @@ from core.live_features import FEATURE_NAMES
 logger = logging.getLogger(__name__)
 
 Z_SCORE_CLIP = 8.0
-# Hard safety net against runaway coefficient growth (2026-07-06 divergence:
-# intercept reached -80, yes_price coef +65 after 509 updates, saturating
-# predict_proba_one() into a ~0.21/~0.79 binary step function no matter the
-# input -- see OnlineQuantModel._clip_coefficients()). L2 alone (alpha, set on
-# the SGDClassifier below) didn't stop it at the previous strength, so this
-# clips coef_/intercept_ back into range after every partial_fit() call,
-# independent of whatever the regularization strength is.
-COEF_CLIP = 10.0
+# Bounds how much of the accumulated resolution history a single fit() call
+# re-trains on -- fit cost grows with history size, so this keeps it bounded
+# over a long-running session instead of growing forever. Same shape as the
+# dashboard's own Math.min(portfolio.closed.length, 5000) cap for its Monte
+# Carlo inputs.
+HISTORY_MAX = 5000
+# Saturation health check (2026-07-07, replaces the old COEF_CLIP hard clip
+# entirely -- see the class docstring's "Why LogisticRegression" section for
+# why clipping individual coefficients didn't actually prevent the model
+# collapsing to a near-constant output). Probes predict_proba_one() across a
+# spread of yes_price values with everything else held at the running mean;
+# a healthy model should show at least some spread in its output across that
+# sweep. SATURATION_EPSILON is deliberately tight -- 0.01 on a probability
+# scale is "these 5 genuinely different inputs produced the same answer,"
+# not normal model behavior.
+SATURATION_PROBE_YES_PRICES = [0.20, 0.35, 0.50, 0.65, 0.80]
+SATURATION_EPSILON = 0.01
 
 
 class OnlineQuantModel:
-    """Online-learning trading model: an SGDClassifier that updates itself
-    with partial_fit() after every resolved trade, instead of being trained
-    once on a static historical batch.
+    """Online-learning trading model: a LogisticRegression that re-fits on
+    its full accumulated resolution history after every resolved trade,
+    instead of being trained once on a static historical batch.
 
     This is a deliberately different approach from the two prior batch-model
     sprints (docs/polymarket/DECISIONS.md D-001, data/historical/README.md):
@@ -51,31 +61,83 @@ class OnlineQuantModel:
     from zero evidence, so it needs a warm-up period before its predictions
     can be trusted with real trading decisions.
 
-    For the first ONLINE_MODEL_WARMUP_TRADES (200) resolved trades, decide()
-    always defers to the repricing signal passed in, and (in isolation) every
-    one of those resolutions would be fed into the model as a training
-    example. CAUTION: under run.py's current QUANT_ONLY_MODE=True wiring,
-    this warm-up fallback branch is explicitly skipped (no trade opens, so
-    record_features()/resolve() are never called), so a model reset back to
-    n_updates=0 would never re-warm itself live -- it would need a non-empty
-    warm-up trading path (QUANT_ONLY_MODE=False, or a manual backfill) to
-    ever accumulate training examples again. Prefer temporarily adjusting
-    ONLINE_MODEL_OWN_THRESHOLD over resetting the model for this reason.
+    For the first ONLINE_MODEL_WARMUP_TRADES (50) resolved trades, decide()
+    always defers to the repricing signal passed in (see run.py's warm-up
+    branch, which now also sizes those trades at a flat WARMUP_FLAT_SIZE_USD
+    regardless of confidence -- Kelly-style BET_SIZES sizing is reserved for
+    after warm-up, once the model itself is actually driving decisions).
+    Every one of those warm-up resolutions is still fed into the model as a
+    training example, via update().
 
     After warm-up, a trade requires BOTH signals to agree: the model's own
     (calibrated) prediction must exceed ONLINE_MODEL_OWN_THRESHOLD AND
     the signal combiner's independent output (passed in as `repricing_signal`
-    -- see run.py, which now feeds SignalCombiner.combine()'s result here
-    instead of the raw repricing detector) must be non-None, i.e. already
-    cleared its own ONLINE_MODEL_COMBINER_THRESHOLD (0.60). Sized via a flat
-    BET_SIZES lookup table keyed off the signal combiner's confidence (see
+    -- see run.py, which feeds SignalCombiner.combine()'s result here instead
+    of the raw repricing detector) must be non-None, i.e. already cleared its
+    own ONLINE_MODEL_COMBINER_THRESHOLD (0.60). Sized via a flat BET_SIZES
+    lookup table keyed off the signal combiner's confidence (see
     kelly_size()), not a Kelly-criterion formula.
 
-    predict_proba_one() runs the raw SGDClassifier output through a
-    tanh-based calibration (_calibrate_proba) before returning it: this
-    project observed the raw sigmoid saturating to ~0.0/1.0 well before 200
-    updates (coefficients growing past +/-50 by update 234), so decide()'s
-    threshold check should not trust the raw value at face value.
+    Why LogisticRegression(solver="liblinear") instead of SGDClassifier
+    (2026-07-07, second divergence): the SGD model's coefficients diverged
+    TWICE -- first to +/-80 (intercept) after 509 updates, then again to the
+    COEF_CLIP=10 hard bound itself (multiple correlated features -- yes_price,
+    no_price, ohlc_open/high/low/close all move together -- pinned right at
+    +/-10 simultaneously) after 328 more updates post-reset. Root cause,
+    confirmed by inspecting the live pickle before this rewrite: (1) clipping
+    each coefficient independently to [-10, 10] does nothing to bound their
+    COMBINED linear contribution to the logit when several correlated
+    features are all pinned at the boundary at once -- the dot product can
+    still be enormous even though no single weight exceeds the clip: (2) the
+    alpha=1e-2 regularization strengthening from the same 2026-07-06 fix
+    turned out to have NEVER actually taken effect on the running model --
+    _load() unconditionally replaces self.clf with whatever classifier
+    object was pickled, and a classifier's hyperparameters (alpha, in SGD's
+    case) are baked into that object at construction time, not re-read from
+    config on every load. Only a full reset (a fresh __init__ with no
+    persisted pkl) would have picked up the new alpha; simply restarting the
+    bot after that code change did not. (Both issues are fixed here: no more
+    per-coefficient clip to reason about, and _load() now explicitly
+    re-applies C/solver onto the loaded classifier every time, so a
+    future tuning change takes effect on the next restart without requiring
+    another manual reset.)
+
+    LogisticRegression + liblinear structurally cannot repeat either failure:
+    each fit() call solves a single well-posed, strongly-regularized (C=0.1)
+    convex optimization over the FULL accumulated history (capped at
+    HISTORY_MAX) from scratch -- there is no sequence of small per-sample
+    gradient steps that can compound into a runaway trajectory the way SGD's
+    partial_fit stream could. liblinear requires at least 2 distinct outcome
+    classes to have been observed before its first fit() call (a single-class
+    fit raises), so update() only actually re-fits once both a win and a loss
+    have been seen; before that (and always, on a fresh model) predict_proba_one()
+    serves the seeded yes_price prior instead of an unfit classifier. Note
+    `warm_start` was deliberately NOT set: sklearn's liblinear code path
+    returns before ever consulting warm_start (verified against sklearn
+    1.9's LogisticRegression.fit() source), so it would have been a silent
+    no-op -- refitting the full (bounded) history each time is cheap enough
+    at this data scale to not need it.
+
+    As a second, independent safety net (not a replacement for the above,
+    which prevents the specific past failure mode -- this catches ANY future
+    one): every ONLINE_MODEL_HEALTH_CHECK_INTERVAL (10) resolved trades,
+    _run_health_check() probes predict_proba_one() across a deliberate
+    spread of yes_price values (SATURATION_PROBE_YES_PRICES) with every
+    other feature held at its running mean. A healthy model shows some
+    spread in its output across that sweep; if all 5 probes land within
+    SATURATION_EPSILON of each other, that's the exact signature of the
+    binary-step-function collapse observed twice now, and the model is
+    auto-reset with a logged warning rather than left to keep serving a
+    degenerate prediction. The result ("healthy"/"saturated"/"reset") is
+    exported to data/online_model_status.json as model_health so the
+    dashboard can surface it.
+
+    predict_proba_one() runs the raw classifier output through a tanh-based
+    calibration (_calibrate_proba) before returning it, compressing it into
+    an asymptotic ~(0.20, 0.80) band -- kept as an extra safety margin
+    against overconfident predictions even with the new, better-regularized
+    model; not itself a fix for either divergence (that was the raw
+    coefficients, not the calibration).
     """
 
     def __init__(self, feature_names: list[str] = FEATURE_NAMES,
@@ -84,13 +146,7 @@ class OnlineQuantModel:
         self.feature_names = list(feature_names)
         self.state_path = state_path
         self.warmup_trades = warmup_trades
-        # alpha RAISED 1e-4 -> 1e-2 (2026-07-06): the previous strength did not
-        # keep coefficients bounded over hundreds of updates (see COEF_CLIP
-        # above for the actual divergence this caused) -- stronger L2 pulls
-        # weights toward zero every step instead of relying on clipping alone
-        # to undo growth after the fact.
-        self.clf = SGDClassifier(loss="log_loss", penalty="l2", alpha=1e-2,
-                                  learning_rate="optimal", random_state=20260704)
+        self.clf = self._fresh_classifier()
         self._fitted = False
         self._n_updates = 0
         n = len(self.feature_names)
@@ -98,14 +154,24 @@ class OnlineQuantModel:
         self._m2 = np.zeros(n)
         self._count_vec = np.zeros(n)
         self._pending: dict[str, dict] = {}
+        self._history_X: list[np.ndarray] = []
+        self._history_y: list[int] = []
+        self._model_health = "healthy"
         self._load()
         if not self._fitted:
             self._seed_yes_price_prior()
 
+    @staticmethod
+    def _fresh_classifier() -> LogisticRegression:
+        # penalty is deliberately NOT passed -- 'l2' is already
+        # LogisticRegression's default, and sklearn 1.8+ emits a
+        # FutureWarning ("removed in 1.10") whenever it's set explicitly.
+        return LogisticRegression(C=ONLINE_MODEL_C, solver="liblinear", random_state=20260704)
+
     def _seed_yes_price_prior(self):
         """Manually initializes the linear model's weights with an informed
-        prior BEFORE any real partial_fit() call, instead of starting from
-        an uninformative all-zero coefficient vector. This runs only on a
+        prior BEFORE any real fit() call, instead of starting from an
+        uninformative all-zero coefficient vector. This runs only on a
         genuinely fresh model (self._fitted was False after _load(), i.e.
         no persisted real training progress exists) -- it never overwrites
         real learned state.
@@ -115,10 +181,10 @@ class OnlineQuantModel:
         (still 0, still gated on real resolved trades). It's a documented
         initial condition grounded in a real, statistically significant
         finding (docs/polymarket/DECISIONS.md D-002). Every real resolved
-        trade from here on still calls partial_fit() and performs a normal
-        SGD gradient step starting from this prior, exactly as it would
-        from an all-zero start -- only the starting point changes, not the
-        learning mechanism.
+        trade from here on still calls update() and performs a normal
+        refit starting from this prior in the training history, exactly as
+        it would from an all-zero start -- only the starting point changes,
+        not the learning mechanism.
 
         Caveat: the calibration below (P~0.40 at yes_price=0.45, P~0.55 at
         yes_price=0.60) holds only at the instant this runs, when the
@@ -135,11 +201,9 @@ class OnlineQuantModel:
             self.clf.coef_[0][idx] = ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT
         self.clf.intercept_ = np.array([ONLINE_MODEL_PRIOR_INTERCEPT])
         self.clf.classes_ = np.array([0, 1])
-        self.clf.t_ = 1.0
-        # sklearn only sets n_features_in_ itself on a partial_fit() call
-        # that passes classes= (a genuine "first fit") -- since seeding
-        # bypasses partial_fit entirely, it's otherwise left unset, which
-        # would silently skip sklearn's own feature-count validation on
+        # sklearn only sets n_features_in_ itself on a real fit() call --
+        # since seeding bypasses fit() entirely, it's otherwise left unset,
+        # which would silently skip sklearn's own feature-count validation on
         # every later call (masking exactly the kind of shape mismatch
         # _migrate_new_features() has to guard against by hand).
         self.clf.n_features_in_ = n
@@ -151,9 +215,33 @@ class OnlineQuantModel:
             f"D-002 -- not learned from real data yet"
         )
 
+    def _reset_to_fresh(self):
+        """Full reset back to a brand-new model: fresh classifier (current
+        C/solver), zeroed standardizer, cleared history/pending,
+        n_updates back to 0, then re-seeded with the same yes_price prior a
+        genuinely new instance would get. Used by the saturation health
+        check (_run_health_check) -- this is the automatic equivalent of the
+        manual "delete the pkl and restart" reset performed twice by hand for
+        the two prior divergences."""
+        n = len(self.feature_names)
+        self.clf = self._fresh_classifier()
+        self._fitted = False
+        self._n_updates = 0
+        self._mean = np.zeros(n)
+        self._m2 = np.zeros(n)
+        self._count_vec = np.zeros(n)
+        self._pending = {}
+        self._history_X = []
+        self._history_y = []
+        self._seed_yes_price_prior()
+
     @property
     def n_updates(self) -> int:
         return self._n_updates
+
+    @property
+    def model_health(self) -> str:
+        return self._model_health
 
     def is_warmed_up(self) -> bool:
         return self._n_updates >= self.warmup_trades
@@ -188,27 +276,70 @@ class OnlineQuantModel:
         """One resolved-trade training example: outcome=1 for a win, 0 for a
         loss. Called for every resolution, whether or not decide() itself
         was the one that opened that trade -- warm-up trades are training
-        data too."""
+        data too.
+
+        Appends to the accumulated history and re-fits on the whole thing
+        (bounded at HISTORY_MAX) rather than taking a single incremental
+        gradient step -- see the class docstring for why. liblinear needs
+        both outcome classes present at least once; before that, this still
+        records the history and advances n_updates, it just skips the fit()
+        call itself (predict_proba_one() keeps serving the seeded prior or
+        whatever was last actually fitted)."""
         x = self._vectorize(features)
         self._update_standardizer(x)
-        x_std = self._standardize(x).reshape(1, -1)
-        if not self._fitted:
-            self.clf.partial_fit(x_std, [outcome], classes=np.array([0, 1]))
+        x_std = self._standardize(x)
+        self._history_X.append(x_std)
+        self._history_y.append(int(outcome))
+        if len(self._history_y) > HISTORY_MAX:
+            self._history_X = self._history_X[-HISTORY_MAX:]
+            self._history_y = self._history_y[-HISTORY_MAX:]
+        if len(set(self._history_y)) >= 2:
+            self.clf.fit(np.array(self._history_X), np.array(self._history_y))
             self._fitted = True
-        else:
-            self.clf.partial_fit(x_std, [outcome])
-        self._clip_coefficients()
         self._n_updates += 1
+        if self._n_updates % ONLINE_MODEL_HEALTH_CHECK_INTERVAL == 0:
+            self._run_health_check()
         self.save()
 
-    def _clip_coefficients(self):
-        """Clips coef_/intercept_ into [-COEF_CLIP, COEF_CLIP] after every
-        partial_fit() call -- a hard bound on top of L2, not a replacement for
-        it, so a repeat of the 2026-07-06 divergence can't saturate
-        predict_proba_one() into a binary step function again regardless of
-        how many updates accumulate."""
-        np.clip(self.clf.coef_, -COEF_CLIP, COEF_CLIP, out=self.clf.coef_)
-        np.clip(self.clf.intercept_, -COEF_CLIP, COEF_CLIP, out=self.clf.intercept_)
+    def _run_health_check(self) -> str:
+        """Probes predict_proba_one() across SATURATION_PROBE_YES_PRICES
+        (yes_price swept from 0.20 to 0.80, every other feature held at its
+        running mean) and compares the spread of the 5 outputs against
+        SATURATION_EPSILON. Sets and returns self._model_health
+        ("healthy" or "saturated", or "reset" once a reset actually fires).
+        This is a real behavioral check (does the model's output actually
+        vary across genuinely different inputs), not a proxy on coefficient
+        magnitude -- that's what let the previous COEF_CLIP-based approach
+        miss the second divergence even though it kept every individual
+        coefficient within its bound."""
+        if not self._fitted:
+            self._model_health = "healthy"
+            return self._model_health
+        base = {name: self._mean[i] for i, name in enumerate(self.feature_names)}
+        outputs = []
+        for yp in SATURATION_PROBE_YES_PRICES:
+            feats = dict(base)
+            feats["yes_price"] = yp
+            if "no_price" in feats:
+                feats["no_price"] = 1.0 - yp
+            p = self.predict_proba_one(feats)
+            if p is None:
+                self._model_health = "healthy"
+                return self._model_health
+            outputs.append(p)
+        spread = max(outputs) - min(outputs)
+        if spread < SATURATION_EPSILON:
+            logger.warning(
+                f"OnlineQuantModel: saturation detected (predict_proba spread "
+                f"{spread:.4f} < {SATURATION_EPSILON} across yes_price sweep "
+                f"{SATURATION_PROBE_YES_PRICES}, outputs={[round(o, 4) for o in outputs]}) "
+                f"after {self._n_updates} updates -- auto-resetting to a fresh model."
+            )
+            self._reset_to_fresh()
+            self._model_health = "reset"
+        else:
+            self._model_health = "healthy"
+        return self._model_health
 
     def predict_proba_one(self, features: dict) -> Optional[float]:
         if not self._fitted:
@@ -251,8 +382,7 @@ class OnlineQuantModel:
         entirely. confidence_threshold is accepted for backward
         compatibility but no longer used in the live branch -- the model's
         own bar is ONLINE_MODEL_OWN_THRESHOLD (see config/settings.py for the
-        current value and whether it's been temporarily lowered from its 0.5
-        spec value).
+        current value).
 
         predict_proba_one() always returns the calibrated P(YES wins |
         features) -- the model has no direction feature, so it cannot ask
@@ -336,6 +466,9 @@ class OnlineQuantModel:
             "m2": self._m2,
             "count_vec": self._count_vec,
             "pending": self._pending,
+            "history_X": self._history_X,
+            "history_y": self._history_y,
+            "model_health": self._model_health,
         }
         try:
             with open(tmp_path, "wb") as f:
@@ -356,6 +489,7 @@ class OnlineQuantModel:
             "warmup_trades": self.warmup_trades,
             "fitted": self._fitted,
             "is_warmed_up": self.is_warmed_up(),
+            "model_health": self._model_health,
             "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
         try:
@@ -382,12 +516,25 @@ class OnlineQuantModel:
             # ONLINE_MODEL_WARMUP_TRADES never actually takes effect for an
             # existing state file, silently keeping the old (lower) bar.
             self.clf = state["clf"]
+            # Re-apply current-code hyperparameters onto the loaded classifier
+            # (2026-07-07) instead of trusting whatever was pickled -- this is
+            # the actual root cause behind the previous alpha fix silently
+            # never taking effect: a classifier's hyperparameters are baked in
+            # at construction time and persist through pickling, so bumping
+            # ONLINE_MODEL_C in config alone would otherwise do nothing for an
+            # existing state file until another full reset. Now a tuning
+            # change takes effect on the very next restart.
+            self.clf.C = ONLINE_MODEL_C
+            self.clf.solver = "liblinear"
             self._fitted = state["fitted"]
             self._n_updates = state["n_updates"]
             self._mean = state["mean"]
             self._m2 = state["m2"]
             self._count_vec = state["count_vec"]
             self._pending = state.get("pending", {})
+            self._history_X = state.get("history_X", [])
+            self._history_y = state.get("history_y", [])
+            self._model_health = state.get("model_health", "healthy")
             if persisted_features == target_features:
                 self.feature_names = persisted_features
             elif (len(target_features) > len(persisted_features)
@@ -415,21 +562,24 @@ class OnlineQuantModel:
         migration this supports -- inserting/reordering/removing would
         silently mismap the existing positional coefficients to the wrong
         features). Preserves every real learned weight and all training
-        progress: pads the standardizer accumulators and the classifier's
-        own coef_ with zeros for the new dimensions, so the new features
-        start at exactly zero influence -- neutral, not a guess -- and get
-        trained up from there by ordinary partial_fit() calls same as any
-        other feature. n_updates/fitted are untouched; nothing is reset."""
+        progress: pads the standardizer accumulators, the classifier's own
+        coef_, and every row of the accumulated history with zeros for the
+        new dimensions, so the new features start at exactly zero influence
+        -- neutral, not a guess -- and get trained up from there by ordinary
+        fit() calls same as any other feature. n_updates/fitted are
+        untouched; nothing is reset."""
         n_new = len(target_features) - len(persisted_features)
         self._mean = np.concatenate([self._mean, np.zeros(n_new)])
         self._m2 = np.concatenate([self._m2, np.zeros(n_new)])
         self._count_vec = np.concatenate([self._count_vec, np.zeros(n_new)])
+        if self._history_X:
+            self._history_X = [np.concatenate([row, np.zeros(n_new)]) for row in self._history_X]
         if self._fitted and hasattr(self.clf, "coef_"):
             self.clf.coef_ = np.hstack([self.clf.coef_, np.zeros((1, n_new))])
-            # sklearn validates future predict()/partial_fit() calls against
+            # sklearn validates future predict()/fit() calls against
             # n_features_in_, tracked separately from coef_'s own shape --
             # padding coef_ alone still raises "X has N features, but
-            # SGDClassifier is expecting <old N> features" without this.
+            # LogisticRegression is expecting <old N> features" without this.
             if hasattr(self.clf, "n_features_in_"):
                 self.clf.n_features_in_ = len(target_features)
         self.feature_names = target_features
