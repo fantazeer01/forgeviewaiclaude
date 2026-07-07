@@ -53,35 +53,43 @@ NO_SHADOW_LOG = "data/no_shadow.jsonl"
 NO_SHADOW_YES_PRICE_THRESHOLD = 0.80
 QUANT_MODEL_PATH = "data/quant_model.pkl"
 # KELLY_FRACTION_CAP stays defined here: core/kelly_criterion.py (a separate,
-# still-valid standalone utility module with its own tests) uses it
-# independently of the online model's own sizing. It's no longer used by
-# core/online_model.py's kelly_size(), which now uses the flat BET_SIZES
-# table below instead of the Kelly formula.
+# still-valid standalone utility module with its own tests) uses it for its
+# OWN quarter_kelly_fraction()/kelly_position_size() helpers. core/online_model.py's
+# kelly_size() (2026-07-07 CRITICAL FIX) uses that module's kelly_fraction()/
+# net_odds_from_price() directly instead -- FULL Kelly (not quarter-Kelly),
+# since the $5/$25 clamp below already bounds the position size.
 KELLY_FRACTION_CAP = 0.25
 ONLINE_MODEL_STATE_FILE = "data/online_model_state.pkl"
 # 50 real resolved trades before the online model's own prediction is
 # trusted at all (see core/online_model.py.decide()) -- during this window
 # every trade is sized flat at WARMUP_FLAT_SIZE_USD via the signal combiner
-# alone (run.py's warm-up branch), Kelly-style BET_SIZES sizing only turns
-# on once is_warmed_up() is true.
+# alone (run.py's warm-up branch), real Kelly sizing only turns on once
+# is_warmed_up() is true.
 ONLINE_MODEL_WARMUP_TRADES = 50
 # Flat size for every trade opened during warm-up (2026-07-07), regardless of
-# signal combiner confidence -- Kelly/BET_SIZES sizing is deliberately
-# withheld until the model has actually warmed up and is driving decisions;
-# sizing a fresh, unproven warm-up trade at up to $25 (the top BET_SIZES
-# bucket) was needlessly risky for a period whose only purpose is
-# accumulating training examples, not making good bets yet.
+# signal combiner confidence -- Kelly sizing is deliberately withheld until
+# the model has actually warmed up and is driving decisions; sizing a fresh,
+# unproven warm-up trade at up to $25 was needlessly risky for a period whose
+# only purpose is accumulating training examples, not making good bets yet.
 WARMUP_FLAT_SIZE_USD = 5.0
 ONLINE_MODEL_CONFIDENCE_THRESHOLD = 0.55
-# Simple step-function bet sizing, replacing the old Kelly-criterion formula
-# (which used to need ONLINE_MODEL_BANKROLL_USD, ONLINE_MODEL_MIN_TRADE_USD,
-# and ONLINE_MODEL_MAX_TRADE_USD -- all removed, since a flat lookup table
-# needs none of them: the table's own values ARE the floor/ceiling now).
-# Keyed by signal_combiner confidence (NOT the online model's own calibrated
-# probability) -- core/online_model.py.kelly_size() finds the largest
-# threshold the confidence clears and returns that flat dollar amount. Only
-# used post-warmup -- see WARMUP_FLAT_SIZE_USD above for during warm-up.
-BET_SIZES = {0.60: 5, 0.70: 10, 0.80: 15, 0.90: 25}
+# Real Kelly-criterion sizing (2026-07-07 CRITICAL FIX, post-warmup only --
+# see WARMUP_FLAT_SIZE_USD above for during warm-up). Replaces the flat
+# BET_SIZES lookup table used from 2026-07-06 to 2026-07-07, which keyed
+# size off signal_combiner confidence and ignored entry_price entirely --
+# it couldn't tell a favorable payout (low yes_price, high b) from an
+# unfavorable one (high yes_price, low b) at the same confidence. See
+# core/online_model.py.kelly_size(): f = (p*b - (1-p))/b where
+# b = (1-yes_price)/yes_price is this market's real payout ratio and p is
+# the model's own calibrated win_probability -- computed via
+# core/kelly_criterion.py's already-tested kelly_fraction()/
+# net_odds_from_price(). f <= 0 means no edge -- the trade is skipped
+# entirely, not opened at $0. A positive fraction is applied to
+# ONLINE_MODEL_KELLY_BANKROLL_USD and clamped to
+# [ONLINE_MODEL_KELLY_MIN_SIZE_USD, ONLINE_MODEL_KELLY_MAX_SIZE_USD].
+ONLINE_MODEL_KELLY_BANKROLL_USD = 100.0
+ONLINE_MODEL_KELLY_MIN_SIZE_USD = 5.0
+ONLINE_MODEL_KELLY_MAX_SIZE_USD = 25.0
 # Once live (post-warmup), a trade now requires BOTH the model's own
 # prediction (calibrated p > ONLINE_MODEL_OWN_THRESHOLD) AND the signal
 # combiner's independent agreement (a non-None combiner signal, which by
@@ -120,9 +128,9 @@ ONLINE_MODEL_HEALTH_CHECK_INTERVAL = 10
 # matter how extreme the raw prediction is. p_raw=0.5 still maps to exactly
 # 0.5 (uncalibrated confidence is unaffected); only the extremes are pulled
 # in. This affects every consumer of predict_proba_one() -- decide()'s
-# threshold check -- not just display. (kelly_size() no longer consumes this
-# value at all: it's keyed off signal_combiner confidence instead, since the
-# BET_SIZES sprint.)
+# threshold check, AND (2026-07-07) kelly_size()'s win_probability input,
+# since that's now the calibrated p straight from decide(), not a
+# signal_combiner-confidence lookup.
 ONLINE_MODEL_CALIBRATION_LOWER = 0.20
 ONLINE_MODEL_CALIBRATION_UPPER = 0.80
 ONLINE_MODEL_CALIBRATION_STEEPNESS = 2.0

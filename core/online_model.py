@@ -15,9 +15,11 @@ from config.settings import (
     ONLINE_MODEL_STATUS_FILE, ONLINE_MODEL_PRIOR_YES_PRICE_WEIGHT,
     ONLINE_MODEL_PRIOR_INTERCEPT, ONLINE_MODEL_OWN_THRESHOLD,
     ONLINE_MODEL_COMBINER_THRESHOLD, ONLINE_MODEL_CALIBRATION_UPPER,
-    ONLINE_MODEL_CALIBRATION_STEEPNESS, BET_SIZES, ONLINE_MODEL_C,
-    ONLINE_MODEL_HEALTH_CHECK_INTERVAL,
+    ONLINE_MODEL_CALIBRATION_STEEPNESS, ONLINE_MODEL_C,
+    ONLINE_MODEL_HEALTH_CHECK_INTERVAL, ONLINE_MODEL_KELLY_BANKROLL_USD,
+    ONLINE_MODEL_KELLY_MIN_SIZE_USD, ONLINE_MODEL_KELLY_MAX_SIZE_USD,
 )
+from core.kelly_criterion import kelly_fraction, net_odds_from_price
 # ONLINE_MODEL_CALIBRATION_LOWER (0.20) is not imported separately: the
 # tanh-based transform below is symmetric around 0.5 by construction
 # (tanh is an odd function), so the lower asymptote always equals
@@ -64,9 +66,9 @@ class OnlineQuantModel:
     For the first ONLINE_MODEL_WARMUP_TRADES (50) resolved trades, decide()
     always defers to the repricing signal passed in (see run.py's warm-up
     branch, which now also sizes those trades at a flat WARMUP_FLAT_SIZE_USD
-    regardless of confidence -- Kelly-style BET_SIZES sizing is reserved for
-    after warm-up, once the model itself is actually driving decisions).
-    Every one of those warm-up resolutions is still fed into the model as a
+    regardless of confidence -- real Kelly sizing is reserved for after
+    warm-up, once the model itself is actually driving decisions). Every
+    one of those warm-up resolutions is still fed into the model as a
     training example, via update().
 
     After warm-up, a trade requires BOTH signals to agree: the model's own
@@ -74,9 +76,13 @@ class OnlineQuantModel:
     the signal combiner's independent output (passed in as `repricing_signal`
     -- see run.py, which feeds SignalCombiner.combine()'s result here instead
     of the raw repricing detector) must be non-None, i.e. already cleared its
-    own ONLINE_MODEL_COMBINER_THRESHOLD (0.60). Sized via a flat BET_SIZES
-    lookup table keyed off the signal combiner's confidence (see
-    kelly_size()), not a Kelly-criterion formula.
+    own ONLINE_MODEL_COMBINER_THRESHOLD (0.60). Sized via real Kelly-criterion
+    sizing keyed off the model's own win_probability AND the market's actual
+    payout ratio (see kelly_size()) -- a flat BET_SIZES lookup table keyed
+    only off signal_combiner confidence was used from 2026-07-06 to
+    2026-07-07, but it ignored entry_price entirely, so it couldn't tell a
+    favorable payout (low yes_price, high b) from an unfavorable one (high
+    yes_price, low b) at the same confidence level.
 
     Why LogisticRegression(solver="liblinear") instead of SGDClassifier
     (2026-07-07, second divergence): the SGD model's coefficients diverged
@@ -416,19 +422,37 @@ class OnlineQuantModel:
             f"confidence={repricing_signal.confidence:.3f} agree"
         )
 
-    def kelly_size(self, combiner_confidence: float) -> float:
-        """Simple step-function bet sizing keyed directly off the signal
-        combiner's confidence value (NOT the online model's own calibrated
-        probability) -- replaces the previous Kelly-criterion formula
-        entirely per explicit request. See config.settings.BET_SIZES for
-        the table: the largest threshold the confidence clears determines
-        the flat dollar size. Below the lowest bucket (0.60) returns $0 --
-        should never happen in practice since the signal combiner itself
-        never returns a signal below that same 0.60 threshold."""
-        for threshold in sorted(BET_SIZES, reverse=True):
-            if combiner_confidence >= threshold:
-                return float(BET_SIZES[threshold])
-        return 0.0
+    def kelly_size(self, win_probability: float, yes_price: float) -> float:
+        """Real Kelly-criterion sizing (2026-07-07 CRITICAL FIX -- replaces
+        the flat BET_SIZES lookup table used 2026-07-06 to 2026-07-07, which
+        keyed size off signal_combiner confidence and ignored entry_price
+        entirely: it couldn't tell a favorable payout (low yes_price, high
+        b) from an unfavorable one (high yes_price, low b) at the same
+        confidence level).
+
+        b = (1-yes_price)/yes_price is this market's real payout ratio (a $1
+        YES win pays b dollars profit; a loss costs the full stake) --
+        computed via core/kelly_criterion.py's net_odds_from_price(), the
+        same already-tested helper core/kelly_criterion.py's own
+        kelly_position_size() uses. f = (p*b - (1-p))/b via that module's
+        kelly_fraction(), using FULL Kelly (not quarter-Kelly) since the
+        [ONLINE_MODEL_KELLY_MIN_SIZE_USD, ONLINE_MODEL_KELLY_MAX_SIZE_USD]
+        clamp below already bounds the position size independently.
+
+        kelly_fraction() already clamps a non-positive edge to exactly 0.0
+        -- callers MUST treat a 0.0 return as "do not open this trade," not
+        "open at $0" (see run.py._decide_and_open, which returns None
+        without opening when this is 0.0). A positive fraction is applied
+        to ONLINE_MODEL_KELLY_BANKROLL_USD and clamped to
+        [ONLINE_MODEL_KELLY_MIN_SIZE_USD, ONLINE_MODEL_KELLY_MAX_SIZE_USD] --
+        so even a razor-thin positive edge still opens at the $5 floor,
+        it's only edges <= 0 that are skipped entirely."""
+        b = net_odds_from_price(yes_price)
+        f = kelly_fraction(win_probability, b)
+        if f <= 0:
+            return 0.0
+        size = f * ONLINE_MODEL_KELLY_BANKROLL_USD
+        return max(ONLINE_MODEL_KELLY_MIN_SIZE_USD, min(ONLINE_MODEL_KELLY_MAX_SIZE_USD, size))
 
     def record_features(self, market_id: str, features: dict):
         """Stash the feature snapshot a decision was made from, keyed by

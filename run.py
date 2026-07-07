@@ -124,6 +124,19 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         return None
     _export_execution_cycle("validate", asset=market["asset"], market_id=market["market_id"], detail=reason)
     if online_model.is_warmed_up():
+        # Real Kelly fraction (2026-07-07 CRITICAL FIX) computed from the
+        # model's own win_probability AND this market's actual entry_price --
+        # a non-positive fraction (no edge) returns exactly 0.0, and that
+        # means skip the trade entirely, not open it at $0. Checked BEFORE
+        # constructing the RepricingSignal so a no-edge tick doesn't build
+        # an object it'll never use.
+        size_usd = online_model.kelly_size(win_probability, market["yes_price"])
+        if size_usd <= 0:
+            logger.debug(
+                f"Kelly fraction non-positive for {market['asset']} "
+                f"(p={win_probability:.3f}, yes_price={market['yes_price']:.3f}) -- no edge, skipping"
+            )
+            return None
         signal = RepricingSignal(
             asset=market["asset"], market_id=market["market_id"], direction=direction,
             yes_price=market["yes_price"], no_price=market["no_price"],
@@ -131,7 +144,6 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             minutes_remaining=market.get("minutes_remaining", 5.0),
             decisive_signal=combined_signal.decisive_signal,
         )
-        size_usd = online_model.kelly_size(combined_signal.confidence)
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
                                  size_usd=size_usd, detail=f"sized at ${size_usd:.2f}")
         trade = engine.open_trade(signal, source="online_model", size_usd=size_usd)
@@ -149,11 +161,11 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         #
         # FLAT WARMUP_FLAT_SIZE_USD, NOT KELLY (2026-07-07 reversal): briefly
         # sized warm-up trades via kelly_size() too (2026-07-06), but that let
-        # a totally unproven, freshly-reset model open $25 trades (the top
-        # BET_SIZES bucket) purely off combiner confidence. Warm-up's only
-        # job is accumulating training examples safely -- confidence-weighted
-        # sizing is reserved for after the model has actually warmed up and
-        # is driving the decision itself (the branch above).
+        # a totally unproven, freshly-reset model open trades up to
+        # ONLINE_MODEL_KELLY_MAX_SIZE_USD purely off combiner confidence.
+        # Warm-up's only job is accumulating training examples safely --
+        # real Kelly sizing is reserved for after the model has actually
+        # warmed up and is driving the decision itself (the branch above).
         signal = combined_signal
         size_usd = WARMUP_FLAT_SIZE_USD
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],

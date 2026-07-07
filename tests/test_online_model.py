@@ -208,37 +208,49 @@ def test_record_features_persists_immediately_to_disk(tmp_path):
     assert restarted.n_updates == 1
 
 
-def test_kelly_size_below_lowest_bucket_returns_zero(model):
-    size = model.kelly_size(0.59)
+def test_kelly_size_negative_edge_returns_zero(model):
+    # the reported example: yes_price=0.55, p=0.54 -> raw f = (0.54*b-0.46)/b
+    # with b=(1-0.55)/0.55=0.818 is slightly negative (~-0.022) -- no edge.
+    size = model.kelly_size(0.54, 0.55)
     assert size == pytest.approx(0.0, abs=1e-6)
 
 
-def test_kelly_size_first_bucket(model):
-    size = model.kelly_size(0.60)
+def test_kelly_size_zero_edge_returns_zero_not_a_zero_dollar_trade(model):
+    # b=1 (yes_price=0.5), p=0.5 -> f=(0.5-0.5)/1=0 exactly. Callers must
+    # treat this 0.0 as "skip the trade," not "open at $0" -- see
+    # run.py._decide_and_open.
+    size = model.kelly_size(0.5, 0.5)
+    assert size == pytest.approx(0.0, abs=1e-6)
+
+
+def test_kelly_size_small_positive_edge_floored_to_minimum(model):
+    # b=1 (yes_price=0.5), p=0.51 -> f=0.02 -> $2 raw, floored to the $5 min
+    size = model.kelly_size(0.51, 0.5)
     assert size == pytest.approx(5.0)
-    size = model.kelly_size(0.65)
-    assert size == pytest.approx(5.0)
 
 
-def test_kelly_size_second_bucket(model):
-    size = model.kelly_size(0.70)
-    assert size == pytest.approx(10.0)
-    size = model.kelly_size(0.75)
-    assert size == pytest.approx(10.0)
+def test_kelly_size_mid_range_edge_scales_with_real_fraction(model):
+    # b=1 (yes_price=0.5), p=0.6 -> f=0.2 -> $20, between the $5/$25 clamps
+    size = model.kelly_size(0.6, 0.5)
+    assert size == pytest.approx(20.0)
 
 
-def test_kelly_size_third_bucket(model):
-    size = model.kelly_size(0.80)
-    assert size == pytest.approx(15.0)
-    size = model.kelly_size(0.85)
-    assert size == pytest.approx(15.0)
-
-
-def test_kelly_size_top_bucket(model):
-    size = model.kelly_size(0.90)
+def test_kelly_size_large_edge_capped_at_maximum(model):
+    # b=1 (yes_price=0.5), p=0.9 -> f=0.8 -> $80 raw, capped at $25
+    size = model.kelly_size(0.9, 0.5)
     assert size == pytest.approx(25.0)
-    size = model.kelly_size(1.0)
-    assert size == pytest.approx(25.0)
+
+
+def test_kelly_size_accounts_for_actual_payout_ratio(model):
+    # same win_probability (0.6), different yes_price -> different size,
+    # since the payout ratio b=(1-yes_price)/yes_price differs -- exactly
+    # what the old flat BET_SIZES table (keyed only on combiner confidence,
+    # blind to entry_price) could never distinguish.
+    favorable = model.kelly_size(0.6, 0.45)    # b=1.222 -> real edge -> sized
+    unfavorable = model.kelly_size(0.6, 0.64)  # b=0.5625 -> f<0 -> no edge -> $0
+    assert favorable > 0
+    assert unfavorable == pytest.approx(0.0, abs=1e-6)
+    assert favorable > unfavorable
 
 
 def test_warmup_trades_not_restored_from_persisted_state(tmp_path):

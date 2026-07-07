@@ -55,7 +55,9 @@ def test_normal_band_signal_uses_kelly_size(engine, warmed_model, mocker):
     )
     assert trade is not None
     assert trade.direction == "YES"
-    assert trade.size_usd == warmed_model.kelly_size(0.95)
+    # kelly_size() is now keyed off the model's own win_probability (0.9) AND
+    # this market's real yes_price (0.5), not signal_combiner confidence.
+    assert trade.size_usd == warmed_model.kelly_size(0.9, 0.5)
 
 
 def test_decisive_signal_propagates_from_combiner_into_the_logged_signal(engine, warmed_model, mocker):
@@ -83,9 +85,9 @@ def test_decisive_signal_propagates_from_combiner_into_the_logged_signal(engine,
 
 def test_warmup_trade_sizes_flat_regardless_of_combiner_confidence(engine, warming_up_model):
     # 2026-07-07 reversal: warm-up trades must NOT use kelly_size() -- a
-    # freshly-reset, unproven model shouldn't be sized up to $25 (the top
-    # BET_SIZES bucket) purely off combiner confidence during the one period
-    # whose only job is safely accumulating training examples.
+    # freshly-reset, unproven model shouldn't be sized off real Kelly purely
+    # off combiner confidence during the one period whose only job is
+    # safely accumulating training examples.
     strong_combiner_signal = RepricingSignal(
         asset="BTC", market_id="m1", direction="YES",
         yes_price=0.5, no_price=0.5, confidence=0.95, reason="combined(momentum)=0.95",
@@ -96,4 +98,3 @@ def test_warmup_trade_sizes_flat_regardless_of_combiner_confidence(engine, warmi
     )
     assert trade is not None
     assert trade.size_usd == WARMUP_FLAT_SIZE_USD
-    assert trade.size_usd != warming_up_model.kelly_size(0.95)
