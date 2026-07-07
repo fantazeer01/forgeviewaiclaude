@@ -142,7 +142,13 @@ STABILITY_MIN_WIN_RATE = 0.45
 # examples; below this, that's the same "collapsed to a near-constant
 # output" signature as the saturation check, so THIS one auto-resets.
 STABILITY_PREDICTIONS_WINDOW = 20
-STABILITY_MIN_PREDICTION_STD = 0.05
+# LOWERED 0.05 -> 0.02 (2026-07-07): 0.05 was too aggressive for a
+# genuinely converging LogisticRegression -- the model auto-reset itself at
+# 300 updates with prediction_std=0.0445, which was the model's predictions
+# naturally narrowing as it converges, not a real collapse. 0.02 still
+# catches an actual collapse (all predictions landing on one point) without
+# punishing normal convergence.
+STABILITY_MIN_PREDICTION_STD = 0.02
 # Raw |coefficient| bound -- tighter than the model's own internal workings
 # would need to be "not diverged" (LogisticRegression regularized at C=0.1
 # on standardized features typically stays well under 1.0, see the

@@ -409,12 +409,20 @@ class OnlineQuantModel:
             logger.warning(f"OnlineQuantModel stability monitor: {msg}")
 
         action = "none"
+        n_updates_before_reset = None
         if not diversity_ok or not coef_ok:
             reasons = []
             if not diversity_ok:
                 reasons.append(f"prediction std {pred_std:.4f} <= {STABILITY_MIN_PREDICTION_STD}")
             if not coef_ok:
                 reasons.append(f"max abs coef {max_abs_coef:.4f} > {STABILITY_COEF_BOUND}")
+            # Captured BEFORE _reset_to_fresh() zeroes self._n_updates --
+            # otherwise the logged "n_updates" below would show 0 (the
+            # post-reset value) and the real trigger point would only be
+            # recoverable indirectly (2026-07-07: had to infer it from
+            # STABILITY_CHECK_INTERVAL arithmetic against the previous
+            # healthy log entry).
+            n_updates_before_reset = self._n_updates
             logger.warning(
                 f"OnlineQuantModel stability monitor: auto-resetting at {self._n_updates} "
                 f"updates ({'; '.join(reasons)})"
@@ -426,6 +434,7 @@ class OnlineQuantModel:
         self._append_jsonl(MODEL_HEALTH_LOG, {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "n_updates": self._n_updates,
+            "n_updates_before_reset": n_updates_before_reset,
             "win_rate": round(win_rate, 4) if win_rate is not None else None,
             "win_rate_window": len(recent_y),
             "win_rate_ok": win_rate_ok,
