@@ -560,8 +560,17 @@ class OnlineQuantModel:
         return 0.5 + span * squashed
 
     def decide(self, features: dict, repricing_signal,
-               confidence_threshold: float = ONLINE_MODEL_CONFIDENCE_THRESHOLD):
+               confidence_threshold: float = ONLINE_MODEL_CONFIDENCE_THRESHOLD,
+               asset: Optional[str] = None):
         """Returns (should_trade, direction, win_probability, reason).
+
+        `asset` is optional and used only for the SKIP log lines below
+        (2026-07-07 diagnostics) -- defaults to repricing_signal.asset when
+        a signal is present (the authoritative source), falling back to
+        this explicit kwarg only for the one case where repricing_signal is
+        None and there'd otherwise be no way to know which asset a call was
+        even for. Kept optional (not a required positional param) so the
+        many existing decide() call sites in tests didn't need touching.
 
         Before warm-up: mirrors the repricing signal exactly (fires iff a
         repricing signal fired, using its own direction/confidence).
@@ -586,25 +595,43 @@ class OnlineQuantModel:
         zone, added 2026-07-06) the model's own bar must be checked against
         P(NO wins) = 1 - p instead, or a NO signal would be gated by the
         wrong side of the model's belief.
+
+        SKIP reasons are logged at INFO here (2026-07-07 diagnostics --
+        previously only returned as a string, never logged anywhere, which
+        made "why isn't anything trading" impossible to answer from the log
+        alone). The SUCCESS ("SIGNAL [...]") line is deliberately NOT logged
+        here, even though this method can return should_trade=True -- see
+        run.py._decide_and_open, which is where kelly_size()'s REAL Kelly
+        fraction is computed and can still be <= 0 (no edge) even when
+        own_side_p already cleared ONLINE_MODEL_OWN_THRESHOLD here, since
+        the two use different math (a simple probability bar vs. the real
+        payout-ratio-aware Kelly formula). Logging a SIGNAL line from this
+        method alone would be premature -- it doesn't yet know whether a
+        trade will actually open.
         """
+        resolved_asset = repricing_signal.asset if repricing_signal is not None else asset
+        yes_price = features.get("yes_price")
+
         if not self.is_warmed_up():
             if repricing_signal is None:
+                logger.info(f"SKIP [{resolved_asset}] reason=warmup: no repricing signal yes_price={yes_price}")
                 return False, None, None, "warmup: no repricing signal"
             return True, repricing_signal.direction, repricing_signal.confidence, "warmup: repricing rule"
 
         p = self.predict_proba_one(features)
         if p is None:
+            logger.info(f"SKIP [{resolved_asset}] reason=model not fitted yes_price={yes_price}")
             return False, None, None, "model not fitted"
         if repricing_signal is None or repricing_signal.confidence <= ONLINE_MODEL_COMBINER_THRESHOLD:
-            return False, None, p, (
-                f"signal combiner did not agree (confidence <= {ONLINE_MODEL_COMBINER_THRESHOLD})"
-            )
+            reason = f"signal combiner did not agree (confidence <= {ONLINE_MODEL_COMBINER_THRESHOLD})"
+            logger.info(f"SKIP [{resolved_asset}] reason={reason} yes_price={yes_price}")
+            return False, None, p, reason
         direction = repricing_signal.direction
         own_side_p = p if direction == "YES" else (1.0 - p)
         if own_side_p <= ONLINE_MODEL_OWN_THRESHOLD:
-            return False, None, p, (
-                f"online model P({direction})={own_side_p:.3f} <= {ONLINE_MODEL_OWN_THRESHOLD}"
-            )
+            reason = f"online model P({direction})={own_side_p:.3f} <= {ONLINE_MODEL_OWN_THRESHOLD}"
+            logger.info(f"SKIP [{resolved_asset}] reason={reason} yes_price={yes_price}")
+            return False, None, p, reason
         return True, direction, p, (
             f"online model P({direction})={own_side_p:.3f} AND combiner "
             f"confidence={repricing_signal.confidence:.3f} agree"

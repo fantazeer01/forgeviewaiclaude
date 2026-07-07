@@ -28,6 +28,7 @@ from core.live_features import LiveFeatureCollector
 from core.online_model import OnlineQuantModel
 from core.signal_combiner import SignalCombiner
 from core.no_shadow_tracker import NoShadowTracker
+from core.kelly_criterion import kelly_fraction, net_odds_from_price
 from core.stats_calculator import StatsCalculator
 from reporting.stats_reporter import StatsReporter
 from reporting.telegram_reporter import TelegramReporter
@@ -119,7 +120,9 @@ def main():
             time.sleep(30)
 
 def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg):
-    should_trade, direction, win_probability, reason = online_model.decide(snapshot, combined_signal)
+    should_trade, direction, win_probability, reason = online_model.decide(
+        snapshot, combined_signal, asset=market["asset"],
+    )
     if not should_trade:
         return None
     _export_execution_cycle("validate", asset=market["asset"], market_id=market["market_id"], detail=reason)
@@ -139,13 +142,26 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
             kelly_p, kelly_price = win_probability, market["yes_price"]
         else:
             kelly_p, kelly_price = 1.0 - win_probability, market["no_price"]
+        # kelly_f recomputed here (not returned by kelly_size() itself) purely
+        # for the SIGNAL log line below -- same math kelly_size() uses
+        # internally, just also surfaced as the raw pre-clamp fraction.
+        kelly_f = kelly_fraction(kelly_p, net_odds_from_price(kelly_price))
         size_usd = online_model.kelly_size(kelly_p, kelly_price)
         if size_usd <= 0:
-            logger.debug(
+            # RAISED DEBUG -> INFO (2026-07-07 diagnostics): this was
+            # previously invisible in the log entirely (root logger is
+            # configured at INFO, see logging.basicConfig above), making it
+            # impossible to tell "no signal fired" apart from "a signal
+            # fired but Kelly found no edge" from the log alone.
+            logger.info(
                 f"Kelly fraction non-positive for {market['asset']} {direction} "
                 f"(p={kelly_p:.3f}, entry_price={kelly_price:.3f}) -- no edge, skipping"
             )
             return None
+        logger.info(
+            f"SIGNAL [{market['asset']}] side={direction} confidence={combined_signal.confidence:.3f} "
+            f"model_p={win_probability:.3f} kelly_f={kelly_f:.4f} size=${size_usd:.2f}"
+        )
         signal = RepricingSignal(
             asset=market["asset"], market_id=market["market_id"], direction=direction,
             yes_price=market["yes_price"], no_price=market["no_price"],
@@ -177,6 +193,14 @@ def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg
         # warmed up and is driving the decision itself (the branch above).
         signal = combined_signal
         size_usd = WARMUP_FLAT_SIZE_USD
+        # model_p/kelly_f are genuinely not applicable during warm-up -- no
+        # model prediction or Kelly calculation happens on this path at all
+        # (see the comment above), so they're logged as "n/a" rather than a
+        # misleading number.
+        logger.info(
+            f"SIGNAL [{market['asset']}] side={direction} confidence={combined_signal.confidence:.3f} "
+            f"model_p=n/a kelly_f=n/a size=${size_usd:.2f} (warmup)"
+        )
         _export_execution_cycle("size", asset=market["asset"], market_id=market["market_id"],
                                  size_usd=size_usd, detail=f"sized at ${size_usd:.2f} (warmup flat)")
         trade = engine.open_trade(signal, source="repricing", size_usd=size_usd)
