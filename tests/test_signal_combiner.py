@@ -256,7 +256,15 @@ def test_signal_stats_persists_across_new_combiner_instance_same_day(tmp_path):
 
 # ---------------- NO mean-reversion carve-out (2026-07-07 resurrection) ----------------
 
-def test_no_signal_fires_on_real_reversion_from_extreme_peak(combiner):
+def test_no_signal_fires_on_real_reversion_from_extreme_peak(combiner, mocker):
+    # NO_TRADING_ENABLED defaults to False (2026-07-07: disabled again after
+    # real results confirmed a negative edge, 2/25 = 8.00% win rate). This
+    # test exercises the underlying carve-out logic itself, so it explicitly
+    # re-enables the flag at BOTH places that check it (defense-in-depth:
+    # SignalCombiner's own call-site check, and the generator's internal
+    # guard) rather than relying on a default that's deliberately off.
+    mocker.patch("core.signal_combiner.NO_TRADING_ENABLED", True)
+    mocker.patch("core.signals.mean_reversion_no_signal.NO_TRADING_ENABLED", True)
     combiner.combine(make_market(yes_price=0.97, no_price=0.03), FakeFetcher(top=None), btc_eth_correlation=None)
     result = combiner.combine(make_market(yes_price=0.83, no_price=0.17), FakeFetcher(top=None), btc_eth_correlation=None)
     assert result is not None
@@ -278,8 +286,10 @@ def test_no_signal_disabled_by_kill_switch(combiner, mocker):
     assert result is None
 
 
-def test_no_signal_status_reflects_fired_not_blocked(combiner):
+def test_no_signal_status_reflects_fired_not_blocked(combiner, mocker):
     import json
+    mocker.patch("core.signal_combiner.NO_TRADING_ENABLED", True)
+    mocker.patch("core.signals.mean_reversion_no_signal.NO_TRADING_ENABLED", True)
     combiner.combine(make_market(yes_price=0.97, no_price=0.03), FakeFetcher(top=None), btc_eth_correlation=None)
     combiner.combine(make_market(yes_price=0.83, no_price=0.17), FakeFetcher(top=None), btc_eth_correlation=None)
     with open(combiner.status_path) as f:

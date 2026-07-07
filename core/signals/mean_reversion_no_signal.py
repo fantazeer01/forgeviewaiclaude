@@ -2,7 +2,7 @@ import datetime
 from typing import Optional
 
 from config.settings import (
-    NO_REVERSION_WINDOW_SEC, NO_REVERSION_PEAK_MIN_YES_PRICE,
+    NO_TRADING_ENABLED, NO_REVERSION_WINDOW_SEC, NO_REVERSION_PEAK_MIN_YES_PRICE,
     NO_REVERSION_MIN_YES_PRICE, NO_REVERSION_MIN_DROP,
 )
 from core.repricing_detector import RepricingSignal
@@ -15,14 +15,17 @@ class MeanReversionNoSignalGenerator:
     NO_REVERSION_WINDOW_SEC window -- betting that the market's own
     near-certainty in YES was overdone and is mean-reverting back down.
 
-    This is a resurrection of the "extreme mean-reversion" strategy removed
-    2026-07-06 (10.5% win rate over 19 trades, net -$139.67 -- see
-    config.settings.NO_TRADING_ENABLED for the full history) -- reintroduced
-    2026-07-07 with the two things actually broken back then now fixed: the
-    online model no longer diverges, and kelly_size() uses each side's real
-    payout ratio instead of a flat lookup table blind to entry_price. Never
-    proven live in this corrected form yet -- watch its real results
-    closely and flip NO_TRADING_ENABLED off if they repeat the old pattern.
+    This is the "extreme mean-reversion" strategy removed 2026-07-06 (10.5%
+    win rate over 19 trades, net -$139.67 -- see config.settings.NO_TRADING_ENABLED
+    for the full history), resurrected 2026-07-07 once the online model's
+    divergence and kelly_size()'s entry-price-blind sizing were both fixed,
+    then DISABLED AGAIN the same day once real results in the corrected form
+    came in: 2/25 = 8.00% win rate -- confirming a genuine negative edge,
+    not a symptom of the old bugs. generate() below checks NO_TRADING_ENABLED
+    as its very first line, before any other condition, so this class can
+    never produce a signal while the flag is off regardless of caller --
+    defense-in-depth on top of core/signal_combiner.py's own check at the
+    call site.
 
     Structurally the same 3-point shape as MomentumSignalGenerator (track a
     rolling window, look for a real reversal, require a minimum drop so
@@ -41,6 +44,8 @@ class MeanReversionNoSignalGenerator:
         self._history[market_id] = [p for p in history if p["ts"] > cutoff]
 
     def generate(self, market: dict) -> Optional[RepricingSignal]:
+        if not NO_TRADING_ENABLED:
+            return None
         yes_price = market["yes_price"]
         if yes_price < NO_REVERSION_MIN_YES_PRICE:
             return None

@@ -325,19 +325,21 @@ SIGNAL_COMBINER_THRESHOLD = 0.60
 SIGNAL_COMBINER_MIN_YES_PRICE = 0.30
 SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
 
-# RESURRECTED (2026-07-07): an "extreme mean-reversion" NO strategy at
+# DISABLED AGAIN (2026-07-07): an "extreme mean-reversion" NO strategy at
 # yes_price>0.80 was disabled 2026-07-06 after real results (10.5% win rate
-# over 19 trades, net -$139.67) -- not viable AT THE TIME. Reintroduced now
-# that both of that period's actual root causes are fixed: the online model
-# no longer diverges (core/online_model.py was rewritten from SGDClassifier
-# to LogisticRegression the same day this was disabled), and kelly_size()
-# now uses the real Kelly formula with each side's actual payout ratio
-# instead of a flat lookup table blind to entry_price. Never proven live in
-# this corrected form -- NO_TRADING_ENABLED is a single kill switch back to
-# YES-only [SIGNAL_COMBINER_MIN_YES_PRICE, SIGNAL_COMBINER_MAX_YES_PRICE]
-# behavior if results repeat the old pattern. See
-# core/signals/mean_reversion_no_signal.py for the signal itself.
-NO_TRADING_ENABLED = True
+# over 19 trades, net -$139.67), then resurrected the same day (2026-07-07)
+# once both of that period's actual root causes were fixed: the online
+# model no longer diverges (LogisticRegression rewrite), and kelly_size()
+# uses the real Kelly formula with each side's actual payout ratio instead
+# of a flat lookup table blind to entry_price. Real results in this
+# corrected form: 2/25 = 8.00% win rate -- confirms a real negative edge,
+# not the old model/sizing bugs. Turned off again via this single kill
+# switch, falling back to YES-only [SIGNAL_COMBINER_MIN_YES_PRICE,
+# SIGNAL_COMBINER_MAX_YES_PRICE] behavior. See
+# core/signals/mean_reversion_no_signal.py for the signal itself, which
+# also checks this flag directly (defense-in-depth, not just the
+# SignalCombiner call site).
+NO_TRADING_ENABLED = False
 # Gate: NO is only even considered above this yes_price (the old disabled
 # strategy's own threshold).
 NO_REVERSION_MIN_YES_PRICE = 0.80
