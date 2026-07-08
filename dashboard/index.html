@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Quant Bot Dashboard</title>
+<style>
+  .viz-root {
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6; /* BTC */
+    --series-2:       #1baf7a; /* ETH */
+    --good:           #0ca30c;
+    --critical:       #d03b3b;
+    --good-text:      #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-2:       #199e70;
+      --good:           #0ca30c;
+      --critical:       #d03b3b;
+      --good-text:      #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #199e70;
+    --good-text:      #0ca30c;
+  }
+  :root[data-theme="light"] .viz-root {
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --series-2:       #1baf7a;
+    --good-text:      #006300;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 13px; margin: 0 0 20px; }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .tile-label { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .tile-value { font-size: 22px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile-sub { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+  .delta-good { color: var(--good-text); }
+  .delta-bad { color: var(--critical); }
+
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .panel-title { font-size: 13px; font-weight: 600; margin: 0 0 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+  th { color: var(--text-muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .empty-row td { color: var(--text-muted); text-align: center; padding: 16px; }
+
+  #equity-canvas { width: 100%; height: 180px; display: block; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 10px; height: 2px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1>Quant Bot &mdash; live dashboard</h1>
+  <p class="subtitle" id="last-updated">Loading&hellip;</p>
+
+  <div class="tiles" id="score-tiles"></div>
+
+  <div class="panel">
+    <p class="panel-title">Equity curve (today)</p>
+    <canvas id="equity-canvas"></canvas>
+  </div>
+
+  <div class="panel">
+    <p class="panel-title">Open positions</p>
+    <table id="positions-table">
+      <thead>
+        <tr><th>Asset</th><th>Side</th><th>Entry</th><th>Size</th><th>Unrealized P&amp;L</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="tiles" id="stat-tiles"></div>
+</div>
+
+<script>
+const STATUS_URL = "/data/market/bot_status.json";
+const TRADES_URL = "/data/trades/paper_trades.jsonl";
+const POLL_MS = 3000;
+
+function fmt(n, digits) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "n/a";
+  return Number(n).toFixed(digits);
+}
+
+function renderScoreTiles(status) {
+  const el = document.getElementById("score-tiles");
+  const assets = Object.keys(status.scores || {});
+  el.innerHTML = assets.map(asset => {
+    const s = status.scores[asset];
+    const decision = s.decision ? s.decision : "—";
+    return `<div class="tile">
+      <div class="tile-label">${asset}</div>
+      <div class="tile-value">${fmt(s.final_score, 2)}</div>
+      <div class="tile-sub">spot=${fmt(s.spot_price, 0)} yes=${fmt(s.yes_price, 2)} decision=${decision}</div>
+    </div>`;
+  }).join("") || `<div class="tile"><div class="tile-label">Score</div><div class="tile-sub">waiting for data…</div></div>`;
+}
+
+function renderPositions(status) {
+  const tbody = document.querySelector("#positions-table tbody");
+  const positions = status.open_positions || [];
+  if (positions.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">No open positions</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = positions.map(p => {
+    const spot = (status.scores[p.asset] || {}).yes_price;
+    const unrealized = spot !== undefined && spot !== null
+      ? (p.side === "YES" ? (spot - p.entry_price) : ((1 - spot) - p.entry_price)) * (p.size_usd / p.entry_price)
+      : null;
+    const cls = unrealized === null ? "" : (unrealized >= 0 ? "delta-good" : "delta-bad");
+    return `<tr>
+      <td>${p.asset}</td>
+      <td>${p.side}</td>
+      <td>${fmt(p.entry_price, 3)}</td>
+      <td>$${fmt(p.size_usd, 2)}</td>
+      <td class="${cls}">${unrealized === null ? "n/a" : (unrealized >= 0 ? "+" : "") + "$" + fmt(unrealized, 2)}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderStatTiles(status, trades) {
+  const el = document.getElementById("stat-tiles");
+  const wins = status.day_wins || 0;
+  const losses = status.day_losses || 0;
+  const total = wins + losses;
+  const winRate = total > 0 ? (wins / total * 100) : null;
+  const avgPnl = trades.length > 0 ? trades.reduce((a, t) => a + (t.pnl || 0), 0) / trades.length : null;
+  const pnlCls = (status.day_pnl || 0) >= 0 ? "delta-good" : "delta-bad";
+  el.innerHTML = `
+    <div class="tile">
+      <div class="tile-label">Today P&amp;L</div>
+      <div class="tile-value ${pnlCls}">${(status.day_pnl >= 0 ? "+" : "")}$${fmt(status.day_pnl, 2)}</div>
+      <div class="tile-sub">${wins}W / ${losses}L</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Win rate</div>
+      <div class="tile-value">${winRate === null ? "n/a" : fmt(winRate, 1) + "%"}</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Avg P&amp;L / trade</div>
+      <div class="tile-value">${avgPnl === null ? "n/a" : (avgPnl >= 0 ? "+" : "") + "$" + fmt(avgPnl, 2)}</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Model examples</div>
+      <div class="tile-value">${status.model_examples ?? "n/a"}</div>
+    </div>
+  `;
+}
+
+function drawEquityCurve(trades) {
+  const canvas = document.getElementById("equity-canvas");
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(rect.width, 300);
+  const h = 180;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.height = h + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const styles = getComputedStyle(document.querySelector(".viz-root"));
+  const grid = styles.getPropertyValue("--gridline").trim();
+  const series = styles.getPropertyValue("--series-1").trim();
+  const muted = styles.getPropertyValue("--text-muted").trim();
+
+  const pad = { top: 12, right: 12, bottom: 20, left: 12 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  if (!trades.length) {
+    ctx.fillStyle = muted;
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.fillText("No resolved trades yet", pad.left, h / 2);
+    return;
+  }
+
+  let cum = 0;
+  const points = [{ x: 0, y: 0 }];
+  trades.forEach((t, i) => { cum += (t.pnl || 0); points.push({ x: i + 1, y: cum }); });
+
+  const ys = points.map(p => p.y);
+  const minY = Math.min(0, ...ys);
+  const maxY = Math.max(0, ...ys);
+  const range = (maxY - minY) || 1;
+
+  const xScale = i => pad.left + (i / (points.length - 1)) * plotW;
+  const yScale = v => pad.top + plotH - ((v - minY) / range) * plotH;
+
+  // zero baseline
+  ctx.strokeStyle = grid;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const zeroY = yScale(0);
+  ctx.moveTo(pad.left, zeroY);
+  ctx.lineTo(pad.left + plotW, zeroY);
+  ctx.stroke();
+
+  // equity line
+  ctx.strokeStyle = series;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = xScale(i), y = yScale(p.y);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // rounded end marker
+  const last = points[points.length - 1];
+  ctx.fillStyle = series;
+  ctx.beginPath();
+  ctx.arc(xScale(points.length - 1), yScale(last.y), 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+async function fetchJson(url) {
+  const resp = await fetch(url, { cache: "no-store" });
+  if (!resp.ok) throw new Error(`${url} -> ${resp.status}`);
+  return resp.json();
+}
+
+async function fetchTrades() {
+  try {
+    const resp = await fetch(TRADES_URL, { cache: "no-store" });
+    if (!resp.ok) return [];
+    const text = await resp.text();
+    return text.split("\n").filter(Boolean).map(line => {
+      try { return JSON.parse(line); } catch { return null; }
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function refresh() {
+  try {
+    const status = await fetchJson(STATUS_URL);
+    const trades = await fetchTrades();
+    document.getElementById("last-updated").textContent = "Updated " + new Date(status.updated_at).toLocaleTimeString();
+    renderScoreTiles(status);
+    renderPositions(status);
+    renderStatTiles(status, trades);
+    drawEquityCurve(trades);
+  } catch (e) {
+    document.getElementById("last-updated").textContent = "Waiting for bot.py to write data/market/bot_status.json…";
+  }
+}
+
+refresh();
+setInterval(refresh, POLL_MS);
+</script>
+</body>
+</html>

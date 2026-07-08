@@ -1,0 +1,18 @@
+{
+  "n_trades": 917,
+  "total_pnl_usd": 428.9173,
+  "sharpe_ratio": 0.564,
+  "avg_rr": 1.3041,
+  "apy_pct": 24491.23,
+  "days_running": 6.3923,
+  "best_day_pnl": 1097.409,
+  "max_win_streak": 17,
+  "current_win_streak": 0,
+  "updated_at": "2026-07-08T20:46:08.403124+00:00",
+  "alltime": {
+    "n_trades": 917,
+    "total_pnl_usd": 428.9173,
+    "win_rate": 0.4504,
+    "avg_pnl_per_trade": 0.4677
+  }
+}

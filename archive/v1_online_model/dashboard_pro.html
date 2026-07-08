@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORGEVIEWAI :: QUANT TERMINAL</title>
+<style>
+  /* ==========================================================================
+     RULE OF THIS FILE: every widget shows REAL data or an explicit "NO DATA"
+     tag. Nothing here is randomly generated or fabricated.
+     Reference elements with no real backing metric in this codebase are
+     omitted or relabeled honestly rather than invented:
+       - "CHEAP TAIL"/"TAIL TRADE" markers (the extreme-price NO-direction
+         strategy they describe was retired -- see docs/polymarket/DECISIONS.md
+         D-003: 10.5% win rate over 19 trades, net -$139.67).
+       - A literal on-chain wallet address (this is a paper-trading bot).
+     ========================================================================== */
+  :root {
+    --bg:          #F3F0E4;
+    --card:        #EDE8D8;
+    --border:      #C8C4B4;
+    --border-soft: #D8D4C4;
+
+    --text-primary:   #1A1A16;
+    --text-secondary: #5B5646;
+    --text-muted:     #8A8570;
+
+    --green: #1a7f37;
+    --red:   #cf222e;
+    --gold:  #9a6700;
+    --purple:#6639BA;
+    --cyan:  #0969DA;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Courier New', ui-monospace, Consolas, monospace;
+    font-size: 12.5px;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .up   { color: var(--green); }
+  .down { color: var(--red); }
+  /* PnL numbers (2026-07-06 explicit request, paired with dropping REFRESH_MS
+     to 500ms): smooth color fade when a value flips between up/down
+     (green/red) instead of an instant snap, now that it can happen twice a
+     second. Only visible on elements whose DOM node persists across
+     refreshes -- #pf-total-pnl and #pnl-growth-pct both update
+     textContent/className in place and are never destroyed. Elements inside
+     a fully innerHTML-rebuilt list (Live Trades rows, Live Feed, Biggest
+     Win) get a brand-new node every render, so there's no prior state for a
+     transition to interpolate from there regardless of this rule -- a
+     rendering-pattern limit, not something a selector can work around.
+     Status badges (.lt-badge) and the canvas-drawn candlestick chart are
+     deliberately excluded below: badges flip state instantly, and canvas
+     isn't a CSS-transitionable target at all (redrawn pixels, not a DOM
+     node) -- both per explicit request. */
+  .pnl-num { transition: all 0.3s ease; }
+
+  .no-data {
+    display: inline-block;
+    color: var(--text-muted);
+    border: 1px dashed var(--border);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+  }
+  .real-tag {
+    font-size: 9.5px; letter-spacing: 0.05em; color: var(--green);
+    border: 1px solid var(--green); border-radius: 3px; padding: 1px 6px;
+  }
+
+  /* ---- SECTION 1: top header ---- */
+  #header-bar {
+    display: flex; align-items: center; gap: 16px;
+    height: 30px; padding: 0 14px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+  }
+  #header-bar .logo {
+    width: 18px; height: 18px; border-radius: 4px; background: var(--text-primary); color: var(--bg);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; flex-shrink: 0;
+  }
+  #header-bar .brand { font-weight: 800; letter-spacing: 0.03em; color: var(--text-primary); flex-shrink: 0; }
+  #header-bar .subtitle { color: var(--text-muted); font-size: 10.5px; flex-shrink: 0; }
+  #header-bar .center { flex: 1; text-align: center; color: var(--gold); letter-spacing: 0.05em; font-weight: 700; }
+  #header-bar .hdr-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; color: var(--text-secondary); }
+  #header-bar b { color: var(--text-primary); }
+  .status-run { color: var(--green); font-weight: 700; }
+  .status-stop { color: var(--red); font-weight: 700; }
+  .quant-mode-badge {
+    display: inline-block; padding: 1px 6px; border: 1px solid var(--purple); border-radius: 3px;
+    color: var(--purple); font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em; flex-shrink: 0;
+  }
+
+  /* ---- SECTION 2: ticker strip ---- */
+  #ticker-bar { height: 25px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--card); display: flex; align-items: center; }
+  #ticker-wrap { flex: 1; overflow: hidden; white-space: nowrap; }
+  #ticker-track { display: inline-block; animation: tickerScroll 26s linear infinite; padding-left: 100%; }
+  @keyframes tickerScroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+  .ticker-item { font-size: 11px; margin-right: 34px; color: var(--text-secondary); }
+  .ticker-item b { color: var(--text-primary); }
+  .ticker-hero { color: var(--gold); font-weight: 800; }
+
+  /* ---- overall layout ---- */
+  .terminal { max-width: 1900px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+  .main-row { display: grid; grid-template-columns: 40fr 25fr 35fr; gap: 14px; min-height: 320px; }
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 1100px) {
+    .main-row, .bottom-row { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .panel-title {
+    font-size: 11.5px; letter-spacing: 0.03em; text-transform: uppercase;
+    color: var(--text-secondary); font-weight: 700;
+  }
+  .panel-title .glyph { color: var(--gold); margin-right: 5px; }
+  .panel-body { padding: 12px 14px; flex: 1; min-height: 0; overflow: auto; }
+
+  /* ---- portfolio card ---- */
+  #portfolio-panel { background: var(--card); }
+  .wallet-line { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.01em; display:flex; align-items:center; justify-content:space-between; margin-bottom: 10px; }
+  .wallet-tag { font-size: 9.5px; border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; color: var(--text-secondary); }
+  .hero { font-size: 56px; font-weight: 800; line-height: 1; }
+  .hero-sub { font-size: 11.5px; color: var(--text-secondary); letter-spacing: 0.01em; margin-top: 6px; margin-bottom: 12px; }
+
+  .triple-stat { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; padding: 10px 0; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+  .triple-stat .ts-cell { text-align: center; }
+  .triple-stat .ts-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.03em; text-transform: uppercase; }
+  .triple-stat .ts-value { font-size: 18px; font-weight: 800; color: var(--text-primary); margin-top: 3px; }
+
+  .liq-risk-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .liq-risk-label { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.02em; flex-shrink: 0; }
+  .liq-risk-segs { display: flex; gap: 2px; flex: 1; }
+  .liq-risk-segs .seg { flex: 1; height: 8px; border-radius: 1px; background: var(--border-soft); }
+  .liq-risk-segs .seg.filled { background: var(--seg-color, var(--green)); }
+  .liq-risk-tag { font-size: 9.5px; font-weight: 800; letter-spacing: 0.02em; padding: 1px 7px; border-radius: 3px; flex-shrink: 0; }
+  .liq-risk-note { font-size: 10.5px; color: var(--text-muted); margin-bottom: 12px; }
+
+  .stat-grid2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-top: 1px solid var(--border-soft); }
+  .stat-grid2 .sg-cell { padding: 9px 6px; border-right: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
+  .stat-grid2 .sg-cell:nth-child(3n) { border-right: none; }
+  .stat-grid2 .sg-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.02em; text-transform: uppercase; }
+  .stat-grid2 .sg-value { font-size: 13px; font-weight: 800; color: var(--text-primary); margin-top: 3px; }
+  .stat-grid2-note { font-size: 10px; color: var(--text-muted); margin-top: 8px; }
+
+  .reset-session-btn {
+    font-family: inherit; font-size: 10px; letter-spacing: 0.02em; text-transform: uppercase;
+    color: var(--text-secondary); background: transparent; border: 1px solid var(--border);
+    border-radius: 3px; padding: 3px 8px; cursor: pointer;
+  }
+  .reset-session-btn:disabled { opacity: 0.5; cursor: default; }
+
+  /* ---- biggest win ---- */
+  .bw-mult { font-size: 72px; font-weight: 800; color: var(--green); line-height: 1; margin-bottom: 10px; }
+  .bw-mult.down { color: var(--red); }
+  .bw-sub { font-size: 10.5px; color: var(--text-muted); margin-bottom: 14px; }
+  .bw-row { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--border-soft); font-size: 11.5px; }
+  .bw-row .label { color: var(--text-muted); }
+  .bw-row .value { font-weight: 700; }
+  .bw-progress-track { height: 6px; border-radius: 3px; background: var(--border-soft); margin-top: 12px; overflow: hidden; }
+  .bw-progress-fill { height: 100%; background: var(--green); }
+
+  /* ---- BTC chart ---- */
+  .chart-hdr-price { font-size: 14px; font-weight: 800; }
+  .chart-hdr-chg { font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .chart-wrap { position: relative; flex: 1; min-height: 200px; }
+  .chart-wrap canvas { display: block; width: 100%; height: 100%; }
+  /* Candlestick container only (2026-07-06 explicit request) -- overrides
+     the shared .chart-wrap flex:1/min-height:200px above with a fixed,
+     smaller size so it can't grow to match its taller row-siblings
+     (Portfolio/Biggest Win), and clips anything that would still overflow
+     it. #equity-wrap (PnL Growth, bottom row) also uses .chart-wrap and is
+     deliberately untouched -- this id-specific rule only applies to #candle-wrap. */
+  #candle-wrap { flex: 0 0 170px; height: 170px; min-height: 0; overflow: hidden; }
+
+  /* ---- SECTION 4: execution cycle ---- */
+  .exec-cycle-row { display: flex; align-items: center; height: 100%; padding: 0 18px; }
+  .exec-step { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; z-index: 1; }
+  .exec-step .dot {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid var(--border); background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--text-muted); font-weight: 800;
+    transition: all 0.3s ease;
+  }
+  .exec-step .label { font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); }
+  .exec-step.done .dot { border-color: var(--green); color: var(--green); background: rgba(26,127,55,0.08); }
+  .exec-step.done .label { color: var(--text-secondary); }
+  .exec-step.current .dot {
+    border-color: var(--purple); color: #fff; background: var(--purple);
+    animation: cyclehue 3s linear infinite;
+  }
+  @keyframes cyclehue {
+    0%   { background: var(--purple); border-color: var(--purple); }
+    33%  { background: var(--cyan);   border-color: var(--cyan); }
+    66%  { background: var(--gold);   border-color: var(--gold); }
+    100% { background: var(--purple); border-color: var(--purple); }
+  }
+  .exec-step.current .label { color: var(--purple); }
+  .exec-connector { flex: 0 0 auto; width: 26px; height: 2px; background: var(--border-soft); }
+  .exec-connector.done { background: var(--green); }
+
+  /* ---- SECTION 5: strategy decision tree ---- */
+  .tree-top-strip { display: flex; align-items: stretch; padding: 10px 16px; border-bottom: 1px solid var(--border); gap: 14px; }
+  .tree-sparklines { display: flex; gap: 10px; flex-shrink: 0; width: 220px; }
+  .tree-spark { flex: 1; text-align: center; }
+  .tree-spark .ts-asset { font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.03em; }
+  .tree-spark canvas { display: block; width: 100%; height: 26px; }
+  .tree-spark .ts-val { font-size: 10px; font-weight: 800; }
+  .tree-edge-conf { flex: 1; text-align: center; }
+  .tree-edge-conf .ec-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.05em; }
+  .tree-edge-conf .ec-value { font-size: 24px; font-weight: 800; line-height: 1.2; margin-top: 2px; }
+  .tree-edge-conf .ec-detail { font-size: 10.5px; color: var(--text-secondary); margin-top: 4px; }
+  .tree-pace-box { text-align: right; flex-shrink: 0; width: 150px; }
+  .tree-pace-box .pace-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.04em; }
+  .tree-pace-box .pace-value { font-size: 15px; font-weight: 800; margin-top: 2px; }
+  .tree-pace-box .next-value { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; }
+  .tree-svg-wrap { flex: 1; min-height: 0; position: relative; }
+  .tree-svg-wrap svg { width: 100%; height: 100%; display: block; }
+  .tree-node-label { font-size: 11px; font-weight: 700; fill: var(--text-secondary); font-family: 'IBM Plex Mono', monospace; text-anchor: middle; }
+  .tree-node-sub { font-size: 9.5px; fill: var(--text-muted); font-family: 'IBM Plex Mono', monospace; text-anchor: middle; }
+  .tree-edge { stroke: var(--border); stroke-width: 1.5; fill: none; }
+  .tree-flow-dot { filter: drop-shadow(0 0 3px var(--green)); }
+  /* A normal flex row BELOW tree-svg-wrap (see the HTML comment above
+     #tree-fill-box-row) -- never absolutely positioned over the SVG, so it
+     cannot cover a node no matter how the panel is sized. */
+  .tree-fill-box-row { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; padding: 10px 16px; border-top: 1px solid var(--border); min-height: 64px; }
+  .tree-fill-box {
+    background: #1A1A16; border: 1.5px solid var(--gold); border-radius: 6px;
+    padding: 8px 22px; text-align: center; white-space: nowrap;
+    box-shadow: 0 0 16px rgba(154,103,0,0.35);
+  }
+  .tree-fill-box .ff-bolt { font-size: 10px; color: var(--gold); letter-spacing: 0.15em; }
+  .tree-fill-box .ff-main { font-size: 20px; font-weight: 800; color: var(--gold); margin-top: 2px; }
+  .tree-fill-box .ff-sub { font-size: 10px; color: #C9D1D9; letter-spacing: 0.02em; margin-top: 4px; }
+
+  /* ---- SECTION 6: live trades / monte carlo / pnl growth ---- */
+  .lt-row {
+    display: grid; grid-template-columns: 62px 46px 40px 66px 60px 74px;
+    gap: 6px; padding: 6px 14px; align-items: center;
+    border-bottom: 1px solid var(--border-soft); font-size: 11.5px;
+  }
+  .lt-head { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; border-bottom: 1px solid var(--border); }
+  .lt-time { color: var(--text-muted); }
+  .lt-badge {
+    display: inline-block; min-width: 40px; text-align: center;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
+    padding: 2px 6px; border-radius: 3px; color: #fff;
+    transition: none; /* status flips (OPEN->WIN/LOSS) are instant, explicit request */
+  }
+  .lt-badge-open { background: var(--gold); }
+  .lt-badge-win  { background: var(--green); }
+  .lt-badge-loss { background: var(--red); }
+  .lt-row.lt-open { background: rgba(154,103,0,0.07); }
+  .lt-row.lt-win  { background: rgba(26,127,55,0.07); }
+  .lt-row.lt-loss { background: rgba(207,34,46,0.07); }
+  .horizon-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-left:5px; }
+
+  .mc-stats { display: flex; gap: 16px; padding-bottom: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border-soft); margin-bottom: 10px; }
+  .mc-stat .mc-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.02em; text-transform: uppercase; }
+  .mc-stat .mc-value { font-size: 13px; font-weight: 800; margin-top: 3px; }
+  .mc-stat.hi .mc-value { color: var(--red); }
+  .mc-chart-wrap { position: relative; flex: 1; min-height: 90px; }
+  .mc-chart-wrap canvas { display: block; width: 100%; height: 100%; }
+
+  .pnl-hdr-pct { font-size: 12px; font-weight: 800; }
+
+  /* ---- SECTION 7: live feed ---- */
+  .feed-wrap { flex: 1; overflow: hidden; position: relative; min-height: 0; }
+  .feed-track { animation: feedScroll 30s linear infinite; }
+  .feed-wrap:hover .feed-track { animation-play-state: paused; }
+  @keyframes feedScroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+  .feed-row { display: flex; gap: 12px; align-items: center; padding: 6px 16px; font-size: 11.5px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+  .feed-time { color: var(--text-muted); flex-shrink: 0; }
+  .feed-badge {
+    flex-shrink: 0; display: inline-block; min-width: 40px; text-align: center;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
+    padding: 2px 8px; border-radius: 3px;
+  }
+  .feed-badge.badge-buy  { color: #fff; background: var(--green); }
+  .feed-badge.badge-sell { color: #fff; background: var(--red); }
+  .feed-amount { margin-left: auto; font-weight: 800; }
+</style>
+</head>
+<body>
+
+<!-- ================= SECTION 1: TOP HEADER ================= -->
+<div id="header-bar">
+  <span class="logo">Q</span>
+  <span class="brand">CLAUDE &times; QUANT</span>
+  <span class="subtitle">BTC/ETH/SOL &middot; 5M POLYMARKET</span>
+  <span id="hdr-quant-mode-wrap"></span>
+  <div class="center">MARKOV &middot; KELLY &middot; SELF-LEARN</div>
+  <div class="hdr-right">
+    <span>STATUS <b id="hdr-status">--</b></span>
+    <b id="hdr-time" class="num">--:--:--</b>
+    <span>UTC &middot; <b id="hdr-latency" class="num">--</b></span>
+  </div>
+</div>
+
+<!-- ================= SECTION 2: TICKER STRIP ================= -->
+<div id="ticker-bar">
+  <div id="ticker-wrap"><div id="ticker-track"></div></div>
+</div>
+
+<div class="terminal">
+
+  <!-- ================= SECTION 3: MAIN ROW ================= -->
+  <div class="main-row">
+    <div class="panel" id="portfolio-panel">
+      <div class="panel-head">
+        <div class="panel-title">Portfolio</div>
+        <span style="display:flex; align-items:center; gap:8px;">
+          <button id="reset-session-btn" class="reset-session-btn" title="Zero out visible stats without touching paper_trades.jsonl">Reset Session</button>
+          <span class="real-tag">REAL</span>
+        </span>
+      </div>
+      <div class="panel-body">
+        <div class="wallet-line">
+          <span>FORGEVIEWAI &middot; QUANT</span>
+          <span class="wallet-tag">PAPER TRADING</span>
+        </div>
+        <div class="hero num pnl-num" id="pf-total-pnl">--</div>
+        <div id="pf-hero-sub" class="hero-sub"></div>
+        <div id="pf-triple-stat"></div>
+        <div id="liq-risk-body"></div>
+        <div id="stat-grid-body"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="glyph">&#9733;</span>Biggest Win</div>
+        <span class="real-tag">&#10003; VERIFIED</span>
+      </div>
+      <div class="panel-body" id="bw-body"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="glyph">&#9632;</span><span id="chart-asset-name">BTC</span> / USD &middot; 5-Min</div>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span id="chart-hdr-price" class="chart-hdr-price num"></span>
+          <span id="chart-hdr-chg" class="chart-hdr-chg num"></span>
+        </span>
+      </div>
+      <div class="chart-wrap" id="candle-wrap"><canvas id="candle-canvas"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ================= SECTION 4: EXECUTION CYCLE ================= -->
+  <div class="panel" style="height:100px;">
+    <div class="panel-head">
+      <div class="panel-title">Execution Cycle</div>
+      <span id="exec-fill-price" style="font-size:10.5px;color:var(--text-muted);"></span>
+    </div>
+    <div class="panel-body" style="padding:0;" id="exec-cycle-body"></div>
+  </div>
+
+  <!-- ================= SECTION 5: STRATEGY DECISION TREE ================= -->
+  <div class="panel" style="height:460px;">
+    <div class="panel-head">
+      <div class="panel-title"><span class="glyph">&#9660;</span>Strategy Decision Tree &middot; Every Trade Traced</div>
+      <span id="tree-inflight" style="font-size:10.5px;color:var(--text-muted);"></span>
+    </div>
+    <div class="tree-top-strip">
+      <div class="tree-sparklines" id="tree-sparklines"></div>
+      <div class="tree-edge-conf">
+        <div class="ec-label" id="tree-edge-label">EDGE CONF (BTC)</div>
+        <div class="ec-value" id="tree-edge-value">--</div>
+        <div class="ec-detail" id="tree-edge-detail"></div>
+      </div>
+      <div class="tree-pace-box">
+        <div class="pace-label">PACE</div>
+        <div class="pace-value num" id="tree-pace-value">--</div>
+        <div class="next-value" id="tree-next-value"></div>
+      </div>
+    </div>
+    <!-- tree-svg-wrap (flex:1) and tree-fill-box-row (fixed height) are
+         SIBLING flex children, never an absolute overlay on top of the SVG --
+         this guarantees the fill box can never cover a node regardless of
+         panel/container height, unlike the earlier absolute-positioned
+         overlay which depended on careful proportion-tuning and re-broke
+         whenever the container's real aspect ratio differed from what was
+         tested. -->
+    <div class="tree-svg-wrap" id="tree-svg-wrap"></div>
+    <div class="tree-fill-box-row" id="tree-fill-box-row"></div>
+  </div>
+
+  <!-- ================= SECTION 6: BOTTOM ROW ================= -->
+  <div class="bottom-row">
+    <div class="panel" style="height:320px;">
+      <div class="panel-head">
+        <div class="panel-title"><span class="glyph">&#9632;</span>Live Trades &middot; Last 20</div>
+        <span id="lt-open-count" style="font-size:10.5px;color:var(--text-muted);"></span>
+      </div>
+      <div class="panel-body" style="padding:0;" id="live-trades-body"></div>
+    </div>
+
+    <div class="panel" style="height:320px;">
+      <div class="panel-head">
+        <div class="panel-title"><span class="glyph">~</span>Monte Carlo &middot; <span id="mc-path-count" class="num">7,000</span> Paths</div>
+        <span id="mc-p01-tag" style="font-size:10.5px;color:var(--text-muted);"></span>
+      </div>
+      <div class="panel-body" style="display:flex;flex-direction:column;" id="mc-body">
+        <div class="mc-stats" id="mc-stats"></div>
+        <div class="mc-chart-wrap" id="mc-chart-wrap"><canvas id="mc-canvas"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel" style="height:320px;">
+      <div class="panel-head">
+        <div class="panel-title"><span class="glyph">&#9642;</span>PnL Growth &middot; All-Time</div>
+        <span id="pnl-growth-pct" class="pnl-hdr-pct num pnl-num"></span>
+      </div>
+      <div class="chart-wrap" id="equity-wrap"><canvas id="equity-canvas"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ================= SECTION 7: LIVE FEED ================= -->
+  <div class="panel" style="height:110px;">
+    <div class="panel-head">
+      <div class="panel-title"><span class="glyph">&#9642;</span>Polymarket Bot &middot; Live Feed</div>
+      <span class="real-tag">5M &#9679;</span>
+    </div>
+    <div class="feed-wrap"><div class="feed-track" id="feed-track"></div></div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+/* =============================================================================
+   DATA SOURCES -- what is real, and where it comes from
+   -----------------------------------------------------------------------------
+   data/paper_trades.jsonl   real trades (asset, direction, entry, result, PnL,
+                              open/close ts, size_usd), deduped by trade_id.
+                              Backs Portfolio, Biggest Win, Live Trades, PnL
+                              Growth, Live Feed, Monte Carlo inputs, and the
+                              client-computed all-time %-return / avg hold time.
+   data/state.json           daily_loss_usd, system_stopped, session_start_ts.
+                              Backs header STATUS, LIQ RISK gauge. Pace uses the
+                              earliest open_ts across paper_trades.jsonl (or
+                              session_start_ts after a reset), never
+                              session_start/hours_running -- that resets on
+                              every bot restart and inflates pace.
+   session_start_ts          Set once at the bot's first-ever start (see
+                              core/state_manager.py) and deliberately NOT
+                              touched on later restarts -- only
+                              scripts/dashboard_server.py's POST
+                              /api/reset-session (the "Reset Session" button)
+                              moves it. Purely a display cutoff;
+                              paper_trades.jsonl is never modified. Also
+                              consumed server-side by core/stats_calculator.py
+                              for stats.json's "session" block (2026-07-08).
+   data/stats.json           sharpe_ratio, avg_rr, apy_pct, best_day_pnl,
+                              max/current_win_streak -- written by
+                              core/stats_calculator.py every 60s. apy_pct /
+                              all-time %-return are relative to a notional
+                              $100 capital base (matches
+                              config.settings.STATS_APY_NOTIONAL_CAPITAL_USD),
+                              not tied to any real tracked balance.
+   data/live_status.json     quant_only_mode flag, written by run.py.
+   data/latency.json         real Polymarket HTTP call latency, written by
+                              core/market_fetcher.py after every call.
+   data/price_history.jsonl  real per-tick yes_price samples for BTC/ETH/SOL,
+                              ~5s cadence. Bucketed client-side into real OHLC
+                              candles for the rotating chart -- see
+                              computeOhlcCandles -- and, as a raw last-20-ticks
+                              slice per asset, feeds the Decision Tree's
+                              per-asset sparklines -- see
+                              loadRecentYesPricesByAsset/renderTreeSparklines.
+   data/market_bias.jsonl    CoinGecko spot prices + 24h change + bias label,
+                              written by run.py every 60s. Feeds the ticker,
+                              the BTC chart header price/change, and (via its
+                              full history) the 5-min BTC/ETH/SOL directional
+                              arrows in the ticker.
+   data/execution_cycle.json real stage of the scan->detect->validate->size->
+                              fill pipeline, written by run.py at each stage.
+                              Feeds Execution Cycle, the Decision Tree's
+                              SIZE/FILL nodes, and the order-fill overlay.
+   data/signal_combiner_status.json  Per-asset order_book/momentum/volume
+                              signal state + combined confidence, written every
+                              tick by core/signal_combiner.py. Feeds the
+                              Decision Tree's EDGE CONF readout and branch nodes.
+   -----------------------------------------------------------------------------
+   Panels kept minimal per an earlier explicit "ONLY these sections" request:
+   no AI signal panel, correlation map, decision timeline, AI reasoning, or
+   signal combiner breakdown table -- that logic still lives in core/*.py,
+   it's just not surfaced in this view. Live Trades (section 6) is the one
+   exception, added 2026-07-06 on explicit request.
+   ============================================================================= */
+
+// Main refresh cadence is hard-coded to 500ms directly on the
+// setInterval(refresh, 500) call below (2026-07-06 explicit request -- no
+// REFRESH_MS variable anymore, so there's no indirection left to check).
+// Drives the whole refresh() loop: stats/portfolio, live trades,
+// live feed, decision tree, AND the candlestick chart (updateChart() is the
+// last call inside refresh()), all on the same cadence. Monte Carlo stays on
+// its own separate, slower MC_TICK_MS timer (see below) since it's a real
+// simulation batch, not a cheap re-render -- no need to run that 10x more
+// often just because the rest of the dashboard does.
+const MAX_DAILY_LOSS_USD = 1000.0;
+const STALE_AFTER_MS = 15000;
+// One candle = one real 5-minute window (matches the "5-MIN" chart label and
+// Polymarket's own 5-minute market cycle) -- was 60s before, which produced
+// far more, noisier candles than the label claimed.
+const CANDLE_BUCKET_SEC = 300;
+const CANDLE_COUNT = 60;
+const NOTIONAL_CAPITAL_USD = 100.0; // mirrors config.settings.STATS_APY_NOTIONAL_CAPITAL_USD
+const MARKET_POLL_INTERVAL_SEC = 3;
+const CHART_ROTATE_MS = 10000;
+const CHART_ASSETS = ['BTC', 'ETH', 'SOL'];
+const ASSET_PRICE_FIELDS = {
+  BTC: ['btc_price', 'btc_24h_change'],
+  ETH: ['eth_price', 'eth_24h_change'],
+  SOL: ['sol_price', 'sol_24h_change'],
+};
+const ASSET_COLORS = { BTC: '#9a6700', ETH: '#6639BA', SOL: '#0969DA' };
+let _chartAssetIdx = 0;
+let _currentChartAsset = CHART_ASSETS[0];
+let _lastMarketBias = null;
+let _lastPortfolio = null;
+
+async function fetchNoCache(path) {
+  const res = await fetch(path + '?t=' + Date.now(), { cache: 'no-store' });
+  if (!res.ok) throw new Error(path + ' -> ' + res.status);
+  return res;
+}
+async function fetchJsonl(path) {
+  try {
+    const text = await (await fetchNoCache(path)).text();
+    const out = [];
+    for (const line of text.split('\n')) {
+      const t = line.trim();
+      if (!t) continue;
+      try { out.push(JSON.parse(t)); } catch (e) { /* skip malformed line */ }
+    }
+    return out;
+  } catch (e) { return null; }
+}
+async function fetchJsonlTail(path, maxLines) {
+  try {
+    const text = await (await fetchNoCache(path)).text();
+    const lines = text.split('\n').filter(l => l.trim());
+    const tail = lines.slice(-maxLines);
+    const out = [];
+    for (const line of tail) {
+      try { out.push(JSON.parse(line)); } catch (e) { /* skip malformed line */ }
+    }
+    return out;
+  } catch (e) { return null; }
+}
+async function fetchJson(path) {
+  try { return await (await fetchNoCache(path)).json(); }
+  catch (e) { return null; }
+}
+
+function noData(label) { return `<span class="no-data">${label || 'NO DATA'}</span>`; }
+function has(v) { return v !== null && v !== undefined && !(typeof v === 'number' && isNaN(v)); }
+function fmtUsd(n, decimals) {
+  decimals = decimals == null ? 2 : decimals;
+  const sign = n > 0 ? '+' : (n < 0 ? '-' : '');
+  return sign + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function fmtClock(iso) {
+  if (!iso) return '--:--:--';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '--:--:--';
+  return d.toLocaleTimeString('en-US', { hour12: false });
+}
+function fmtAge(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return Date.now() - d.getTime();
+}
+function scopeTradesToSession(trades, state) {
+  const sessionStartTs = state && state.session_start_ts;
+  const cutMs = sessionStartTs ? new Date(sessionStartTs).getTime() : null;
+  if (!cutMs || isNaN(cutMs)) return { scoped: trades, cutMs: null };
+  return { scoped: trades.filter(t => t.open_ts && new Date(t.open_ts).getTime() >= cutMs), cutMs };
+}
+
+const _countState = new WeakMap();
+// Tracks the current "animation token" per element. Without this, calling
+// animateNumber on the same element again before its previous rAF loop
+// finished left BOTH loops running and racing to write textContent -- each
+// stale loop's closure holds an old, smaller "prev"/"target" pair, so a
+// late-firing stale frame could stomp a newer, larger value back down. Only
+// the loop matching the element's current token is allowed to keep writing.
+const _animToken = new WeakMap();
+function animateNumber(el, target, formatter, duration) {
+  duration = duration || 600;
+  const prev = _countState.has(el) ? _countState.get(el) : target;
+  _countState.set(el, target);
+  const myToken = (_animToken.get(el) || 0) + 1;
+  _animToken.set(el, myToken);
+  el.textContent = formatter(prev); // paint the first frame synchronously -- don't wait on the first rAF tick
+  const start = performance.now();
+  function step(now) {
+    if (_animToken.get(el) !== myToken) return; // superseded by a newer call -- stop
+    // Clamp both ends -- a negative t (now < start, seen under headless
+    // Chrome's --virtual-time-budget clock, and cheap insurance in real
+    // browsers too) blows up through the cubic ease into a huge negative
+    // "eased," driving the interpolated value far below zero.
+    const t = Math.max(0, Math.min(1, (now - start) / duration));
+    const eased = 1 - Math.pow(1 - t, 3);
+    const val = prev + (target - prev) * eased;
+    el.textContent = formatter(val);
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ---------------- loaders ---------------- */
+async function loadTrades() {
+  const rows = await fetchJsonl('data/paper_trades.jsonl');
+  if (!rows) return null;
+  const byId = new Map();
+  for (const entry of rows) if (entry.trade_id) byId.set(entry.trade_id, entry);
+  return Array.from(byId.values());
+}
+async function loadState() { return await fetchJson('data/state.json'); }
+async function loadStats() { return await fetchJson('data/stats.json'); }
+async function loadLiveStatus() { return await fetchJson('data/live_status.json'); }
+async function loadLatency() { return await fetchJson('data/latency.json'); }
+async function loadPriceHistoryTicks(asset) {
+  const rows = await fetchJsonlTail('data/price_history.jsonl', 6000);
+  if (!rows) return null;
+  return rows.filter(r => r.asset === asset && has(r.yes_price) && r.timestamp);
+}
+function computeOhlcCandles(ticks, bucketSec, count) {
+  if (!ticks || ticks.length < 2) return null;
+  const buckets = new Map();
+  for (const t of ticks) {
+    const ms = new Date(t.timestamp).getTime();
+    if (isNaN(ms)) continue;
+    const bucketMs = Math.floor(ms / (bucketSec * 1000)) * (bucketSec * 1000);
+    let b = buckets.get(bucketMs);
+    if (!b) { b = { ts: bucketMs, open: t.yes_price, high: t.yes_price, low: t.yes_price, close: t.yes_price }; buckets.set(bucketMs, b); }
+    else { b.high = Math.max(b.high, t.yes_price); b.low = Math.min(b.low, t.yes_price); b.close = t.yes_price; }
+  }
+  const sorted = Array.from(buckets.values()).sort((a, b) => a.ts - b.ts);
+  return sorted.slice(-count);
+}
+async function loadMarketBiasHistory() { return await fetchJsonl('data/market_bias.jsonl'); }
+async function loadExecutionCycle() { return await fetchJson('data/execution_cycle.json'); }
+async function loadSignalCombinerStatus() { return await fetchJson('data/signal_combiner_status.json'); }
+
+/* ---------------- SECTION 1/2: HEADER + TICKER ---------------- */
+function renderHeader(state, liveStatus, latency) {
+  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const statusEl = document.getElementById('hdr-status');
+  const latEl = document.getElementById('hdr-latency');
+  const quantModeWrap = document.getElementById('hdr-quant-mode-wrap');
+  quantModeWrap.innerHTML = (liveStatus && liveStatus.quant_only_mode === true)
+    ? `<span class="quant-mode-badge">QUANT MODE</span>` : '';
+  if (latency && has(latency.last_ms)) {
+    latEl.textContent = Math.round(latency.last_ms) + 'ms latency';
+  } else {
+    latEl.innerHTML = noData();
+  }
+  if (!state) { statusEl.innerHTML = noData(); return; }
+  const stopped = !!state.system_stopped;
+  statusEl.textContent = stopped ? 'STOPPED' : 'RUNNING';
+  statusEl.className = stopped ? 'status-stop' : 'status-run';
+}
+// Real 5-min direction per asset from market_bias.jsonl's own history (logged
+// every ~60s) -- compares the latest sample to the one closest to 5 minutes
+// earlier, rather than fabricating a "5M" figure with no backing series.
+function compute5MinChange(biasHistory, priceKey) {
+  if (!biasHistory || biasHistory.length < 2) return null;
+  const last = biasHistory[biasHistory.length - 1];
+  const lastMs = new Date(last.timestamp || last.updated_at || 0).getTime();
+  if (!has(last[priceKey])) return null;
+  let prior = null;
+  for (let i = biasHistory.length - 2; i >= 0; i--) {
+    const ts = new Date(biasHistory[i].timestamp || biasHistory[i].updated_at || 0).getTime();
+    if (!has(biasHistory[i][priceKey])) continue;
+    if (lastMs - ts >= 5 * 60 * 1000 || i === 0) { prior = biasHistory[i]; break; }
+  }
+  if (!prior) return null;
+  return { last: last[priceKey], delta: last[priceKey] - prior[priceKey] };
+}
+function renderTicker(marketBias, biasHistory, portfolio) {
+  const track = document.getElementById('ticker-track');
+  const parts = [];
+  if (portfolio && portfolio.closed.length) {
+    const beatRandom = (portfolio.winRate * 100) - 50;
+    parts.push(`<span class="ticker-item ticker-hero">WIN RATE ${(portfolio.winRate * 100).toFixed(1)}% &middot; BEATING RANDOM BY ${beatRandom >= 0 ? '+' : ''}${beatRandom.toFixed(1)}%</span>`);
+  }
+  if (!marketBias) {
+    parts.push(`<span class="ticker-item">${noData('NO MARKET DATA')}</span>`);
+  } else {
+    [['BTC', 'btc_price'], ['ETH', 'eth_price'], ['SOL', 'sol_price']].forEach(([label, key]) => {
+      const chg = compute5MinChange(biasHistory, key);
+      if (!chg) { parts.push(`<span class="ticker-item"><b>${label}</b> ${noData()}</span>`); return; }
+      const up = chg.delta >= 0;
+      parts.push(`<span class="ticker-item"><b>${label}</b> ${up ? '&#9650;' : '&#9660;'} <span class="${up ? 'up' : 'down'}">${up ? 'UP' : 'DOWN'} 5M ${up ? '+' : ''}$${chg.delta.toFixed(2)}</span></span>`);
+    });
+  }
+  track.innerHTML = parts.join('') || noData();
+}
+
+/* ---------------- SECTION 3: PORTFOLIO ---------------- */
+function computePortfolio(trades) {
+  const closed = trades.filter(t => t.status !== 'open' && t.pnl_usd != null);
+  const wins = closed.filter(t => t.pnl_usd > 0);
+  const losses = closed.filter(t => t.pnl_usd <= 0);
+  const totalPnl = closed.reduce((s, t) => s + t.pnl_usd, 0);
+  const grossWin = wins.reduce((s, t) => s + t.pnl_usd, 0);
+  const grossLoss = Math.abs(losses.reduce((s, t) => s + t.pnl_usd, 0));
+  const winRate = closed.length ? wins.length / closed.length : 0;
+  const avgWin = wins.length ? grossWin / wins.length : 0;
+  const avgLoss = losses.length ? grossLoss / losses.length : 0;
+  const avgRR = (wins.length && losses.length && avgLoss > 0) ? avgWin / avgLoss : null;
+  const sortedClosed = closed.slice().sort((a, b) => new Date(a.close_ts) - new Date(b.close_ts));
+  let running = 0, peak = 0, maxDD = 0;
+  const curve = sortedClosed.map(t => {
+    running += t.pnl_usd; peak = Math.max(peak, running); maxDD = Math.max(maxDD, peak - running);
+    return running;
+  });
+  const now = Date.now();
+  const earliestTradeMs = sortedClosed.length ? new Date(sortedClosed[0].close_ts).getTime() : null;
+  const historyDays = earliestTradeMs != null ? (now - earliestTradeMs) / (24 * 3600 * 1000) : null;
+  const holdMinutes = closed.filter(t => t.open_ts && t.close_ts).map(t => (new Date(t.close_ts) - new Date(t.open_ts)) / 60000);
+  const avgHoldMinutes = holdMinutes.length ? holdMinutes.reduce((s, v) => s + v, 0) / holdMinutes.length : null;
+
+  return { closed, sortedClosed, curve, wins, losses, totalPnl, winRate, avgWin, avgLoss, avgRR, maxDD, historyDays, avgHoldMinutes };
+}
+function computeAllTimeReturnPct(totalPnl) { return (totalPnl / NOTIONAL_CAPITAL_USD) * 100; }
+function computePace(portfolio, state, trades) {
+  if (!portfolio || !trades || !trades.length) return null;
+  const sessionStartTs = state && state.session_start_ts;
+  const cutMs = sessionStartTs ? new Date(sessionStartTs).getTime() : null;
+  let startMs;
+  if (cutMs && !isNaN(cutMs)) {
+    startMs = cutMs;
+  } else {
+    const openTimes = trades.map(t => new Date(t.open_ts).getTime()).filter(ms => !isNaN(ms));
+    if (!openTimes.length) return null;
+    startMs = Math.min(...openTimes);
+  }
+  const hoursRunning = (Date.now() - startMs) / 3600000;
+  if (!(hoursRunning > 0)) return { pace: null };
+  return { pace: portfolio.totalPnl / hoursRunning };
+}
+function renderPortfolio(trades, state) {
+  const heroEl = document.getElementById('pf-total-pnl');
+  const heroSubEl = document.getElementById('pf-hero-sub');
+  if (!trades) {
+    heroEl.innerHTML = noData();
+    document.getElementById('pf-triple-stat').innerHTML = '';
+    return null;
+  }
+  const { scoped } = scopeTradesToSession(trades, state);
+  const m = computePortfolio(scoped);
+  animateNumber(heroEl, m.totalPnl, v => fmtUsd(v));
+  heroEl.classList.toggle('up', m.totalPnl >= 0);
+  heroEl.classList.toggle('down', m.totalPnl < 0);
+
+  const allTimePct = computeAllTimeReturnPct(m.totalPnl);
+  const daysTxt = m.historyDays != null ? m.historyDays.toFixed(1) : '?';
+  // "SESSION PNL" (was mislabeled "ALL-TIME PNL" even though `m` is computed
+  // over `scoped`, the session-cutoff-filtered trades) -- and when nothing's
+  // closed yet, distinguish "no trades this session" from "trades are open,
+  // just not resolved yet" (a 5-min market can take several more minutes to
+  // settle after its nominal window closes), so $0.00 doesn't read as broken.
+  const openCount = scoped.length - m.closed.length;
+  heroSubEl.innerHTML = m.closed.length
+    ? `SESSION PNL &middot; ${daysTxt} DAYS &middot; <span class="${allTimePct >= 0 ? 'up' : 'down'}">${allTimePct >= 0 ? '+' : ''}${allTimePct.toFixed(0)}%</span>`
+    : (openCount > 0 ? noData(`${openCount} OPEN &middot; NONE RESOLVED YET`) : noData('NO TRADES THIS SESSION'));
+
+  document.getElementById('pf-triple-stat').innerHTML = `
+    <div class="triple-stat">
+      <div class="ts-cell"><div class="ts-label">Closed</div><div class="ts-value">${m.closed.length}</div></div>
+      <div class="ts-cell"><div class="ts-label">Win Rate</div><div class="ts-value">${m.closed.length ? (m.winRate * 100).toFixed(0) + '%' : '--'}</div></div>
+      <div class="ts-cell"><div class="ts-label">Avg R/R</div><div class="ts-value">${m.avgRR == null ? '--' : m.avgRR.toFixed(2)}</div></div>
+    </div>`;
+  return m;
+}
+// Thin wrapper used by the Reset Session handler to redraw the Portfolio
+// panel immediately from the server's response, without waiting on
+// refresh()'s next data/state.json fetch -- also keeps _lastPortfolio (read
+// by the equity curve / Monte Carlo resize observers) in sync.
+function rerenderPortfolio(trades, state) {
+  _lastPortfolio = renderPortfolio(trades, state);
+  return _lastPortfolio;
+}
+function renderLiqRisk(state) {
+  const wrap = document.getElementById('liq-risk-body');
+  if (!state || !has(state.daily_loss_usd)) { wrap.innerHTML = noData(); return; }
+  const used = state.daily_loss_usd;
+  const pct = Math.min(100, (used / MAX_DAILY_LOSS_USD) * 100);
+  const filledSegs = Math.round(pct / 10);
+  const color = pct >= 80 ? 'var(--red)' : (pct >= 50 ? 'var(--gold)' : 'var(--green)');
+  const tag = pct >= 80 ? 'DANGER' : (pct >= 50 ? 'WARNING' : 'SAFE');
+  const segs = Array.from({ length: 10 }, (_, i) => `<div class="seg ${i < filledSegs ? 'filled' : ''}" style="--seg-color:${color};"></div>`).join('');
+  wrap.innerHTML = `
+    <div class="liq-risk-row">
+      <span class="liq-risk-label">LIQ RISK</span>
+      <div class="liq-risk-segs">${segs}</div>
+      <span class="liq-risk-label num">${filledSegs}/10</span>
+      <span class="liq-risk-tag" style="color:#fff;background:${color};">${tag}</span>
+    </div>
+    <div class="liq-risk-note">No leverage/margin in this project -- this tracks the real daily-loss cap: ${fmtUsd(-used)} used of ${fmtUsd(-MAX_DAILY_LOSS_USD)} hard stop.</div>
+  `;
+}
+function renderStatGrid(stats, portfolio) {
+  const wrap = document.getElementById('stat-grid-body');
+  if (!stats || !stats.n_trades) { wrap.innerHTML = noData(); return; }
+  const holdTxt = portfolio && has(portfolio.avgHoldMinutes) ? portfolio.avgHoldMinutes.toFixed(1) + 'm' : '--';
+  const cells = [
+    ['Sharpe', stats.sharpe_ratio == null ? '--' : stats.sharpe_ratio.toFixed(2)],
+    ['APY', stats.apy_pct == null ? '--' : `${stats.apy_pct >= 0 ? '+' : ''}${stats.apy_pct.toFixed(0)}%`],
+    ['Best Day', stats.best_day_pnl == null ? '--' : fmtUsd(stats.best_day_pnl)],
+    ['Hold', holdTxt],
+    ['Wins', String((portfolio && portfolio.wins.length) || 0)],
+    ['Win Rate', portfolio && portfolio.closed.length ? (portfolio.winRate * 100).toFixed(1) + '%' : '--'],
+  ];
+  wrap.innerHTML = `<div class="stat-grid2">${cells.map(([l, v]) => `
+    <div class="sg-cell"><div class="sg-label">${l}</div><div class="sg-value">${v}</div></div>
+  `).join('')}</div>
+  <div class="stat-grid2-note">Per $100 notionally risked (no real tracked capital balance; stakes are flat $5-$25). n=${stats.n_trades} resolved trades.</div>`;
+}
+
+/* ---------------- BIGGEST WIN ---------------- */
+function computeBiggestWin(m) {
+  if (!m || !m.wins.length) return null;
+  const bw = m.wins.reduce((a, b) => (b.pnl_usd > a.pnl_usd ? b : a));
+  const multiplier = bw.size_usd > 0 ? bw.pnl_usd / bw.size_usd : null;
+  const pnls = m.closed.map(t => t.pnl_usd);
+  const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
+  const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
+  const std = Math.sqrt(variance);
+  const sharpe = std > 0 ? mean / std : null;
+  return { bw, multiplier, sharpe };
+}
+function renderBiggestWin(portfolio) {
+  const wrap = document.getElementById('bw-body');
+  const c = computeBiggestWin(portfolio);
+  if (!c) { wrap.innerHTML = noData(portfolio ? 'NO WINNING TRADES YET' : 'NO DATA'); return; }
+  const bw = c.bw;
+  const progressPct = Math.min(100, has(c.multiplier) ? c.multiplier * 20 : 0);
+  wrap.innerHTML = `
+    <div class="bw-mult num">${c.multiplier != null ? 'X' + c.multiplier.toFixed(1) : noData()}</div>
+    <div class="bw-sub">Biggest win PnL (${fmtUsd(bw.pnl_usd)}) &divide; stake ($${bw.size_usd.toFixed(2)})</div>
+    <div class="bw-row"><span class="label">Stake</span><span class="value num">$${bw.size_usd.toFixed(2)}</span></div>
+    <div class="bw-row"><span class="label">Entry Price</span><span class="value num">${bw.entry_price.toFixed(3)}</span></div>
+    <div class="bw-row"><span class="label">Market</span><span class="value">${bw.asset} &middot; ${bw.direction}</span></div>
+    <div class="bw-row"><span class="label">Date</span><span class="value num">${fmtClock(bw.close_ts)}</span></div>
+    <div class="bw-row"><span class="label">Sharpe (per-trade)</span><span class="value num">${has(c.sharpe) ? c.sharpe.toFixed(2) : noData()}</span></div>
+    <div class="bw-progress-track"><div class="bw-progress-fill" style="width:${progressPct}%;"></div></div>
+  `;
+}
+
+/* ---------------- SECTION 4: EXECUTION CYCLE ---------------- */
+const EXEC_STAGES = ['scan', 'detect', 'validate', 'size', 'fill', 'settle'];
+let _lastTickAtMs = null;
+function renderExecutionCycle(cycle, trades) {
+  const wrap = document.getElementById('exec-cycle-body');
+  const fillPriceEl = document.getElementById('exec-fill-price');
+  if (!cycle || !cycle.stage) {
+    wrap.innerHTML = noData();
+    _lastTickAtMs = null;
+    if (fillPriceEl) fillPriceEl.textContent = '';
+    return;
+  }
+  _lastTickAtMs = new Date(cycle.updated_at).getTime();
+  const idx = EXEC_STAGES.indexOf(cycle.stage);
+  const age = fmtAge(cycle.updated_at);
+  const fresh = age != null && age < STALE_AFTER_MS * 8;
+  if (fillPriceEl) {
+    const lastTrade = trades && trades.length
+      ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
+    fillPriceEl.textContent = lastTrade ? `FILL ${lastTrade.entry_price.toFixed(3)}` : '';
+  }
+  let row = '<div class="exec-cycle-row">';
+  EXEC_STAGES.forEach((stage, i) => {
+    if (i > 0) row += `<div class="exec-connector ${fresh && i <= idx ? 'done' : ''}"></div>`;
+    const isCurrent = fresh && i === idx;
+    const isDone = fresh && i < idx;
+    const cls = isCurrent ? 'current' : (isDone ? 'done' : '');
+    row += `<div class="exec-step ${cls}">
+      <div class="dot">${String(i + 1).padStart(2, '0')}</div>
+      <div class="label">${stage}</div>
+    </div>`;
+  });
+  row += '</div>';
+  wrap.innerHTML = row;
+}
+function renderNextTick() {
+  const treeNextEl = document.getElementById('tree-next-value');
+  if (!treeNextEl) return;
+  if (_lastTickAtMs == null) { treeNextEl.textContent = ''; return; }
+  const elapsedSec = (Date.now() - _lastTickAtMs) / 1000;
+  const remain = Math.max(0, MARKET_POLL_INTERVAL_SEC - (elapsedSec % MARKET_POLL_INTERVAL_SEC));
+  treeNextEl.textContent = `NEXT: ${remain.toFixed(0)}s`;
+}
+function renderTreePace(portfolio, state, trades) {
+  const valEl = document.getElementById('tree-pace-value');
+  if (!valEl) return;
+  const p = computePace(portfolio, state, trades);
+  if (!p || p.pace == null) { valEl.innerHTML = noData(); return; }
+  valEl.textContent = fmtUsd(p.pace) + '/hr';
+  valEl.className = 'pace-value num ' + (p.pace >= 0 ? 'up' : 'down');
+}
+function renderTreeInflight(trades) {
+  const el = document.getElementById('tree-inflight');
+  if (!el || !trades) { if (el) el.innerHTML = noData(); return; }
+  const open = trades.filter(t => t.status === 'open').length;
+  el.textContent = `IN-FLIGHT ${open}`;
+}
+
+/* ---------------- per-asset sparklines (top-left of decision tree) ----------------
+   Real data/price_history.jsonl yes_price ticks (the same unconditioned,
+   every-poll-tick log the candlestick chart reads), not a synthetic curve --
+   last 20 ticks per asset, green if the last price is >= the first, red if
+   it dropped. */
+async function loadRecentYesPricesByAsset() {
+  const rows = await fetchJsonlTail('data/price_history.jsonl', 1500);
+  if (!rows) return null;
+  const byAsset = { BTC: [], ETH: [], SOL: [] };
+  for (const r of rows) {
+    if (byAsset[r.asset] && has(r.yes_price)) byAsset[r.asset].push(r.yes_price);
+  }
+  Object.keys(byAsset).forEach(a => { byAsset[a] = byAsset[a].slice(-20); });
+  return byAsset;
+}
+function renderTreeSparklines(pricesByAsset) {
+  const wrap = document.getElementById('tree-sparklines');
+  if (!pricesByAsset) { wrap.innerHTML = noData(); return; }
+  wrap.innerHTML = ['BTC', 'ETH', 'SOL'].map(asset => `
+    <div class="tree-spark">
+      <div class="ts-asset">${asset}</div>
+      <canvas id="spark-${asset}"></canvas>
+      <div class="ts-val num" id="spark-${asset}-val"></div>
+    </div>
+  `).join('');
+  ['BTC', 'ETH', 'SOL'].forEach(asset => {
+    const curve = pricesByAsset[asset] || [];
+    const canvas = document.getElementById(`spark-${asset}`);
+    const valEl = document.getElementById(`spark-${asset}-val`);
+    const { ctx, w, h } = resizeCanvasToParent(canvas);
+    ctx.clearRect(0, 0, w, h);
+    if (curve.length < 2) {
+      valEl.innerHTML = curve.length ? curve[curve.length - 1].toFixed(3) : noData();
+      return;
+    }
+    const min = Math.min(...curve), max = Math.max(...curve);
+    const span = (max - min) || 0.001;
+    const x = i => (i / (curve.length - 1)) * w;
+    const y = v => h - ((v - min) / span) * h;
+    const positive = curve[curve.length - 1] >= curve[0];
+    ctx.beginPath();
+    curve.forEach((v, i) => i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v)));
+    ctx.strokeStyle = positive ? '#1a7f37' : '#cf222e'; ctx.lineWidth = 1.5;
+    ctx.stroke();
+    valEl.textContent = curve[curve.length - 1].toFixed(3);
+    valEl.className = 'ts-val num ' + (positive ? 'up' : 'down');
+  });
+}
+
+/* ---------------- SECTION 5: STRATEGY DECISION TREE (animated SVG) ---------------- */
+// Logical (base) node layout in a 1050x380 design space (nodes top out around
+// y=338, a modest margin below). The order-fill/loss box lives in its own
+// #tree-fill-box-row flex sibling below tree-svg-wrap, not inside this SVG's
+// coordinate space at all, so this height no longer needs to reserve extra
+// room for it. The actual <svg> viewBox is recomputed every render from the
+// wrapper's real aspect ratio so the tree fills the panel edge-to-edge
+// instead of letterboxing.
+const TREE_NODES_BASE = {
+  tick:       { x: 55,  y: 168, label: 'TICK' },
+  scan:       { x: 200, y: 168, label: 'SCAN' },
+  classify:   { x: 350, y: 168, label: 'CLASSIFY' },
+  repricing:  { x: 540, y: 35,  label: 'REPRICING' },
+  order_book: { x: 540, y: 130, label: 'ORDER BOOK' },
+  momentum:   { x: 540, y: 215, label: 'MOMENTUM' },
+  volume:     { x: 540, y: 300, label: 'VOLUME' },
+  size:       { x: 710, y: 168, label: 'SIZE' },
+  fill:       { x: 860, y: 168, label: 'FILL' },
+  pnl:        { x: 980, y: 168, label: 'P&L' },
+};
+const TREE_BASE_W = 1050, TREE_BASE_H = 380;
+const TREE_EDGES = [
+  ['tick', 'scan'], ['scan', 'classify'],
+  ['classify', 'repricing'], ['classify', 'order_book'], ['classify', 'momentum'], ['classify', 'volume'],
+  ['repricing', 'size'], ['order_book', 'size'], ['momentum', 'size'], ['volume', 'size'],
+  ['size', 'fill'], ['fill', 'pnl'],
+];
+let _lastSeenTreeFillTs = undefined;
+const _lastSeenBranchFireTs = { order_book: undefined, momentum: undefined, volume: undefined };
+// EDGE CONF "last known" fallback (2026-07-06): combined_confidence is null
+// whenever an asset is currently blocked (price out of band, correlation
+// filter, or just no signal firing this tick) -- since EDGE CONF rotates
+// through all 3 assets and any of them can be blocked at once (e.g. all 3
+// out of the tradeable price band simultaneously), showing a blank "NO DATA"
+// every time that happens would make the panel go dark constantly even
+// though a real recent reading exists. Cache the last real (non-null)
+// reading per asset with its own real timestamp instead of inventing a
+// number -- shown as stale (no up/down tint) alongside whatever the current
+// live block reason is.
+const _lastEdgeConfByAsset = { BTC: null, ETH: null, SOL: null };
+let _currentTreeNodes = TREE_NODES_BASE;
+function buildFlowPath(...nodeKeys) {
+  return 'M ' + nodeKeys.map(k => `${_currentTreeNodes[k].x} ${_currentTreeNodes[k].y}`).join(' L ');
+}
+function triggerFlowDot(pathStr, durSec) {
+  const motion = document.getElementById('tree-flow-motion');
+  const opacityAnim = document.getElementById('tree-flow-opacity');
+  if (!motion || !opacityAnim) return;
+  const dur = (durSec || 1.8) + 's';
+  motion.setAttribute('path', pathStr);
+  motion.setAttribute('dur', dur);
+  opacityAnim.setAttribute('dur', dur);
+  motion.beginElement();
+  opacityAnim.beginElement();
+}
+function renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades) {
+  const wrap = document.getElementById('tree-svg-wrap');
+  const edgeValueEl = document.getElementById('tree-edge-value');
+  const edgeDetailEl = document.getElementById('tree-edge-detail');
+  const edgeLabelEl = document.getElementById('tree-edge-label');
+  const btcStatus = combinerStatus ? combinerStatus.BTC : null;
+
+  // EDGE CONF rotates BTC -> ETH -> SOL in lockstep with the candlestick
+  // chart, sharing _currentChartAsset / CHART_ROTATE_MS -- independent of
+  // the tree diagram's node highlighting below, which stays BTC-specific
+  // (that's the tree's own walkthrough, not asked to rotate).
+  const edgeAsset = _currentChartAsset;
+  const edgeStatus = combinerStatus ? combinerStatus[edgeAsset] : null;
+  if (edgeLabelEl) edgeLabelEl.textContent = `EDGE CONF (${edgeAsset})`;
+  if (edgeStatus && has(edgeStatus.combined_confidence) && !edgeStatus.correlation_filter_blocked && !edgeStatus.price_out_of_band) {
+    const pct = edgeStatus.combined_confidence * 100;
+    edgeValueEl.textContent = pct.toFixed(1) + '%';
+    edgeValueEl.className = 'ec-value ' + (edgeStatus.fired ? 'up' : '');
+    _lastEdgeConfByAsset[edgeAsset] = { pct, ts: (combinerStatus && combinerStatus.updated_at) || null };
+  } else {
+    const cached = _lastEdgeConfByAsset[edgeAsset];
+    if (cached) {
+      edgeValueEl.innerHTML = `${cached.pct.toFixed(1)}% <span style="font-size:10px;color:var(--text-muted);">(last ${fmtClock(cached.ts)})</span>`;
+      edgeValueEl.className = 'ec-value';
+    } else {
+      edgeValueEl.innerHTML = noData();
+    }
+  }
+  if (edgeStatus) {
+    const fmtSig = s => (s && s.fired) ? `<span class="up">${(s.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted);">--</span>';
+    const combinedText = edgeStatus.correlation_filter_blocked ? '<span class="down">BLOCKED</span>'
+      : edgeStatus.price_out_of_band ? '<span style="color:var(--gold);">OUT OF BAND</span>'
+      : 'Order Book ' + fmtSig(edgeStatus.order_book) + ' &middot; Momentum ' + fmtSig(edgeStatus.momentum) + ' &middot; Volume ' + fmtSig(edgeStatus.volume);
+    edgeDetailEl.innerHTML = combinedText;
+  } else {
+    edgeDetailEl.innerHTML = noData();
+  }
+
+  const liveFresh = !!(liveStatus && (() => { const a = fmtAge(liveStatus.updated_at); return a != null && a < STALE_AFTER_MS; })());
+  const cycleFresh = !!(executionCycle && (() => { const a = fmtAge(executionCycle.updated_at); return a != null && a < STALE_AFTER_MS * 8; })());
+  const cycleStage = cycleFresh ? executionCycle.stage : null;
+
+  const active = {
+    tick: liveFresh,
+    scan: liveFresh,
+    classify: !!btcStatus,
+    repricing: false, // permanently disabled under QUANT_ONLY_MODE -- shadow-logging only, never fires a real trade
+    order_book: !!(btcStatus && btcStatus.order_book && btcStatus.order_book.fired),
+    momentum: !!(btcStatus && btcStatus.momentum && btcStatus.momentum.fired),
+    volume: !!(btcStatus && btcStatus.volume && btcStatus.volume.fired),
+    size: cycleStage === 'size' || cycleStage === 'fill',
+    fill: cycleStage === 'fill',
+    pnl: !!(portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length > 0),
+  };
+
+  const rectW = wrap.clientWidth || TREE_BASE_W, rectH = wrap.clientHeight || TREE_BASE_H;
+  const viewBoxW = TREE_BASE_H * (rectW / rectH);
+  const xScale = viewBoxW / TREE_BASE_W;
+  const scaledNodes = {};
+  Object.entries(TREE_NODES_BASE).forEach(([k, n]) => { scaledNodes[k] = { x: n.x * xScale, y: n.y, label: n.label }; });
+  _currentTreeNodes = scaledNodes;
+
+  let svg = `<svg viewBox="0 0 ${viewBoxW.toFixed(0)} ${TREE_BASE_H}" preserveAspectRatio="xMidYMid meet">`;
+  TREE_EDGES.forEach(([a, b]) => {
+    const n1 = scaledNodes[a], n2 = scaledNodes[b];
+    const isRepricingEdge = a === 'repricing' || b === 'repricing';
+    const lit = active[a] && active[b];
+    const dash = isRepricingEdge ? ' stroke-dasharray="3,3"' : '';
+    svg += `<line class="tree-edge" x1="${n1.x}" y1="${n1.y}" x2="${n2.x}" y2="${n2.y}" stroke="${lit ? '#1a7f37' : '#C8C4B4'}"${dash}/>`;
+  });
+  Object.entries(scaledNodes).forEach(([key, n]) => {
+    const isActive = active[key];
+    const isPnl = key === 'pnl';
+    const isRepricing = key === 'repricing';
+    const r = isPnl ? 32 : 22;
+    const fill = isActive ? 'rgba(26,127,55,0.10)' : '#F3F0E4';
+    const stroke = isActive ? '#1a7f37' : '#C8C4B4';
+    const dash = isRepricing ? ' stroke-dasharray="3,3"' : '';
+    svg += `<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2"${dash}/>`;
+    if (isPnl) {
+      const last = (portfolio && portfolio.sortedClosed && portfolio.sortedClosed.length)
+        ? portfolio.sortedClosed[portfolio.sortedClosed.length - 1] : null;
+      const pnlText = last ? fmtUsd(last.pnl_usd) : 'NO DATA';
+      const pnlColor = last ? (last.pnl_usd >= 0 ? '#1a7f37' : '#cf222e') : '#8A8570';
+      svg += `<text x="${n.x}" y="${n.y - 3}" text-anchor="middle" fill="${pnlColor}" font-size="13" font-weight="800" font-family="'IBM Plex Mono', monospace">${pnlText}</text>`;
+      svg += `<text x="${n.x}" y="${n.y + 12}" class="tree-node-sub">last trade</text>`;
+    } else {
+      svg += `<text x="${n.x}" y="${n.y + r + 15}" class="tree-node-label">${n.label}</text>`;
+      if (isRepricing) svg += `<text x="${n.x}" y="${n.y + r + 27}" class="tree-node-sub" style="fill:var(--gold);">(disabled, shadow only)</text>`;
+    }
+  });
+  svg += `<circle class="tree-flow-dot" id="tree-flow-dot" r="5.5" fill="#1a7f37" opacity="0">`
+       + `<animateMotion id="tree-flow-motion" path="${buildFlowPath('tick', 'pnl')}" dur="1.8s" begin="indefinite" fill="freeze"/>`
+       + `<animate id="tree-flow-opacity" attributeName="opacity" values="0;1;1;0" keyTimes="0;0.05;0.9;1" dur="1.8s" begin="indefinite" fill="freeze"/>`
+       + `</circle>`;
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+
+  // Real-data fill box: shows the actual most-recently-opened trade's state
+  // (open, or its real resolved result), never a decorative placeholder.
+  // Rendered into #tree-fill-box-row, a normal flex row BELOW tree-svg-wrap
+  // (see the HTML comment near that element) -- never an overlay on the SVG,
+  // so it can't cover a node.
+  const fillBoxRow = document.getElementById('tree-fill-box-row');
+  const lastTrade = trades && trades.length
+    ? trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts))[0] : null;
+  let fillBoxHtml;
+  if (!lastTrade) {
+    fillBoxHtml = `<div class="tree-fill-box"><div class="ff-main">${noData('AWAITING FIRST SIGNAL')}</div></div>`;
+  } else if (lastTrade.status === 'open') {
+    fillBoxHtml = `<div class="tree-fill-box">
+      <div class="ff-bolt">&#9889; ORDER FILLED &#9889;</div>
+      <div class="ff-main">${lastTrade.entry_price.toFixed(3)}</div>
+      <div class="ff-sub">EXECUTION CONFIRMED &middot; ${lastTrade.asset} ${lastTrade.direction} &middot; ${lastTrade.signal_source}</div>
+    </div>`;
+  } else {
+    fillBoxHtml = `<div class="tree-fill-box">
+      <div class="ff-bolt">&#9889; ORDER ${lastTrade.result} &#9889;</div>
+      <div class="ff-main">${fmtUsd(lastTrade.pnl_usd)}</div>
+      <div class="ff-sub">EXECUTION CONFIRMED &middot; ${lastTrade.asset} ${lastTrade.direction} &middot; ${lastTrade.signal_source}</div>
+    </div>`;
+  }
+  if (fillBoxRow) fillBoxRow.innerHTML = fillBoxHtml;
+
+  const lastFillTs = (executionCycle && executionCycle.stage === 'fill') ? executionCycle.updated_at : null;
+  if (lastFillTs && lastFillTs !== _lastSeenTreeFillTs) {
+    const isFirstPaint = _lastSeenTreeFillTs === undefined;
+    _lastSeenTreeFillTs = lastFillTs;
+    if (!isFirstPaint) triggerFlowDot(buildFlowPath('tick', 'pnl'), 1.8);
+  }
+  const signalStats = combinerStatus && combinerStatus.signal_stats;
+  ['order_book', 'momentum', 'volume'].forEach(branch => {
+    const lastFired = signalStats && signalStats[branch] ? signalStats[branch].last_fired_at : null;
+    const prevSeen = _lastSeenBranchFireTs[branch];
+    if (prevSeen !== undefined && lastFired && lastFired !== prevSeen) {
+      triggerFlowDot(buildFlowPath('tick', 'scan', 'classify', branch, 'size'), 2.2);
+    }
+    _lastSeenBranchFireTs[branch] = lastFired;
+  });
+}
+
+/* ---------------- CANDLESTICK / EQUITY / MONTE CARLO CANVAS HELPERS ---------------- */
+function resizeCanvasToParent(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+function renderCandlestick(candles, marketBias, assetKey) {
+  const canvas = document.getElementById('candle-canvas');
+  const priceEl = document.getElementById('chart-hdr-price');
+  const chgEl = document.getElementById('chart-hdr-chg');
+  const nameEl = document.getElementById('chart-asset-name');
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  if (nameEl) nameEl.textContent = assetKey;
+  const [priceKey, chgKey] = ASSET_PRICE_FIELDS[assetKey] || ASSET_PRICE_FIELDS.BTC;
+  if (marketBias && has(marketBias[priceKey])) {
+    priceEl.textContent = '$' + marketBias[priceKey].toLocaleString('en-US', { maximumFractionDigits: assetKey === 'BTC' ? 0 : 2 });
+    if (has(marketBias[chgKey])) {
+      const up = marketBias[chgKey] >= 0;
+      chgEl.textContent = (up ? '+' : '') + marketBias[chgKey].toFixed(2) + '% 24h';
+      chgEl.className = 'chart-hdr-chg num ' + (up ? 'up' : 'down');
+    } else { chgEl.innerHTML = ''; }
+  } else {
+    priceEl.innerHTML = noData();
+    chgEl.innerHTML = '';
+  }
+
+  if (!candles || candles.length < 2) {
+    ctx.fillStyle = '#8A8570';
+    ctx.font = '12px monospace';
+    ctx.fillText(candles ? `Not enough ${assetKey} ticks yet for a candle` : 'NO DATA', 12, h / 2);
+    return;
+  }
+
+  const pad = { t: 14, r: 52, b: 20, l: 4 };
+  const allPrices = candles.flatMap(c => [c.high, c.low]);
+  // 15% padding above/below the real high/low range (2026-07-06, raised from
+  // 10%) -- without it, the tallest wick's high and the lowest wick's low map
+  // exactly to the plot's top/bottom pixel with zero margin, so candles
+  // visually touch/clip the grid lines and header text instead of sitting
+  // inside the chart. Extra margin matters more now that the container itself
+  // is only 120px tall (see #candle-wrap).
+  const rawMin = Math.min(...allPrices), rawMax = Math.max(...allPrices);
+  const rawSpan = (rawMax - rawMin) || 0.01;
+  const rangePad = rawSpan * 0.15;
+  const min = rawMin - rangePad, max = rawMax + rangePad;
+  const span = max - min;
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+  const n = candles.length;
+  const slot = plotW / n;
+  // Body width = full slot width minus a 2px gap (2026-07-06, replaces the
+  // fixed 4px used before) -- ties body width to how many candles actually
+  // exist so they always span the chart's real width edge-to-edge with even
+  // gaps, instead of a constant looking too-thin whenever n is small (a wide
+  // slot) or overlapping whenever n is large (a narrow slot). x below already
+  // centers each candle within its own [i*slot, (i+1)*slot) slot, so with
+  // bodyW now also derived from that same slot there's no drift toward
+  // either edge as n changes.
+  const bodyW = Math.max(1, slot - 2);
+  const y = v => pad.t + (1 - (v - min) / span) * plotH;
+
+  ctx.strokeStyle = 'rgba(90,86,70,0.10)';
+  ctx.fillStyle = 'rgba(90,86,70,0.5)';
+  ctx.font = '9px monospace';
+  for (let i = 0; i <= 3; i++) {
+    const gy = pad.t + (i / 3) * plotH;
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy); ctx.stroke();
+    ctx.fillText((max - (i / 3) * span).toFixed(3), pad.l + plotW + 4, gy + 3);
+  }
+
+  candles.forEach((c, i) => {
+    const x = pad.l + i * slot + slot / 2;
+    const up = c.close >= c.open;
+    const color = up ? '#1a7f37' : '#cf222e';
+    ctx.strokeStyle = '#8A8570'; ctx.lineWidth = 1; // 1px wick, explicit request
+    ctx.beginPath(); ctx.moveTo(x, y(c.high)); ctx.lineTo(x, y(c.low)); ctx.stroke();
+    const bodyTop = y(Math.max(c.open, c.close)), bodyBot = y(Math.min(c.open, c.close));
+    const bodyH = Math.max(2, bodyBot - bodyTop); // 2px floor so a flat/near-flat candle is still visible
+    ctx.fillStyle = color;
+    ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyH);
+  });
+
+  const last = candles[candles.length - 1];
+  const lastUp = last.close >= last.open;
+  ctx.fillStyle = lastUp ? '#1a7f37' : '#cf222e';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText(last.close.toFixed(3), pad.l + plotW + 4, y(last.close) + 3);
+}
+function renderEquityCurve(m) {
+  const canvas = document.getElementById('equity-canvas');
+  const pctEl = document.getElementById('pnl-growth-pct');
+  const { ctx, w, h } = resizeCanvasToParent(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  if (!m || !m.curve || !m.curve.length) {
+    if (pctEl) pctEl.innerHTML = '';
+    ctx.fillStyle = '#8A8570';
+    ctx.font = '12px monospace';
+    ctx.fillText(m ? 'Awaiting closed trades...' : 'NO DATA', 12, h / 2);
+    return;
+  }
+
+  const allTimePct = computeAllTimeReturnPct(m.totalPnl);
+  if (pctEl) {
+    const up = allTimePct >= 0;
+    pctEl.innerHTML = `${up ? '+' : ''}${allTimePct.toFixed(0)}% <span class="horizon-dot" style="background:${up ? 'var(--green)' : 'var(--red)'};"></span>`;
+    pctEl.className = 'pnl-hdr-pct num ' + (up ? 'up' : 'down');
+  }
+
+  const pad = 24;
+  const curve = m.curve;
+  const min = Math.min(0, ...curve), max = Math.max(0, ...curve);
+  const span = (max - min) || 1;
+  const x = i => curve.length > 1 ? (i / (curve.length - 1)) * (w - pad * 2) + pad : w / 2;
+  const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
+  const zeroY = y(0);
+
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(90,86,70,0.2)';
+  ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(w - pad, zeroY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const positive = curve[curve.length - 1] >= 0;
+  const lineColor = positive ? '#1a7f37' : '#cf222e';
+
+  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+  grad.addColorStop(0, positive ? 'rgba(26,127,55,0.22)' : 'rgba(207,34,46,0.22)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(curve[0]));
+  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(curve.length - 1), zeroY);
+  ctx.lineTo(x(0), zeroY);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(curve[0]));
+  curve.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.strokeStyle = lineColor; ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = lineColor;
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText(fmtUsd(curve[curve.length - 1]) + ` (${curve.length})`, w - pad - 100, pad - 6);
+}
+
+/* ---------------- SECTION 6: LIVE TRADES (last 20, one row per trade_id) ----------------
+   loadTrades() already dedupes paper_trades.jsonl by trade_id, keeping only
+   the LATEST line per trade (the close/resolution line overwrites the open
+   line in that Map) -- so trades here already has exactly one entry per
+   trade_id reflecting its current status. Rebuilding the table from that
+   array every refresh is enough to satisfy "one row per trade, updates in
+   place, never duplicated": there is structurally only one row possible per
+   trade_id, whether it's still open or has since resolved. */
+function tradeStatusInfo(t) {
+  if (t.status === 'open') return { cls: 'open', text: 'OPEN' };
+  return t.result === 'WIN' ? { cls: 'win', text: 'WIN' } : { cls: 'loss', text: 'LOSS' };
+}
+function renderLiveTrades(trades) {
+  const wrap = document.getElementById('live-trades-body');
+  const countEl = document.getElementById('lt-open-count');
+  if (!trades || !trades.length) {
+    wrap.innerHTML = noData();
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+  const sorted = trades.slice().sort((a, b) => new Date(b.open_ts) - new Date(a.open_ts));
+  const openCount = sorted.reduce((n, t) => n + (t.status === 'open' ? 1 : 0), 0);
+  if (countEl) countEl.textContent = `${openCount} OPEN`;
+  const header = `<div class="lt-row lt-head">
+    <div>TIME</div><div>ASSET</div><div>DIR</div><div>ENTRY</div><div>STATUS</div><div>PNL</div>
+  </div>`;
+  const rows = sorted.slice(0, 20).map(t => {
+    const { cls, text } = tradeStatusInfo(t);
+    const pnlKnown = t.pnl_usd != null;
+    const pnlText = pnlKnown ? fmtUsd(t.pnl_usd) : '&mdash;';
+    const pnlCls = pnlKnown ? (t.pnl_usd >= 0 ? 'up' : 'down') : '';
+    return `<div class="lt-row lt-${cls}" data-trade-id="${t.trade_id}">
+      <div class="lt-time">${fmtClock(t.open_ts)}</div>
+      <div>${t.asset}</div>
+      <div>${t.direction}</div>
+      <div class="num">${t.entry_price.toFixed(3)}</div>
+      <div><span class="lt-badge lt-badge-${cls}">${text}</span></div>
+      <div class="num ${pnlCls}">${pnlText}</div>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = header + rows;
+}
+
+/* ---------------- MONTE CARLO SIMULATION (real win_rate/avg_win/avg_loss) ----------------
+   Runs on its own MC_TICK_MS timer, independent of the main data-refresh loop
+   (see mcTick() / setInterval below) -- deliberately kept at 5000ms even
+   though the main refresh() loop runs at 500ms (2026-07-06): this is a real
+   simulation batch (heavy-ish), not a cheap re-render, so there's no benefit
+   to running it 10x more often. Each tick draws MC_BATCH_SIZE more
+   genuine random paths using the live win_rate/avg_win/avg_loss and appends
+   them to a running pool (seeded with MC_INITIAL_PATHS on the first tick),
+   so the displayed path count is a real, monotonically growing count of
+   simulations actually run, not a cosmetic fake counter. Histogram bars
+   animate between their previous and new heights over MC_ANIM_MS. */
+const MC_INITIAL_PATHS = 7000;
+const MC_BATCH_SIZE = 34;
+const MC_TICK_MS = 5000;
+const MC_ANIM_MS = 500;
+const MC_BINS = 26;
+// _mcFinals is a BOUNDED sample pool (capped at MC_MAX_POOL, oldest paths
+// dropped) used only for the histogram/stats -- kept bounded so render/sort
+// cost never grows unbounded over a long-running session. _mcTotalCount is a
+// SEPARATE, always-monotonic real count of every path ever simulated; it is
+// what's displayed, and it must never shrink except via an explicit reset
+// (the "Reset Session" button), which is what a naive "wipe the pool when
+// there are 0 wins or 0 losses" approach got wrong before -- that could zero
+// the pool on a transient state and make the displayed count jump backward.
+const MC_MAX_POOL = 20000;
+let _mcFinals = [];
+let _mcTotalCount = 0;
+let _mcPrevBarFracs = null;
+// Last real simulation result (2026-07-06 500ms-display split, see mcTick /
+// renderMonteCarloDisplay below) -- null until the first heavy calc runs.
+let _mcLastResult = null;
+function mcResetAccumulator() { _mcFinals = []; _mcTotalCount = 0; _mcPrevBarFracs = null; _mcLastResult = null; }
+function mcAccumulate(portfolio) {
+  if (!portfolio || !portfolio.wins.length || !portfolio.losses.length) return null;
+  const n = Math.min(portfolio.closed.length, 5000);
+  const batchSize = _mcTotalCount === 0 ? MC_INITIAL_PATHS : MC_BATCH_SIZE;
+  for (let p = 0; p < batchSize; p++) {
+    let total = 0;
+    for (let t = 0; t < n; t++) {
+      total += (Math.random() < portfolio.winRate) ? portfolio.avgWin : -portfolio.avgLoss;
+    }
+    _mcFinals.push(total);
+  }
+  _mcTotalCount += batchSize;
+  if (_mcFinals.length > MC_MAX_POOL) _mcFinals = _mcFinals.slice(-MC_MAX_POOL);
+  const sorted = _mcFinals.slice().sort((a, b) => a - b);
+  const pct = frac => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(frac * (sorted.length - 1))))];
+  const mean = _mcFinals.reduce((s, v) => s + v, 0) / _mcFinals.length;
+  return { finals: sorted, n, count: _mcTotalCount, p05: pct(0.05), p01: pct(0.01), mean };
+}
+function drawMcHistogram(ctx, w, h, finals, barFracs) {
+  ctx.clearRect(0, 0, w, h);
+  const pad = 24;
+  const min = finals[0], max = finals[finals.length - 1];
+  const span = (max - min) || 1;
+  const plotW = w - pad * 2, plotH = h - pad * 2;
+  const barW = plotW / MC_BINS;
+  for (let i = 0; i < MC_BINS; i++) {
+    const binStart = min + (i / MC_BINS) * span;
+    const barH = barFracs[i] * plotH;
+    ctx.fillStyle = binStart >= 0 ? 'rgba(26,127,55,0.55)' : 'rgba(207,34,46,0.55)';
+    ctx.fillRect(pad + i * barW + 1, h - pad - barH, Math.max(1, barW - 2), barH);
+  }
+  const zeroX = pad + ((0 - min) / span) * plotW;
+  if (zeroX >= pad && zeroX <= w - pad) {
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(90,86,70,0.3)';
+    ctx.beginPath(); ctx.moveTo(zeroX, pad); ctx.lineTo(zeroX, h - pad); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = 'rgba(90,86,70,0.6)'; ctx.font = '10px monospace';
+  ctx.fillText(fmtUsd(min), pad, h - 8);
+  ctx.textAlign = 'right'; ctx.fillText(fmtUsd(max), w - pad, h - 8); ctx.textAlign = 'left';
+}
+let _mcHistogramToken = 0;
+function animateMcHistogram(canvas, finals, targetFracs) {
+  const prevFracs = _mcPrevBarFracs || new Array(MC_BINS).fill(0);
+  const start = performance.now();
+  const myToken = ++_mcHistogramToken; // cancels any still-running previous animation on this canvas
+  function step(now) {
+    if (_mcHistogramToken !== myToken) return;
+    const t = Math.max(0, Math.min(1, (now - start) / MC_ANIM_MS));
+    const eased = 1 - Math.pow(1 - t, 3);
+    const { ctx, w, h } = resizeCanvasToParent(canvas);
+    const frame = targetFracs.map((v, i) => prevFracs[i] + (v - prevFracs[i]) * eased);
+    drawMcHistogram(ctx, w, h, finals, frame);
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+  _mcPrevBarFracs = targetFracs;
+}
+// mcTick() is the HEAVY path (2026-07-06 500ms-display split): runs the
+// actual random-path simulation via mcAccumulate() and caches the result in
+// _mcLastResult. Called only every MC_TICK_MS (5000ms, see setInterval
+// below) -- never from the main 500ms refresh() loop, since re-simulating
+// thousands of paths 10x more often than before would be real, unnecessary
+// CPU cost for a number that's only meant to update every 5s anyway.
+function mcTick(portfolio) {
+  const mc = mcAccumulate(portfolio);
+  // A transient portfolio read (e.g. paper_trades.jsonl caught mid-write by
+  // the live bot) can briefly look like "no wins" or "no losses" even though
+  // real accumulated simulation history exists -- if that happens, keep
+  // _mcLastResult as whatever it already was rather than clobbering it with
+  // null, so the display doesn't blank over a one-tick data hiccup.
+  if (mc) _mcLastResult = mc;
+  renderMonteCarloDisplay(portfolio);
+}
+// renderMonteCarloDisplay() is the CHEAP path: draws whatever _mcLastResult
+// currently holds -- no new random paths, just a redraw. Safe to call every
+// 500ms from refresh() (and on resize) since it does no simulation work.
+function renderMonteCarloDisplay(portfolio) {
+  const statsEl = document.getElementById('mc-stats');
+  const canvas = document.getElementById('mc-canvas');
+  const p01TagEl = document.getElementById('mc-p01-tag');
+  const pathCountEl = document.getElementById('mc-path-count');
+  const mc = _mcLastResult;
+  if (!mc) {
+    statsEl.innerHTML = noData(portfolio ? 'NEED AT LEAST 1 WIN AND 1 LOSS' : 'NO DATA');
+    if (p01TagEl) p01TagEl.innerHTML = '';
+    if (pathCountEl) pathCountEl.textContent = '0';
+    const { ctx, w, h } = resizeCanvasToParent(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#8A8570'; ctx.font = '12px monospace';
+    ctx.fillText(portfolio ? 'Awaiting more trade history...' : 'NO DATA', 12, h / 2);
+    return;
+  }
+  if (p01TagEl) p01TagEl.textContent = 'P < 0.010';
+  if (pathCountEl) animateNumber(pathCountEl, mc.count, v => Math.max(0, Math.round(v)).toLocaleString('en-US'), MC_ANIM_MS);
+  statsEl.innerHTML = `
+    <div class="mc-stat"><div class="mc-label">Expected Value</div><div class="mc-value num ${mc.mean >= 0 ? 'up' : 'down'}">${fmtUsd(mc.mean)}</div></div>
+    <div class="mc-stat"><div class="mc-label">5th %ile (Worst Case)</div><div class="mc-value num down">${fmtUsd(mc.p05)}</div></div>
+    <div class="mc-stat hi"><div class="mc-label">P &lt; 0.010</div><div class="mc-value num down">${fmtUsd(mc.p01)}</div></div>
+  `;
+  const min = mc.finals[0], max = mc.finals[mc.finals.length - 1];
+  const span = (max - min) || 1;
+  const counts = new Array(MC_BINS).fill(0);
+  mc.finals.forEach(v => {
+    let idx = Math.floor(((v - min) / span) * MC_BINS);
+    idx = Math.max(0, Math.min(MC_BINS - 1, idx));
+    counts[idx]++;
+  });
+  const maxCount = Math.max(...counts);
+  const targetFracs = counts.map(c => c / maxCount);
+  animateMcHistogram(canvas, mc.finals, targetFracs);
+}
+
+/* ---------------- SECTION 7: LIVE FEED (scrolling, BUY/SELL badges) ---------------- */
+function buildLiveFeedEvents(trades) {
+  if (!trades) return null;
+  const events = [];
+  trades.forEach(t => {
+    const badge = t.direction === 'YES' ? 'buy' : 'sell';
+    const badgeText = t.direction === 'YES' ? 'BUY' : 'SELL';
+    events.push({ ts: t.open_ts, badge, badgeText, text: `${t.asset} ${t.direction} OPENED @ ${t.entry_price.toFixed(3)}`, amount: `$${t.size_usd.toFixed(2)}`, cls: '' });
+    if (t.status !== 'open' && t.close_ts && t.pnl_usd != null) {
+      events.push({ ts: t.close_ts, badge, badgeText, text: `${t.asset} ${t.direction} ${t.result}`, amount: fmtUsd(t.pnl_usd), cls: t.result === 'WIN' ? 'up' : 'down' });
+    }
+  });
+  events.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  return events.slice(0, 40);
+}
+function renderLiveFeed(trades) {
+  const track = document.getElementById('feed-track');
+  const events = buildLiveFeedEvents(trades);
+  if (!events || !events.length) { track.innerHTML = noData(); return; }
+  const rowsHtml = events.map(e => `<div class="feed-row"><span class="feed-time">${fmtClock(e.ts)}</span><span class="feed-badge badge-${e.badge}">${e.badgeText}</span><span>${e.text}</span><span class="feed-amount ${e.cls}">${e.amount}</span></div>`).join('');
+  track.innerHTML = rowsHtml + rowsHtml;
+}
+
+/* ---------------- chart asset rotation (BTC -> ETH -> SOL -> BTC, every 10s) ---------------- */
+async function updateChart() {
+  const ticks = await loadPriceHistoryTicks(_currentChartAsset);
+  const candles = computeOhlcCandles(ticks, CANDLE_BUCKET_SEC, CANDLE_COUNT);
+  renderCandlestick(candles, _lastMarketBias, _currentChartAsset);
+}
+
+/* =============================================================================
+   REFRESH LOOP
+   ============================================================================= */
+async function refresh() {
+  const [trades, state, liveStatus, latency, biasHistory, combinerStatus, executionCycle, stats, sparkPrices] = await Promise.all([
+    loadTrades(), loadState(), loadLiveStatus(), loadLatency(),
+    loadMarketBiasHistory(), loadSignalCombinerStatus(), loadExecutionCycle(), loadStats(),
+    loadRecentYesPricesByAsset(),
+  ]);
+  _lastMarketBias = biasHistory && biasHistory.length ? biasHistory[biasHistory.length - 1] : null;
+  renderHeader(state, liveStatus, latency);
+  const portfolio = renderPortfolio(trades, state);
+  _lastPortfolio = portfolio;
+  renderTicker(_lastMarketBias, biasHistory, portfolio);
+  renderLiqRisk(state);
+  renderStatGrid(stats, portfolio);
+  renderBiggestWin(portfolio);
+  renderExecutionCycle(executionCycle, trades);
+  renderNextTick();
+  renderTreePace(portfolio, state, trades);
+  renderTreeInflight(trades);
+  renderTreeSparklines(sparkPrices);
+  renderDecisionTree(combinerStatus, executionCycle, portfolio, liveStatus, trades);
+  renderLiveTrades(trades);
+  renderEquityCurve(portfolio);
+  renderLiveFeed(trades);
+  renderMonteCarloDisplay(portfolio); // cheap redraw of the last mcTick() result -- see its own 5s timer below
+  await updateChart(); // uses the current rotating asset + freshly cached _lastMarketBias
+}
+
+document.getElementById('reset-session-btn').addEventListener('click', async () => {
+  if (!confirm('Reset visible session stats?\n\nThis only moves the display cutoff -- paper_trades.jsonl and all historical data are untouched.')) return;
+  const btn = document.getElementById('reset-session-btn');
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = 'Resetting...';
+  try {
+    const res = await fetch('/api/reset-session', { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    mcResetAccumulator(); // scoped trades (and thus win_rate/avg_win/avg_loss) just changed
+    // Apply the new session_start_ts straight from the response so the
+    // Portfolio panel updates immediately, instead of only via refresh()'s
+    // next data/state.json fetch.
+    const trades = await loadTrades();
+    rerenderPortfolio(trades, { session_start_ts: data.session_start_ts });
+    await refresh(); // re-renders every panel via the normal AJAX cycle -- no location.reload(), page never navigates
+    btn.textContent = 'Session reset ✓';
+    await new Promise(resolve => setTimeout(resolve, 2000)); // brief confirmation, then restored in finally below
+  } catch (e) {
+    alert('Reset failed: ' + e.message + '\n\nMake sure the dashboard is served by scripts/dashboard_server.py (not plain `python -m http.server`), which is what implements POST /api/reset-session.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+});
+
+new ResizeObserver(() => updateChart()).observe(document.getElementById('candle-wrap'));
+new ResizeObserver(() => renderEquityCurve(_lastPortfolio)).observe(document.getElementById('equity-wrap'));
+// Redraw only (renderMonteCarloDisplay), not a resimulation -- a resize
+// doesn't need new random paths, just the existing ones redrawn to the new
+// canvas size.
+new ResizeObserver(() => { _mcPrevBarFracs = null; renderMonteCarloDisplay(_lastPortfolio); }).observe(document.getElementById('mc-chart-wrap'));
+
+refresh().then(() => mcTick(_lastPortfolio)); // seed the first real simulation immediately so the panel isn't blank until the first 5s tick
+// Monte Carlo's heavy simulation runs on its own clock, independent of the
+// main 500ms data refresh -- see the comment above MC_INITIAL_PATHS and on
+// mcTick() itself.
+setInterval(() => mcTick(_lastPortfolio), MC_TICK_MS);
+// Rotates the BTC/USD chart panel through BTC -> ETH -> SOL every 10s.
+setInterval(() => {
+  _chartAssetIdx = (_chartAssetIdx + 1) % CHART_ASSETS.length;
+  _currentChartAsset = CHART_ASSETS[_chartAssetIdx];
+  updateChart();
+}, CHART_ROTATE_MS);
+setInterval(refresh, 500);
+setInterval(() => {
+  document.getElementById('hdr-time').textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+  renderNextTick();
+}, 1000);
+</script>
+</body>
+</html>
