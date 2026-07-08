@@ -347,8 +347,31 @@ SIGNAL_COMBINER_THRESHOLD = 0.60
 # n=268, net -$300.19) -- 0.30-0.35 is uncharted territory with zero backtest
 # support, not a proven-safe extension. This is a deliberate data-accumulation
 # tradeoff, not a profitability claim; revisit once fresh trades accumulate.
-SIGNAL_COMBINER_MIN_YES_PRICE = 0.30
+# RAISED 0.30 -> 0.45 (2026-07-08): a real-trade breakdown of online_model's
+# closed trades confirmed the 0.30-0.35 territory above was indeed bad --
+# 0.30-0.40 as a whole came back at 20.0% win rate over 35 trades, -$731.82
+# total PnL, the single worst entry_price bucket by far. 0.50-0.60 was the
+# only bucket with a clear real edge (67.0% win rate, +$837.65). 0.45 keeps a
+# small margin below that proven band rather than cutting exactly at 0.50.
+SIGNAL_COMBINER_MIN_YES_PRICE = 0.45
 SIGNAL_COMBINER_MAX_YES_PRICE = 0.65
+
+# Trading-hours gate (2026-07-08): the same real-trade breakdown found
+# 00-06 UTC was the worst time-of-day bucket for online_model trades (33.8%
+# win rate over 65 trades, -$524.05) -- checked in run.py._decide_and_open()
+# before opening ANY trade (warmup or Kelly-sized), so this doesn't touch
+# market fetching, shadow-logging, or price_history -- only trade-opening.
+TRADING_HOURS_UTC_START = 6
+TRADING_HOURS_UTC_END = 24
+
+# Tradeable assets (2026-07-08): SOL had the worst per-asset result in the
+# same breakdown (43.2% win rate over 44 trades, -$210.23, smallest and
+# worst of the three) -- excluded from trade-opening only. SOL markets are
+# still fetched, monitored, price-logged, and shadow-recorded exactly as
+# before (core.market_fetcher.MarketFetcher.ASSET_SLUG_PREFIX is the actual
+# fetch-gate and is untouched), so this only removes SOL from
+# run.py._decide_and_open()'s trade-opening path.
+ASSETS = ["btc", "eth"]
 
 # DISABLED AGAIN (2026-07-07): an "extreme mean-reversion" NO strategy at
 # yes_price>0.80 was disabled 2026-07-06 after real results (10.5% win rate

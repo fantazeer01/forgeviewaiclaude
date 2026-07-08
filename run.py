@@ -14,6 +14,7 @@ from config.settings import (
     FEAR_GREED_LOG, FEAR_GREED_REFRESH_SEC, MACRO_EVENTS_LOG, MACRO_EVENTS_REFRESH_SEC,
     QUANT_ONLY_MODE, EXECUTION_CYCLE_FILE, PRICE_HISTORY_LOG, SIGNALS_LOG,
     STATS_EXPORT_INTERVAL_SEC, WARMUP_FLAT_SIZE_USD,
+    TRADING_HOURS_UTC_START, TRADING_HOURS_UTC_END, ASSETS,
 )
 from core.market_fetcher import MarketFetcher
 from core.market_bias import MarketBiasFetcher, FearGreedFetcher
@@ -120,6 +121,22 @@ def main():
             time.sleep(30)
 
 def _decide_and_open(engine, online_model, market, combined_signal, snapshot, tg):
+    # 2026-07-08 risk gates -- checked before opening ANY trade (warmup or
+    # Kelly-sized), ahead of online_model.decide() entirely, so a blocked
+    # asset/hour never even reaches a model decision or records a training
+    # example. Deliberately placed only here, not upstream in main()'s loop --
+    # market fetching, shadow-logging (no_shadow), price_history, and
+    # signal_combiner scoring must all keep running for every asset/hour
+    # regardless, per config.settings.ASSETS's own docstring.
+    if market["asset"].lower() not in ASSETS:
+        return None
+    current_hour = datetime.datetime.now(datetime.timezone.utc).hour
+    if not (TRADING_HOURS_UTC_START <= current_hour < TRADING_HOURS_UTC_END):
+        logger.info(
+            f"SKIP [{market['asset']}] reason=outside trading hours "
+            f"(hour={current_hour} UTC, window=[{TRADING_HOURS_UTC_START},{TRADING_HOURS_UTC_END}))"
+        )
+        return None
     should_trade, direction, win_probability, reason = online_model.decide(
         snapshot, combined_signal, asset=market["asset"],
     )

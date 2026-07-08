@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 
 from config.settings import WARMUP_FLAT_SIZE_USD
@@ -9,12 +11,31 @@ from core.state_manager import StateManager
 from reporting.telegram_reporter import TelegramReporter
 from run import _decide_and_open
 
+# Captured at import time, before any test patches datetime.datetime (the
+# same shared stdlib module run.py's "import datetime" also points at) --
+# tests need a real, unmocked datetime constructor to build fixed timestamps
+# with even while a mock is already active.
+_RealDateTime = datetime.datetime
+
 
 def make_market(market_id="m1", asset="BTC", yes_price=0.5, no_price=0.5):
     return {
         "market_id": market_id, "asset": asset, "yes_price": yes_price,
         "no_price": no_price, "minutes_remaining": 3.0,
     }
+
+
+@pytest.fixture(autouse=True)
+def _daytime_hour(mocker):
+    # 2026-07-08 trading-hours gate: _decide_and_open() now reads the real
+    # wall-clock UTC hour. Every test below is about asset/direction/sizing
+    # logic, not the hours gate itself, so pin the clock to a guaranteed
+    # in-window hour (noon) -- otherwise these would flakily fail if the
+    # suite happened to run between 00:00-05:59 UTC.
+    fixed = _RealDateTime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+    mocker.patch("run.datetime.datetime", **{
+        "now.return_value": fixed, "fromisoformat": _RealDateTime.fromisoformat,
+    })
 
 
 @pytest.fixture
@@ -102,6 +123,41 @@ def test_no_direction_trade_sized_off_no_side_probability_and_price(engine, warm
     assert trade.entry_price == 0.15
     assert trade.size_usd == warmed_model.kelly_size(0.9, 0.15)
     assert trade.size_usd != warmed_model.kelly_size(0.1, 0.85)  # sanity: NOT the YES-side pair
+
+
+def test_sol_asset_is_never_traded(engine, warmed_model, mocker):
+    # 2026-07-08: SOL excluded from config.settings.ASSETS after real trades
+    # showed it was the worst-performing asset -- still monitored/shadow-
+    # logged upstream in main()'s loop, just never opened as a trade here.
+    mocker.patch.object(warmed_model, "predict_proba_one", return_value=0.9)
+    combined_signal = RepricingSignal(
+        asset="SOL", market_id="m1", direction="YES",
+        yes_price=0.5, no_price=0.5, confidence=0.95, reason="combined(order_book)=0.95",
+    )
+    trade = _decide_and_open(
+        engine, warmed_model, make_market(asset="SOL", yes_price=0.5, no_price=0.5),
+        combined_signal, {}, TelegramReporter(),
+    )
+    assert trade is None
+
+
+def test_outside_trading_hours_returns_none(engine, warmed_model, mocker):
+    # 2026-07-08: 00-06 UTC excluded after real trades showed it was the
+    # worst-performing time-of-day window.
+    night = _RealDateTime(2026, 1, 1, 3, 0, tzinfo=datetime.timezone.utc)
+    mocker.patch("run.datetime.datetime", **{
+        "now.return_value": night, "fromisoformat": _RealDateTime.fromisoformat,
+    })
+    mocker.patch.object(warmed_model, "predict_proba_one", return_value=0.9)
+    combined_signal = RepricingSignal(
+        asset="BTC", market_id="m1", direction="YES",
+        yes_price=0.5, no_price=0.5, confidence=0.95, reason="combined(order_book)=0.95",
+    )
+    trade = _decide_and_open(
+        engine, warmed_model, make_market(yes_price=0.5, no_price=0.5),
+        combined_signal, {}, TelegramReporter(),
+    )
+    assert trade is None
 
 
 def test_warmup_trade_sizes_flat_regardless_of_combiner_confidence(engine, warming_up_model):
