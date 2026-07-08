@@ -33,10 +33,17 @@ def test_kelly_fraction_negative_edge_clamped_to_zero():
     assert kelly_fraction(0.3, 1.0) == 0.0
 
 
-def test_kelly_fraction_clamped_to_one_for_out_of_range_probability():
+def test_kelly_fraction_clamped_to_kelly_fraction_cap_for_out_of_range_probability():
     # for valid p in [0,1] and b>0 the raw formula never exceeds 1 (max is p=1 -> f=1),
-    # so exercise the clamp defensively with a malformed p>1 input
-    assert kelly_fraction(1.5, 100.0) == 1.0
+    # so exercise the clamp defensively with a malformed p>1 input -- capped at
+    # KELLY_FRACTION_CAP (0.25), not 1.0 (2026-07-08 risk cap applied in the formula itself).
+    assert kelly_fraction(1.5, 100.0) == 0.25
+
+
+def test_kelly_fraction_below_min_edge_floored_to_zero():
+    # p=0.52, b=1 -> raw f = (0.52 - 0.48)/1 = 0.04, below KELLY_MIN_EDGE (0.05) --
+    # a positive but statistically insignificant edge, must not open a position.
+    assert kelly_fraction(0.52, 1.0) == 0.0
 
 
 def test_kelly_fraction_zero_odds_returns_zero():

@@ -225,10 +225,13 @@ def test_kelly_size_zero_edge_returns_zero_not_a_zero_dollar_trade(model):
     assert size == pytest.approx(0.0, abs=1e-6)
 
 
-def test_kelly_size_small_positive_edge_floored_to_minimum(model):
-    # b=1 (yes_price=0.5), p=0.51 -> f=0.02 -> $2 raw, floored to the $5 min
+def test_kelly_size_small_positive_edge_below_min_edge_returns_zero(model):
+    # b=1 (yes_price=0.5), p=0.51 -> f=0.02, below KELLY_MIN_EDGE (0.05) -- an
+    # unconfirmed edge, must not open a position (2026-07-08 min-edge filter,
+    # applied inside kelly_fraction() itself). Previously this floored to the
+    # $5 minimum; now it's filtered out before reaching the dollar clamp.
     size = model.kelly_size(0.51, 0.5)
-    assert size == pytest.approx(5.0)
+    assert size == pytest.approx(0.0, abs=1e-6)
 
 
 def test_kelly_size_mid_range_edge_scales_with_real_fraction(model):

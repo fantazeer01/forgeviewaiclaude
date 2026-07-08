@@ -58,7 +58,16 @@ QUANT_MODEL_PATH = "data/quant_model.pkl"
 # kelly_size() (2026-07-07 CRITICAL FIX) uses that module's kelly_fraction()/
 # net_odds_from_price() directly instead -- FULL Kelly (not quarter-Kelly),
 # since the $5/$25 clamp below already bounds the position size.
+# 2026-07-08: kelly_fraction() itself is now also hard-capped at this value
+# (was previously only clamped to 1.0 there, relying entirely on the $5/$25
+# dollar clamp downstream) -- already 0.25, exactly the requested "Kelly
+# never exceeds 25% of bankroll" cap, just not wired into the formula's own
+# ceiling until now.
 KELLY_FRACTION_CAP = 0.25
+# 2026-07-08: a raw Kelly fraction below this is treated as an unconfirmed /
+# statistically insignificant edge and floored to 0.0 (do not trade) inside
+# kelly_fraction(), rather than opening a razor-thin position.
+KELLY_MIN_EDGE = 0.05
 ONLINE_MODEL_STATE_FILE = "data/online_model_state.pkl"
 # 50 real resolved trades before the online model's own prediction is
 # trusted at all (see core/online_model.py.decide()) -- during this window
