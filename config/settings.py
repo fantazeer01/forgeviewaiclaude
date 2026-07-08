@@ -148,7 +148,12 @@ STABILITY_PREDICTIONS_WINDOW = 20
 # naturally narrowing as it converges, not a real collapse. 0.02 still
 # catches an actual collapse (all predictions landing on one point) without
 # punishing normal convergence.
-STABILITY_MIN_PREDICTION_STD = 0.02
+# LOWERED 0.02 -> 0.015 (2026-07-08): the model auto-reset itself again at
+# 350 updates with prediction_std=0.0185 -- above 0.02's replacement but
+# still a normal-convergence false positive, not a real collapse. 0.015
+# still catches an actual collapse (all predictions landing on one point)
+# without punishing normal convergence.
+STABILITY_MIN_PREDICTION_STD = 0.015
 # Raw |coefficient| bound -- tighter than the model's own internal workings
 # would need to be "not diverged" (LogisticRegression regularized at C=0.1
 # on standardized features typically stays well under 1.0, see the
