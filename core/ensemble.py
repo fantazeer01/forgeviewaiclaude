@@ -49,6 +49,9 @@ class Ensemble:
         return self._live_decide(features, fear_greed, hour_utc)
 
     def _warmup_decide(self, features: dict, training_examples: int) -> dict:
+        if features.get("seconds_remaining", 0) < 60:
+            return {"decision": None, "mode": "warmup", "reason": "too_late"}
+
         yes_price = features.get("yes_price")
         momentum_5m = features.get("price_momentum_5m") or 0.0
         yes_lo, yes_hi = ENSEMBLE_YES_PRICE_BAND
