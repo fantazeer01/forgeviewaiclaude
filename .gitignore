@@ -2,7 +2,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
-data/*.json
-data/*.jsonl
+data/**/*.json
+data/**/*.jsonl
+data/**/*.pkl
+data/**/*.pkl.bak*
+dashboard_screenshot.png
 .claude/settings.local.json
 .claude/scheduled_tasks.lock

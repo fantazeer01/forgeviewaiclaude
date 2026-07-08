@@ -38,8 +38,8 @@ MACRO_BIAS_CLAMP = 0.2
 # ---- market context ----
 CONTEXT_POLL_INTERVAL_SEC = 3
 WINDOW_SEC = 300
-ASSETS = ["BTC", "ETH"]
-BINANCE_SYMBOLS = {"BTC": "btcusdt", "ETH": "ethusdt"}
+ASSETS = ["BTC", "ETH", "SOL"]
+BINANCE_SYMBOLS = {"BTC": "btcusdt", "ETH": "ethusdt", "SOL": "solusdt"}
 BINANCE_WS_BASE = "wss://stream.binance.com:9443/stream"
 BINANCE_KLINE_HISTORY_MIN = 65     # keep enough 1m bars for the 60m momentum window
 BINANCE_RECONNECT_BACKOFF_SEC = 5
@@ -52,8 +52,21 @@ FEAR_GREED_REFRESH_SEC = 900
 FEAR_GREED_LOG = "data/market/fear_greed.json"
 
 # ---- models ----
+# Each asset trains its own momentum/volume model independently -- one
+# resolved BTC trade never updates SOL's weights and vice versa. These
+# generic paths stay as the class-level default (used only if a caller
+# doesn't pass an explicit weights_file); real per-asset instances always
+# get an explicit path from momentum_weights_path()/volume_weights_path().
 MOMENTUM_WEIGHTS_FILE = "data/models/momentum_weights.pkl"
 VOLUME_WEIGHTS_FILE = "data/models/volume_weights.pkl"
+
+
+def momentum_weights_path(asset: str) -> str:
+    return f"data/models/momentum_weights_{asset.lower()}.pkl"
+
+
+def volume_weights_path(asset: str) -> str:
+    return f"data/models/volume_weights_{asset.lower()}.pkl"
 
 # ---- trades / logs ----
 PAPER_TRADES_LOG = "data/trades/paper_trades.jsonl"

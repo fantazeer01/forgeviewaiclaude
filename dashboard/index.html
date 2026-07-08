@@ -208,9 +208,20 @@ function renderStatTiles(status, trades) {
     </div>
     <div class="tile">
       <div class="tile-label">Model examples</div>
-      <div class="tile-value">${status.model_examples ?? "n/a"}</div>
+      <div class="tile-value">${modelExamplesTotal(status.model_examples)}</div>
+      <div class="tile-sub">${modelExamplesBreakdown(status.model_examples)}</div>
     </div>
   `;
+}
+
+function modelExamplesTotal(modelExamples) {
+  if (!modelExamples || typeof modelExamples !== "object") return modelExamples ?? "n/a";
+  return Object.values(modelExamples).reduce((a, b) => a + b, 0);
+}
+
+function modelExamplesBreakdown(modelExamples) {
+  if (!modelExamples || typeof modelExamples !== "object") return "";
+  return Object.entries(modelExamples).map(([asset, n]) => `${asset}: ${n}`).join(" · ");
 }
 
 function drawEquityCurve(trades) {

@@ -1,6 +1,7 @@
-"""Live market context: BTC/ETH spot state from a single Binance WebSocket
-feed (never REST-polled), plus Polymarket yes_price and Fear&Greed, combined
-into one snapshot per asset every poll tick."""
+"""Live market context: spot state for every configured asset (config.ASSETS)
+from a single Binance WebSocket feed (never REST-polled), plus Polymarket
+yes_price and Fear&Greed, combined into one snapshot per asset every poll
+tick."""
 
 import collections
 import datetime
@@ -26,9 +27,10 @@ logger = logging.getLogger(__name__)
 
 
 class BinanceFeed:
-    """Maintains live BTC/ETH price + depth state via one combined Binance
-    WebSocket stream (1m klines + top-5 depth). Runs its own reconnect loop
-    with backoff so a dropped connection doesn't kill the bot."""
+    """Maintains live price + depth state for every symbol in `symbols` via
+    one combined Binance WebSocket stream (1m klines + top-5 depth). Runs
+    its own reconnect loop with backoff so a dropped connection doesn't
+    kill the bot."""
 
     def __init__(self, symbols: dict = None):
         self.symbols = symbols or BINANCE_SYMBOLS

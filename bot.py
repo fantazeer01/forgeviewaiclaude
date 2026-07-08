@@ -7,7 +7,10 @@ import logging
 import os
 import time
 
-from config.settings import ASSETS, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC, BOT_STATUS_FILE
+from config.settings import (
+    ASSETS, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC, BOT_STATUS_FILE,
+    momentum_weights_path, volume_weights_path,
+)
 from core.market_context import MarketContext
 from core.feature_engine import build_features
 from core.ensemble import Ensemble
@@ -23,11 +26,16 @@ logger = logging.getLogger(__name__)
 class Bot:
     def __init__(self):
         self.context = MarketContext()
-        self.momentum_model = MomentumModel()
-        self.volume_model = VolumeModel()
-        self.ensemble = Ensemble(self.momentum_model, self.volume_model)
-        self.risk_manager = RiskManager()
-        self.executor = Executor(self.momentum_model, self.volume_model, self.risk_manager)
+        # Each asset gets its own momentum/volume model (and therefore its
+        # own ensemble and executor) -- a resolved BTC trade only ever
+        # trains BTC's weights, never SOL's or ETH's.
+        self.momentum_models = {a: MomentumModel(weights_file=momentum_weights_path(a)) for a in ASSETS}
+        self.volume_models = {a: VolumeModel(weights_file=volume_weights_path(a)) for a in ASSETS}
+        self.ensembles = {a: Ensemble(self.momentum_models[a], self.volume_models[a]) for a in ASSETS}
+        self.risk_manager = RiskManager()  # shared: bankroll/exposure limits are portfolio-wide
+        self.executors = {
+            a: Executor(self.momentum_models[a], self.volume_models[a], self.risk_manager) for a in ASSETS
+        }
         self.pending = {}  # market_id -> {position_id, asset, seconds_remaining, opened_at}
         self.day_wins = 0
         self.day_losses = 0
@@ -53,7 +61,7 @@ class Bot:
         for asset in ASSETS:
             snapshot = self.context.snapshot(asset)
             features = build_features(snapshot)
-            result = self.ensemble.decide(features, snapshot.get("fear_greed"), snapshot.get("hour_utc"))
+            result = self.ensembles[asset].decide(features, snapshot.get("fear_greed"), snapshot.get("hour_utc"))
             self.last_scores[asset] = {**result, "snapshot": snapshot}
             self._maybe_trade(asset, snapshot, features, result)
         self._check_resolutions()
@@ -75,7 +83,7 @@ class Bot:
         size = self.risk_manager.position_size(win_probability, entry_price)
         if size <= 0:
             return
-        position_id = self.executor.open_position(asset, decision, entry_price, size, features, market_id)
+        position_id = self.executors[asset].open_position(asset, decision, entry_price, size, features, market_id)
         self.pending[market_id] = {
             "position_id": position_id,
             "asset": asset,
@@ -95,7 +103,7 @@ class Bot:
             if outcome is None:
                 continue
             outcome_up = outcome == "UP"
-            pnl = self.executor.close_position(info["position_id"], outcome_up)
+            pnl = self.executors[info["asset"]].close_position(info["position_id"], outcome_up)
             self.day_pnl += pnl
             if pnl > 0:
                 self.day_wins += 1
@@ -122,13 +130,17 @@ class Bot:
             yes_str = f"{yes:.2f}" if yes is not None else "n/a"
             score_str = f"{score:.2f}" if score is not None else "n/a"
             parts.append(f"{asset}: spot={spot_str} yes={yes_str} score={score_str}")
-        n_examples = min(self.momentum_model.n_examples, self.volume_model.n_examples)
+        n_examples_total = sum(self._examples(asset) for asset in ASSETS)
         ts = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M:%S")
         print(
             f"[{ts}] " + " | ".join(parts) +
             f"\nOpen: {len(self.pending)} | Today: {self.day_pnl:+.2f} ({self.day_wins}W/{self.day_losses}L)"
-            f" | Model: {n_examples} examples"
+            f" | Model: {n_examples_total} examples",
+            flush=True,
         )
+
+    def _examples(self, asset: str) -> int:
+        return min(self.momentum_models[asset].n_examples, self.volume_models[asset].n_examples)
 
     def _export_status(self):
         data = {
@@ -143,14 +155,14 @@ class Bot:
                 for asset, s in self.last_scores.items()
             },
             "open_positions": [
-                {**self.executor.open_positions[p["position_id"]], "market_id": mid}
+                {**self.executors[p["asset"]].open_positions[p["position_id"]], "market_id": mid}
                 for mid, p in self.pending.items()
-                if p["position_id"] in self.executor.open_positions
+                if p["position_id"] in self.executors[p["asset"]].open_positions
             ],
             "day_pnl": self.day_pnl,
             "day_wins": self.day_wins,
             "day_losses": self.day_losses,
-            "model_examples": min(self.momentum_model.n_examples, self.volume_model.n_examples),
+            "model_examples": {asset: self._examples(asset) for asset in ASSETS},
         }
         try:
             os.makedirs(os.path.dirname(BOT_STATUS_FILE), exist_ok=True)
