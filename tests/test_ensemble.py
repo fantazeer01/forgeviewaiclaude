@@ -48,3 +48,26 @@ def test_no_side_blocked_when_price_out_of_band():
     result = ensemble.decide({"yes_price": 0.60}, fear_greed=50, hour_utc=12)
     assert result["final_score"] < 0.45
     assert result["decision"] is None
+
+
+def test_warmup_yes_trade_on_positive_momentum_and_price_in_band():
+    ensemble = _ensemble(0.5, 0.5, n_examples=0)
+    result = ensemble.decide({"yes_price": 0.5, "price_momentum_5m": 3.0}, fear_greed=50, hour_utc=12)
+    assert result["mode"] == "warmup"
+    assert result["decision"] == "YES"
+    assert result["final_score"] is None
+
+
+def test_warmup_no_trade_on_negative_momentum_and_price_in_band():
+    ensemble = _ensemble(0.5, 0.5, n_examples=0)
+    result = ensemble.decide({"yes_price": 0.45, "price_momentum_5m": -3.0}, fear_greed=50, hour_utc=12)
+    assert result["mode"] == "warmup"
+    assert result["decision"] == "NO"
+
+
+def test_warmup_no_decision_when_momentum_flat_or_price_out_of_band():
+    ensemble = _ensemble(0.5, 0.5, n_examples=0)
+    flat = ensemble.decide({"yes_price": 0.5, "price_momentum_5m": 0.0}, fear_greed=50, hour_utc=12)
+    assert flat["decision"] is None
+    out_of_band = ensemble.decide({"yes_price": 0.9, "price_momentum_5m": 3.0}, fear_greed=50, hour_utc=12)
+    assert out_of_band["decision"] is None

@@ -38,15 +38,48 @@ class Ensemble:
         }
 
     def decide(self, features: dict, fear_greed: int, hour_utc: int) -> dict:
+        """Trades never open at all until the models have something to learn
+        from -- cold-start fix: below ENSEMBLE_MIN_TRAINING_EXAMPLES, skip the
+        (untrained) ensemble entirely and trade a simple fixed-size momentum
+        rule instead, purely to accumulate resolved outcomes to train on.
+        Once enough examples exist, the real ensemble+Kelly path takes over."""
+        training_examples = self._training_examples()
+        if training_examples < ENSEMBLE_MIN_TRAINING_EXAMPLES:
+            return self._warmup_decide(features, training_examples)
+        return self._live_decide(features, fear_greed, hour_utc)
+
+    def _warmup_decide(self, features: dict, training_examples: int) -> dict:
+        yes_price = features.get("yes_price")
+        momentum_5m = features.get("price_momentum_5m") or 0.0
+        yes_lo, yes_hi = ENSEMBLE_YES_PRICE_BAND
+        no_lo, no_hi = ENSEMBLE_NO_PRICE_BAND
+
+        decision = None
+        if momentum_5m > 0 and yes_price is not None and yes_lo <= yes_price <= yes_hi:
+            decision = "YES"
+        elif momentum_5m < 0 and yes_price is not None and no_lo <= yes_price <= no_hi:
+            decision = "NO"
+
+        return {
+            "mode": "warmup",
+            "momentum_p": None,
+            "volume_p": None,
+            "macro_p": None,
+            "final_score": None,
+            "decision": decision,
+            "reason": (
+                None if decision
+                else f"warmup: {training_examples}/{ENSEMBLE_MIN_TRAINING_EXAMPLES} examples, "
+                     f"momentum/price band not aligned"
+            ),
+        }
+
+    def _live_decide(self, features: dict, fear_greed: int, hour_utc: int) -> dict:
         result = self.score(features, fear_greed, hour_utc)
+        result["mode"] = "live"
         final_score = result["final_score"]
         yes_price = features.get("yes_price")
         decision = None
-
-        if self._training_examples() < ENSEMBLE_MIN_TRAINING_EXAMPLES:
-            result["decision"] = None
-            result["reason"] = f"warmup: {self._training_examples()}/{ENSEMBLE_MIN_TRAINING_EXAMPLES} examples"
-            return result
 
         yes_lo, yes_hi = ENSEMBLE_YES_PRICE_BAND
         no_lo, no_hi = ENSEMBLE_NO_PRICE_BAND

@@ -9,7 +9,7 @@ import time
 
 from config.settings import (
     ASSETS, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC, BOT_STATUS_FILE,
-    momentum_weights_path, volume_weights_path,
+    momentum_weights_path, volume_weights_path, WARMUP_TRADE_SIZE_USD,
 )
 from core.market_context import MarketContext
 from core.feature_engine import build_features
@@ -78,9 +78,13 @@ class Bot:
             logger.info(f"SKIP [{asset}] risk blocked: {reason}")
             return
         yes_price = features["yes_price"]
-        win_probability = result["final_score"] if decision == "YES" else 1 - result["final_score"]
         entry_price = yes_price if decision == "YES" else 1 - yes_price
-        size = self.risk_manager.position_size(win_probability, entry_price)
+        mode = result.get("mode", "live")
+        if mode == "warmup":
+            size = WARMUP_TRADE_SIZE_USD
+        else:
+            win_probability = result["final_score"] if decision == "YES" else 1 - result["final_score"]
+            size = self.risk_manager.position_size(win_probability, entry_price)
         if size <= 0:
             return
         position_id = self.executors[asset].open_position(asset, decision, entry_price, size, features, market_id)
@@ -90,8 +94,9 @@ class Bot:
             "seconds_remaining": snapshot.get("seconds_remaining"),
             "opened_at": time.time(),
         }
+        score_str = f" score={result['final_score']:.3f}" if result.get("final_score") is not None else ""
         logger.info(
-            f"OPEN [{asset}] {decision} entry={entry_price:.3f} size=${size:.2f} score={result['final_score']:.3f}"
+            f"OPEN [{asset}] {decision} mode={mode} entry={entry_price:.3f} size=${size:.2f}{score_str}"
         )
 
     def _check_resolutions(self):
