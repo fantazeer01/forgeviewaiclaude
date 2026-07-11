@@ -100,20 +100,12 @@ def test_warmup_blocked_when_seconds_remaining_below_120():
     assert result["reason"] == "too_late"
 
 
-def test_warmup_sol_excluded_entirely():
-    ensemble = _asset_ensemble(0.5, 0.5, asset="SOL")
-    result = ensemble.decide(
-        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
-    )
-    assert result["mode"] == "warmup"
-    assert result["decision"] is None
-    assert result["reason"] == "asset_excluded_from_warmup"
-
-
-def test_warmup_btc_and_eth_still_trade():
-    for asset in ("BTC", "ETH"):
+def test_warmup_all_three_assets_trade_equally():
+    # SOL's prior exclusion was reverted -- the tight band/timing gate now
+    # applies uniformly, so all three assets get the same shot.
+    for asset in ("BTC", "ETH", "SOL"):
         ensemble = _asset_ensemble(0.5, 0.5, asset=asset)
         result = ensemble.decide(
             {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
         )
-        assert result["decision"] == "YES", f"{asset} should still warmup-trade"
+        assert result["decision"] == "YES", f"{asset} should warmup-trade"

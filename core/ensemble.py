@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 # still uses ENSEMBLE_*_PRICE_BAND/ENSEMBLE_MIN_TRAINING_EXAMPLES above
 # unchanged -- these apply only to the pre-30-example momentum heuristic in
 # _warmup_decide(), which the breakdown showed loses money outside this band.
-WARMUP_EXCLUDED_ASSETS = {"SOL"}          # SOL/YES was 89% of warmup losses with ETH/YES
+# SOL's earlier exclusion was reverted: the losses were attributed to the
+# wide band and early entries (now fixed below for every asset), not SOL
+# itself -- all three assets get an equal, tighter shot at clean examples.
 WARMUP_YES_PRICE_BAND = (0.50, 0.55)      # only profitable entry_price bucket in the breakdown
 WARMUP_MIN_SECONDS_REMAINING = 120        # >240s entries: 39.6% win rate; 120-180s: 50%
 
@@ -58,9 +60,6 @@ class Ensemble:
         return self._live_decide(features, fear_greed, hour_utc)
 
     def _warmup_decide(self, features: dict, training_examples: int) -> dict:
-        if self.asset is not None and self.asset.upper() in WARMUP_EXCLUDED_ASSETS:
-            return {"mode": "warmup", "decision": None, "reason": "asset_excluded_from_warmup"}
-
         if features.get("seconds_remaining", 0) < WARMUP_MIN_SECONDS_REMAINING:
             return {"decision": None, "mode": "warmup", "reason": "too_late"}
 
