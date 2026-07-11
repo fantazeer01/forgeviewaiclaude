@@ -31,7 +31,7 @@ class Bot:
         # trains BTC's weights, never SOL's or ETH's.
         self.momentum_models = {a: MomentumModel(weights_file=momentum_weights_path(a)) for a in ASSETS}
         self.volume_models = {a: VolumeModel(weights_file=volume_weights_path(a)) for a in ASSETS}
-        self.ensembles = {a: Ensemble(self.momentum_models[a], self.volume_models[a]) for a in ASSETS}
+        self.ensembles = {a: Ensemble(self.momentum_models[a], self.volume_models[a], asset=a) for a in ASSETS}
         self.risk_manager = RiskManager()  # shared: bankroll/exposure limits are portfolio-wide
         self.executors = {
             a: Executor(self.momentum_models[a], self.volume_models[a], self.risk_manager) for a in ASSETS

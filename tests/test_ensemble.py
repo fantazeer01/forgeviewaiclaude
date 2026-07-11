@@ -16,7 +16,7 @@ def _ensemble(momentum_p, volume_p, n_examples=30):
 
 def test_no_trade_below_min_training_examples():
     ensemble = _ensemble(0.9, 0.9, n_examples=5)
-    result = ensemble.decide({"yes_price": 0.5, "seconds_remaining": 100}, fear_greed=50, hour_utc=12)
+    result = ensemble.decide({"yes_price": 0.5, "seconds_remaining": 150}, fear_greed=50, hour_utc=12)
     assert result["decision"] is None
     assert "warmup" in result["reason"]
 
@@ -50,42 +50,70 @@ def test_no_side_blocked_when_price_out_of_band():
     assert result["decision"] is None
 
 
-def test_warmup_yes_trade_on_positive_momentum_and_price_in_band():
-    ensemble = _ensemble(0.5, 0.5, n_examples=0)
+def _asset_ensemble(momentum_p, volume_p, asset, n_examples=0):
+    return Ensemble(StubModel(momentum_p, n_examples), StubModel(volume_p, n_examples), asset=asset)
+
+
+def test_warmup_yes_trade_on_positive_momentum_and_price_in_narrow_band():
+    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
     result = ensemble.decide(
-        {"yes_price": 0.5, "price_momentum_5m": 3.0, "seconds_remaining": 100}, fear_greed=50, hour_utc=12
+        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
     )
     assert result["mode"] == "warmup"
     assert result["decision"] == "YES"
     assert result["final_score"] is None
 
 
-def test_warmup_no_trade_on_negative_momentum_and_price_in_band():
-    ensemble = _ensemble(0.5, 0.5, n_examples=0)
+def test_warmup_no_side_always_disabled():
+    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
     result = ensemble.decide(
-        {"yes_price": 0.45, "price_momentum_5m": -3.0, "seconds_remaining": 100}, fear_greed=50, hour_utc=12
+        {"yes_price": 0.52, "price_momentum_5m": -3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
     )
     assert result["mode"] == "warmup"
-    assert result["decision"] == "NO"
+    assert result["decision"] is None
 
 
-def test_warmup_no_decision_when_momentum_flat_or_price_out_of_band():
-    ensemble = _ensemble(0.5, 0.5, n_examples=0)
+def test_warmup_no_decision_when_momentum_flat_or_price_out_of_narrow_band():
+    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
     flat = ensemble.decide(
-        {"yes_price": 0.5, "price_momentum_5m": 0.0, "seconds_remaining": 100}, fear_greed=50, hour_utc=12
+        {"yes_price": 0.52, "price_momentum_5m": 0.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
     )
     assert flat["decision"] is None
     out_of_band = ensemble.decide(
-        {"yes_price": 0.9, "price_momentum_5m": 3.0, "seconds_remaining": 100}, fear_greed=50, hour_utc=12
+        {"yes_price": 0.60, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
     )
     assert out_of_band["decision"] is None
 
 
-def test_warmup_blocked_when_seconds_remaining_below_60():
-    ensemble = _ensemble(0.5, 0.5, n_examples=0)
+def test_warmup_blocked_when_seconds_remaining_below_120():
+    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
+    still_blocked = ensemble.decide(
+        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
+    )
+    assert still_blocked["decision"] == "YES"  # sanity: 150s is allowed
+
     result = ensemble.decide(
-        {"yes_price": 0.5, "price_momentum_5m": 3.0, "seconds_remaining": 30}, fear_greed=50, hour_utc=12
+        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 119}, fear_greed=50, hour_utc=12
     )
     assert result["mode"] == "warmup"
     assert result["decision"] is None
     assert result["reason"] == "too_late"
+
+
+def test_warmup_sol_excluded_entirely():
+    ensemble = _asset_ensemble(0.5, 0.5, asset="SOL")
+    result = ensemble.decide(
+        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
+    )
+    assert result["mode"] == "warmup"
+    assert result["decision"] is None
+    assert result["reason"] == "asset_excluded_from_warmup"
+
+
+def test_warmup_btc_and_eth_still_trade():
+    for asset in ("BTC", "ETH"):
+        ensemble = _asset_ensemble(0.5, 0.5, asset=asset)
+        result = ensemble.decide(
+            {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
+        )
+        assert result["decision"] == "YES", f"{asset} should still warmup-trade"

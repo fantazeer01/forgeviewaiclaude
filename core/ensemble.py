@@ -12,11 +12,20 @@ from models.macro_model import macro_bias
 
 logger = logging.getLogger(__name__)
 
+# Warmup-only tunables (2026-07-11 trade-breakdown fix): the live ensemble
+# still uses ENSEMBLE_*_PRICE_BAND/ENSEMBLE_MIN_TRAINING_EXAMPLES above
+# unchanged -- these apply only to the pre-30-example momentum heuristic in
+# _warmup_decide(), which the breakdown showed loses money outside this band.
+WARMUP_EXCLUDED_ASSETS = {"SOL"}          # SOL/YES was 89% of warmup losses with ETH/YES
+WARMUP_YES_PRICE_BAND = (0.50, 0.55)      # only profitable entry_price bucket in the breakdown
+WARMUP_MIN_SECONDS_REMAINING = 120        # >240s entries: 39.6% win rate; 120-180s: 50%
+
 
 class Ensemble:
-    def __init__(self, momentum_model, volume_model):
+    def __init__(self, momentum_model, volume_model, asset: str = None):
         self.momentum_model = momentum_model
         self.volume_model = volume_model
+        self.asset = asset
 
     def _training_examples(self) -> int:
         return min(self.momentum_model.n_examples, self.volume_model.n_examples)
@@ -49,19 +58,21 @@ class Ensemble:
         return self._live_decide(features, fear_greed, hour_utc)
 
     def _warmup_decide(self, features: dict, training_examples: int) -> dict:
-        if features.get("seconds_remaining", 0) < 60:
+        if self.asset is not None and self.asset.upper() in WARMUP_EXCLUDED_ASSETS:
+            return {"mode": "warmup", "decision": None, "reason": "asset_excluded_from_warmup"}
+
+        if features.get("seconds_remaining", 0) < WARMUP_MIN_SECONDS_REMAINING:
             return {"decision": None, "mode": "warmup", "reason": "too_late"}
 
         yes_price = features.get("yes_price")
         momentum_5m = features.get("price_momentum_5m") or 0.0
-        yes_lo, yes_hi = ENSEMBLE_YES_PRICE_BAND
-        no_lo, no_hi = ENSEMBLE_NO_PRICE_BAND
+        yes_lo, yes_hi = WARMUP_YES_PRICE_BAND
 
+        # NO side disabled entirely in warmup: 48.8% win rate against fixed
+        # payouts is a losing edge, unlike YES's 0.50-0.55 bucket.
         decision = None
         if momentum_5m > 0 and yes_price is not None and yes_lo <= yes_price <= yes_hi:
             decision = "YES"
-        elif momentum_5m < 0 and yes_price is not None and no_lo <= yes_price <= no_hi:
-            decision = "NO"
 
         return {
             "mode": "warmup",
