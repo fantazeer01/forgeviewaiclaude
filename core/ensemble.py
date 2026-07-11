@@ -12,16 +12,6 @@ from models.macro_model import macro_bias
 
 logger = logging.getLogger(__name__)
 
-# Warmup-only tunables (2026-07-11 trade-breakdown fix): the live ensemble
-# still uses ENSEMBLE_*_PRICE_BAND/ENSEMBLE_MIN_TRAINING_EXAMPLES above
-# unchanged -- these apply only to the pre-30-example momentum heuristic in
-# _warmup_decide(), which the breakdown showed loses money outside this band.
-# SOL's earlier exclusion was reverted: the losses were attributed to the
-# wide band and early entries (now fixed below for every asset), not SOL
-# itself -- all three assets get an equal, tighter shot at clean examples.
-WARMUP_YES_PRICE_BAND = (0.50, 0.55)      # only profitable entry_price bucket in the breakdown
-WARMUP_MIN_SECONDS_REMAINING = 120        # >240s entries: 39.6% win rate; 120-180s: 50%
-
 
 class Ensemble:
     def __init__(self, momentum_model, volume_model, asset: str = None):
@@ -60,31 +50,19 @@ class Ensemble:
         return self._live_decide(features, fear_greed, hour_utc)
 
     def _warmup_decide(self, features: dict, training_examples: int) -> dict:
-        if features.get("seconds_remaining", 0) < WARMUP_MIN_SECONDS_REMAINING:
-            return {"decision": None, "mode": "warmup", "reason": "too_late"}
-
-        yes_price = features.get("yes_price")
-        momentum_5m = features.get("price_momentum_5m") or 0.0
-        yes_lo, yes_hi = WARMUP_YES_PRICE_BAND
-
-        # NO side disabled entirely in warmup: 48.8% win rate against fixed
-        # payouts is a losing edge, unlike YES's 0.50-0.55 bucket.
-        decision = None
-        if momentum_5m > 0 and yes_price is not None and yes_lo <= yes_price <= yes_hi:
-            decision = "YES"
-
+        """Warmup trading is fully disabled (2026-07-12): no capital is risked
+        below ENSEMBLE_MIN_TRAINING_EXAMPLES at all anymore. bot.py's shadow
+        learning accumulates (features, outcome) pairs every window instead,
+        with no position ever opened -- see Bot._maybe_capture_shadow() /
+        Bot._check_shadow_resolutions()."""
         return {
             "mode": "warmup",
             "momentum_p": None,
             "volume_p": None,
             "macro_p": None,
             "final_score": None,
-            "decision": decision,
-            "reason": (
-                None if decision
-                else f"warmup: {training_examples}/{ENSEMBLE_MIN_TRAINING_EXAMPLES} examples, "
-                     f"momentum/price band not aligned"
-            ),
+            "decision": None,
+            "reason": f"warmup trading disabled: {training_examples}/{ENSEMBLE_MIN_TRAINING_EXAMPLES} examples, shadow learning only",
         }
 
     def _live_decide(self, features: dict, fear_greed: int, hour_utc: int) -> dict:

@@ -19,6 +19,7 @@ def test_no_trade_below_min_training_examples():
     result = ensemble.decide({"yes_price": 0.5, "seconds_remaining": 150}, fear_greed=50, hour_utc=12)
     assert result["decision"] is None
     assert "warmup" in result["reason"]
+    assert result["mode"] == "warmup"
 
 
 def test_no_trade_in_uncertainty_zone():
@@ -54,58 +55,22 @@ def _asset_ensemble(momentum_p, volume_p, asset, n_examples=0):
     return Ensemble(StubModel(momentum_p, n_examples), StubModel(volume_p, n_examples), asset=asset)
 
 
-def test_warmup_yes_trade_on_positive_momentum_and_price_in_narrow_band():
-    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
-    result = ensemble.decide(
-        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
-    )
-    assert result["mode"] == "warmup"
-    assert result["decision"] == "YES"
-    assert result["final_score"] is None
-
-
-def test_warmup_no_side_always_disabled():
-    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
-    result = ensemble.decide(
-        {"yes_price": 0.52, "price_momentum_5m": -3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
-    )
-    assert result["mode"] == "warmup"
-    assert result["decision"] is None
-
-
-def test_warmup_no_decision_when_momentum_flat_or_price_out_of_narrow_band():
-    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
-    flat = ensemble.decide(
-        {"yes_price": 0.52, "price_momentum_5m": 0.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
-    )
-    assert flat["decision"] is None
-    out_of_band = ensemble.decide(
-        {"yes_price": 0.60, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
-    )
-    assert out_of_band["decision"] is None
-
-
-def test_warmup_blocked_when_seconds_remaining_below_120():
-    ensemble = _asset_ensemble(0.5, 0.5, asset="BTC")
-    still_blocked = ensemble.decide(
-        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
-    )
-    assert still_blocked["decision"] == "YES"  # sanity: 150s is allowed
-
-    result = ensemble.decide(
-        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 119}, fear_greed=50, hour_utc=12
-    )
-    assert result["mode"] == "warmup"
-    assert result["decision"] is None
-    assert result["reason"] == "too_late"
-
-
-def test_warmup_all_three_assets_trade_equally():
-    # SOL's prior exclusion was reverted -- the tight band/timing gate now
-    # applies uniformly, so all three assets get the same shot.
+def test_warmup_never_trades_regardless_of_signal():
+    # Warmup trading is fully disabled (2026-07-12): shadow learning in
+    # bot.py is now the only path to accumulate examples -- no combination
+    # of momentum/price/timing/asset should ever produce a decision here.
+    cases = [
+        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150},   # would have fired pre-fix
+        {"yes_price": 0.52, "price_momentum_5m": -3.0, "seconds_remaining": 150},
+        {"yes_price": 0.52, "price_momentum_5m": 0.0, "seconds_remaining": 150},
+        {"yes_price": 0.60, "price_momentum_5m": 3.0, "seconds_remaining": 150},
+        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 5},
+        {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 299},
+    ]
     for asset in ("BTC", "ETH", "SOL"):
         ensemble = _asset_ensemble(0.5, 0.5, asset=asset)
-        result = ensemble.decide(
-            {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 150}, fear_greed=50, hour_utc=12
-        )
-        assert result["decision"] == "YES", f"{asset} should warmup-trade"
+        for features in cases:
+            result = ensemble.decide(features, fear_greed=50, hour_utc=12)
+            assert result["mode"] == "warmup"
+            assert result["decision"] is None, f"{asset} {features} should never trade in warmup"
+            assert result["final_score"] is None
