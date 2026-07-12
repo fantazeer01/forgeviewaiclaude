@@ -37,22 +37,32 @@ def test_yes_trade_when_score_high_and_price_in_band():
     assert result["decision"] == "YES"
 
 
+def _asset_ensemble(momentum_p, volume_p, asset, n_examples=30):
+    return Ensemble(StubModel(momentum_p, n_examples), StubModel(volume_p, n_examples), asset=asset)
+
+
 def test_no_side_trade_when_score_low_and_price_in_band():
-    ensemble = _ensemble(0.1, 0.1)
+    # NO is only allowed for SOL (2026-07-12: BTC/ETH NO ran 33.3% win rate).
+    ensemble = _asset_ensemble(0.1, 0.1, asset="SOL")
     result = ensemble.decide({"yes_price": 0.45}, fear_greed=50, hour_utc=12)
     assert result["final_score"] < 0.45
     assert result["decision"] == "NO"
 
 
 def test_no_side_blocked_when_price_out_of_band():
-    ensemble = _ensemble(0.1, 0.1)
+    ensemble = _asset_ensemble(0.1, 0.1, asset="SOL")
     result = ensemble.decide({"yes_price": 0.60}, fear_greed=50, hour_utc=12)
     assert result["final_score"] < 0.45
     assert result["decision"] is None
 
 
-def _asset_ensemble(momentum_p, volume_p, asset, n_examples=0):
-    return Ensemble(StubModel(momentum_p, n_examples), StubModel(volume_p, n_examples), asset=asset)
+def test_no_side_blocked_for_btc_and_eth():
+    # Same score/price that fires NO for SOL must never fire for BTC/ETH.
+    for asset in ("BTC", "ETH"):
+        ensemble = _asset_ensemble(0.1, 0.1, asset=asset)
+        result = ensemble.decide({"yes_price": 0.45}, fear_greed=50, hour_utc=12)
+        assert result["final_score"] < 0.45
+        assert result["decision"] is None, f"{asset} should never open a NO trade"
 
 
 def test_warmup_never_trades_regardless_of_signal():
@@ -68,7 +78,7 @@ def test_warmup_never_trades_regardless_of_signal():
         {"yes_price": 0.52, "price_momentum_5m": 3.0, "seconds_remaining": 299},
     ]
     for asset in ("BTC", "ETH", "SOL"):
-        ensemble = _asset_ensemble(0.5, 0.5, asset=asset)
+        ensemble = _asset_ensemble(0.5, 0.5, asset=asset, n_examples=0)
         for features in cases:
             result = ensemble.decide(features, fear_greed=50, hour_utc=12)
             assert result["mode"] == "warmup"

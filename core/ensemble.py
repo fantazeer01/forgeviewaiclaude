@@ -78,7 +78,11 @@ class Ensemble:
         if final_score > ENSEMBLE_YES_SCORE_THRESHOLD and yes_price is not None and yes_lo <= yes_price <= yes_hi:
             decision = "YES"
         elif final_score < ENSEMBLE_NO_SCORE_THRESHOLD and yes_price is not None and no_lo <= yes_price <= no_hi:
-            decision = "NO"
+            # 2026-07-12 trade-breakdown: BTC/NO and ETH/NO both ran 33.3%
+            # win rate today (-$7.43, -$4.40) while SOL/NO ran 66.7%
+            # (+$1.67) -- NO is only allowed for SOL until that changes.
+            if self.asset is not None and self.asset.upper() == "SOL":
+                decision = "NO"
 
         result["decision"] = decision
         result["reason"] = None if decision else "uncertainty zone or price out of band"
