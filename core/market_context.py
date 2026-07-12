@@ -303,8 +303,16 @@ class MarketContext:
             return None
         return max(prices) if highest else min(prices)
 
+    RESOLUTION_PRICE_THRESHOLD = 0.95
+
     def get_resolution(self, market_id: str) -> Optional[str]:
-        """UP / DOWN once the market has resolved, else None."""
+        """UP / DOWN once the market has resolved -- either Polymarket has
+        marked it closed with a winning token, or (2026-07-12 fix) a token's
+        live price already shows a near-certain winner (>0.95) even though
+        closed is still False. Oracle settlement lags the nominal window
+        close by 10+ minutes in practice; the price already reflects the
+        real outcome long before closed flips, so this resolves positions in
+        ~1-2 minutes instead of waiting on the lagging flag."""
         try:
             resp = self.session.get(f"{POLYMARKET_API_BASE}/markets/{market_id}", timeout=10)
             resp.raise_for_status()
@@ -312,16 +320,44 @@ class MarketContext:
         except Exception as e:
             logger.warning(f"get_resolution error market_id={market_id}: {e}")
             return None
-        if not resolution.get("closed"):
+
+        tokens = resolution.get("tokens", [])
+
+        if resolution.get("closed"):
+            for token in tokens:
+                if not token.get("winner"):
+                    continue
+                outcome = str(token.get("outcome", "")).strip().lower()
+                if outcome == "up":
+                    return "UP"
+                if outcome == "down":
+                    return "DOWN"
             return None
-        for token in resolution.get("tokens", []):
-            if not token.get("winner"):
+
+        return self._resolution_from_price(tokens)
+
+    def _resolution_from_price(self, tokens: list) -> Optional[str]:
+        """Not yet closed=True, but a token's own live price already implies
+        a near-certain winner. Keyed off each token's own "outcome" label
+        (not list position/index) -- Polymarket doesn't guarantee Up/Down
+        ordering, and trusting an index here would silently mis-resolve
+        trades whenever the order differs."""
+        best_outcome = None
+        best_price = -1.0
+        for token in tokens:
+            try:
+                price = float(token.get("price"))
+            except (TypeError, ValueError):
                 continue
-            outcome = str(token.get("outcome", "")).strip().lower()
-            if outcome == "up":
-                return "UP"
-            if outcome == "down":
-                return "DOWN"
+            if price > best_price:
+                best_price = price
+                best_outcome = str(token.get("outcome", "")).strip().lower()
+        if best_price <= self.RESOLUTION_PRICE_THRESHOLD:
+            return None
+        if best_outcome == "up":
+            return "UP"
+        if best_outcome == "down":
+            return "DOWN"
         return None
 
     def snapshot(self, asset: str) -> dict:
