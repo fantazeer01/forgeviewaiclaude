@@ -39,15 +39,43 @@ class Ensemble:
         }
 
     def decide(self, features: dict, fear_greed: int, hour_utc: int) -> dict:
-        """Trades never open at all until the models have something to learn
-        from -- cold-start fix: below ENSEMBLE_MIN_TRAINING_EXAMPLES, skip the
-        (untrained) ensemble entirely and trade a simple fixed-size momentum
-        rule instead, purely to accumulate resolved outcomes to train on.
-        Once enough examples exist, the real ensemble+Kelly path takes over."""
-        training_examples = self._training_examples()
-        if training_examples < ENSEMBLE_MIN_TRAINING_EXAMPLES:
-            return self._warmup_decide(features, training_examples)
-        return self._live_decide(features, fear_greed, hour_utc)
+        """Fair-value entry strategy (2026-07-13) replaces model-driven
+        trading entirely -- see _fair_value_decide(). _live_decide() and
+        _warmup_decide() are kept below, dormant/uncalled, in case
+        model-driven trading is re-enabled later; the momentum/volume
+        models themselves keep learning regardless (Executor.close_position()
+        and Bot's shadow learning both still call .learn() on them), they're
+        just not consulted for this decision."""
+        return self._fair_value_decide(features, self.asset)
+
+    def _fair_value_decide(self, features: dict, asset: str) -> dict:
+        """Doesn't predict direction at all: in the first 60s of a window
+        (seconds_remaining >= 240), buys whichever side (YES or NO) is
+        priced below its 0.50 fair value, betting on the ~50/50 UP/DOWN
+        base rate rather than any model signal. No trade in the 0.47-0.53
+        dead zone (edge too thin after slippage) or once price has moved
+        further than the 0.43/0.57 bounds (no longer "cheap", a real move
+        is likely already underway)."""
+        yes_price = features.get("yes_price", 0.5)
+        seconds_remaining = features.get("seconds_remaining", 0)
+
+        base = {
+            "mode": "fair_value",
+            "momentum_p": None,
+            "volume_p": None,
+            "macro_p": None,
+            "final_score": None,
+        }
+
+        if seconds_remaining < 240:
+            return {**base, "decision": None, "reason": "too_late_for_fv"}
+
+        if 0.43 <= yes_price < 0.47:
+            return {**base, "decision": "YES", "reason": f"yes_price={yes_price:.3f} < 0.47"}
+        elif 0.53 < yes_price <= 0.57:
+            return {**base, "decision": "NO", "reason": f"yes_price={yes_price:.3f} > 0.53"}
+        else:
+            return {**base, "decision": None, "reason": "price_near_fair_value"}
 
     def _warmup_decide(self, features: dict, training_examples: int) -> dict:
         """Warmup trading is fully disabled (2026-07-12): no capital is risked

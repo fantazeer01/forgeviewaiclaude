@@ -25,6 +25,7 @@ ENSEMBLE_NO_SCORE_THRESHOLD = 0.45
 ENSEMBLE_NO_PRICE_BAND = (0.35, 0.55)
 ENSEMBLE_MIN_TRAINING_EXAMPLES = 30
 WARMUP_TRADE_SIZE_USD = 2.0        # fixed size while accumulating the first training examples
+FAIR_VALUE_TRADE_SIZE_USD = 2.0    # fixed size for the fair-value strategy (2026-07-13, no stats yet)
 
 # ---- macro model ----
 MACRO_FEAR_GREED_BEARISH = 25

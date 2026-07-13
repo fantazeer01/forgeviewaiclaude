@@ -9,7 +9,7 @@ import time
 
 from config.settings import (
     ASSETS, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC, BOT_STATUS_FILE,
-    momentum_weights_path, volume_weights_path, WARMUP_TRADE_SIZE_USD,
+    momentum_weights_path, volume_weights_path, WARMUP_TRADE_SIZE_USD, FAIR_VALUE_TRADE_SIZE_USD,
 )
 from core.market_context import MarketContext
 from core.feature_engine import build_features
@@ -91,6 +91,8 @@ class Bot:
         mode = result.get("mode", "live")
         if mode == "warmup":
             size = WARMUP_TRADE_SIZE_USD
+        elif mode == "fair_value":
+            size = FAIR_VALUE_TRADE_SIZE_USD
         else:
             win_probability = result["final_score"] if decision == "YES" else 1 - result["final_score"]
             size = self.risk_manager.position_size(win_probability, entry_price)
