@@ -10,6 +10,7 @@ import time
 from config.settings import (
     ASSETS, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC, BOT_STATUS_FILE,
     momentum_weights_path, volume_weights_path, WARMUP_TRADE_SIZE_USD, FAIR_VALUE_TRADE_SIZE_USD,
+    KELLY_WARMUP_TRADES, RISK_STATE_FILE,
 )
 from core.market_context import MarketContext
 from core.feature_engine import build_features
@@ -38,7 +39,7 @@ class Bot:
         self.momentum_models = {a: MomentumModel(weights_file=momentum_weights_path(a)) for a in ASSETS}
         self.volume_models = {a: VolumeModel(weights_file=volume_weights_path(a)) for a in ASSETS}
         self.ensembles = {a: Ensemble(self.momentum_models[a], self.volume_models[a], asset=a) for a in ASSETS}
-        self.risk_manager = RiskManager()  # shared: bankroll/exposure limits are portfolio-wide
+        self.risk_manager = RiskManager(state_file=RISK_STATE_FILE)  # shared: bankroll/exposure limits are portfolio-wide
         self.executors = {
             a: Executor(self.momentum_models[a], self.volume_models[a], self.risk_manager) for a in ASSETS
         }
@@ -118,12 +119,20 @@ class Bot:
             if outcome is None:
                 continue
             outcome_up = outcome == "UP"
-            pnl = self.executors[info["asset"]].close_position(info["position_id"], outcome_up)
+            executor = self.executors[info["asset"]]
+            position_size_usd = executor.open_positions.get(info["position_id"], {}).get("size_usd")
+            pnl = executor.close_position(info["position_id"], outcome_up)
             if pnl > 0:
                 self.day_wins += 1
             else:
                 self.day_losses += 1
             logger.info(f"CLOSE [{info['asset']}] outcome={outcome} pnl=${pnl:+.2f}")
+            kelly_active = self.risk_manager.trades_closed >= KELLY_WARMUP_TRADES
+            size_str = f"${position_size_usd:.2f}" if position_size_usd is not None else "n/a"
+            logger.info(
+                f"Kelly status: trades_closed={self.risk_manager.trades_closed}, "
+                f"kelly_active={kelly_active}, position_size={size_str}"
+            )
             del self.pending[market_id]
 
     def _maybe_capture_shadow(self, asset, snapshot, features):

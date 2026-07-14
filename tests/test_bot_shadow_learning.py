@@ -5,6 +5,7 @@ def _make_bot(monkeypatch, tmp_path):
     monkeypatch.setattr("core.executor.PAPER_TRADES_LOG", str(tmp_path / "trades.jsonl"))
     monkeypatch.setattr("bot.momentum_weights_path", lambda a: str(tmp_path / f"momentum_{a}.pkl"))
     monkeypatch.setattr("bot.volume_weights_path", lambda a: str(tmp_path / f"volume_{a}.pkl"))
+    monkeypatch.setattr("bot.RISK_STATE_FILE", str(tmp_path / "risk_state.json"))
     return bot_module.Bot()
 
 

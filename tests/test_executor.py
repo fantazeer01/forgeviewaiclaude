@@ -18,7 +18,7 @@ def _make_executor(tmp_path, monkeypatch, log_name="trades.jsonl"):
     monkeypatch.setattr("core.executor.PAPER_TRADES_LOG", str(tmp_path / log_name))
     momentum = MomentumModel(weights_file=str(tmp_path / "m.pkl"))
     volume = VolumeModel(weights_file=str(tmp_path / "v.pkl"))
-    risk = RiskManager()
+    risk = RiskManager(state_file=str(tmp_path / "risk_state.json"))
     return Executor(momentum, volume, risk)
 
 

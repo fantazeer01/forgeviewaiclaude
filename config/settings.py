@@ -74,6 +74,10 @@ def volume_weights_path(asset: str) -> str:
 PAPER_TRADES_LOG = "data/trades/paper_trades.jsonl"
 MARKET_CONTEXT_LOG = "data/market/context.jsonl"
 BOT_STATUS_FILE = "data/market/bot_status.json"
+# Just trades_closed -- the one RiskManager field Kelly sizing needs to
+# survive a restart. daily_pnl/loss_streak/paused_until stay in-memory only
+# (daily_pnl in particular must keep resetting fresh each UTC day).
+RISK_STATE_FILE = "data/trades/risk_state.json"
 
 # ---- dashboard ----
 DASHBOARD_PORT = 8080

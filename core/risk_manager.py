@@ -1,26 +1,54 @@
 """Bankroll and trade-frequency guardrails, independent of signal quality."""
 
 import datetime
+import json
 import logging
+import os
 import time
 
 from config.settings import (
     BANKROLL_USD, FIXED_POSITION_PCT, KELLY_WARMUP_TRADES, KELLY_FRACTION_CAP,
     DAILY_LOSS_LIMIT_USD, MAX_OPEN_POSITIONS, LOSS_STREAK_LIMIT, LOSS_STREAK_PAUSE_SEC,
+    RISK_STATE_FILE,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class RiskManager:
-    def __init__(self, bankroll: float = BANKROLL_USD):
+    def __init__(self, bankroll: float = BANKROLL_USD, state_file: str = RISK_STATE_FILE):
         self.bankroll = bankroll
-        self.trades_closed = 0
+        self.state_file = state_file
+        self.trades_closed = self._load_trades_closed()
         self.daily_pnl = 0.0
         self.daily_date = datetime.datetime.now(datetime.timezone.utc).date()
         self.loss_streak = 0
         self.paused_until = 0.0
         self.open_positions = 0
+
+    def _load_trades_closed(self) -> int:
+        """Kelly sizing (position_size()) only activates once trades_closed
+        reaches KELLY_WARMUP_TRADES -- without persisting this, every
+        restart re-warms from 0 and Kelly effectively never turns on for a
+        bot that gets restarted regularly."""
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file) as f:
+                    data = json.load(f)
+                return int(data.get("trades_closed", 0))
+            except Exception as e:
+                logger.warning(f"RiskManager state load error, starting from 0: {e}")
+        return 0
+
+    def _save_trades_closed(self):
+        try:
+            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+            tmp = self.state_file + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({"trades_closed": self.trades_closed}, f)
+            os.replace(tmp, self.state_file)
+        except Exception as e:
+            logger.error(f"RiskManager state save error: {e}")
 
     def _roll_day(self):
         today = datetime.datetime.now(datetime.timezone.utc).date()
@@ -60,6 +88,7 @@ class RiskManager:
         self._roll_day()
         self.open_positions = max(0, self.open_positions - 1)
         self.trades_closed += 1
+        self._save_trades_closed()
         self.daily_pnl += pnl
         self.bankroll += pnl
         if pnl < 0:
