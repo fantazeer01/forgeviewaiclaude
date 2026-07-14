@@ -46,7 +46,6 @@ class Bot:
         self.shadow_pending = {}  # market_id -> {asset, features, captured_at, seconds_remaining}
         self.day_wins = 0
         self.day_losses = 0
-        self.day_pnl = 0.0
         self.last_summary = 0.0
         self.last_scores = {}
 
@@ -120,7 +119,6 @@ class Bot:
                 continue
             outcome_up = outcome == "UP"
             pnl = self.executors[info["asset"]].close_position(info["position_id"], outcome_up)
-            self.day_pnl += pnl
             if pnl > 0:
                 self.day_wins += 1
             else:
@@ -183,7 +181,7 @@ class Bot:
         ts = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M:%S")
         print(
             f"[{ts}] " + " | ".join(parts) +
-            f"\nOpen: {len(self.pending)} | Today: {self.day_pnl:+.2f} ({self.day_wins}W/{self.day_losses}L)"
+            f"\nOpen: {len(self.pending)} | Today: {self.risk_manager.daily_pnl:+.2f} ({self.day_wins}W/{self.day_losses}L)"
             f" | Model: {n_examples_total} examples",
             flush=True,
         )
@@ -208,7 +206,7 @@ class Bot:
                 for mid, p in self.pending.items()
                 if p["position_id"] in self.executors[p["asset"]].open_positions
             ],
-            "day_pnl": self.day_pnl,
+            "day_pnl": self.risk_manager.daily_pnl,
             "day_wins": self.day_wins,
             "day_losses": self.day_losses,
             "model_examples": {asset: self._examples(asset) for asset in ASSETS},
