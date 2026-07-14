@@ -110,10 +110,31 @@
   .expires-blink { animation: expires-blink 1s step-start infinite; }
   @keyframes expires-blink { 50% { opacity: 0.25; } }
 
-  #equity-canvas { width: 100%; height: 180px; display: block; }
+  #equity-canvas { width: 100%; height: 180px; display: block; cursor: default; }
   .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
   .legend-item { display: flex; align-items: center; gap: 6px; }
   .legend-swatch { width: 10px; height: 2px; border-radius: 2px; }
+
+  .chart-tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    z-index: 100;
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 0.08s ease-out;
+    min-width: 150px;
+  }
+  .chart-tooltip.visible { opacity: 1; }
+  .chart-tooltip .tt-title { font-weight: 600; margin-bottom: 4px; }
+  .chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; padding: 1px 0; }
+  .chart-tooltip .tt-label { color: var(--text-muted); }
+  .chart-tooltip .tt-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -127,6 +148,7 @@
     <p class="panel-title">Equity curve (today)</p>
     <canvas id="equity-canvas"></canvas>
   </div>
+  <div class="chart-tooltip" id="equity-tooltip"></div>
 
   <div class="panel">
     <p class="panel-title">Open positions</p>
@@ -255,6 +277,11 @@ function modelExamplesBreakdown(modelExamples) {
   return Object.entries(modelExamples).map(([asset, n]) => `${asset}: ${n}`).join(" · ");
 }
 
+// Trade markers from the most recent drawEquityCurve() call, in canvas
+// CSS-pixel space -- rebuilt on every redraw, read by the hover handler
+// for nearest-point hit testing.
+let equityMarkers = [];
+
 function drawEquityCurve(trades) {
   const canvas = document.getElementById("equity-canvas");
   const dpr = window.devicePixelRatio || 1;
@@ -268,10 +295,15 @@ function drawEquityCurve(trades) {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
 
+  equityMarkers = [];
+
   const styles = getComputedStyle(document.querySelector(".viz-root"));
   const grid = styles.getPropertyValue("--gridline").trim();
   const series = styles.getPropertyValue("--series-1").trim();
   const muted = styles.getPropertyValue("--text-muted").trim();
+  const good = styles.getPropertyValue("--good").trim();
+  const critical = styles.getPropertyValue("--critical").trim();
+  const surface = styles.getPropertyValue("--surface-1").trim();
 
   const pad = { top: 12, right: 12, bottom: 20, left: 12 };
   const plotW = w - pad.left - pad.right;
@@ -286,7 +318,7 @@ function drawEquityCurve(trades) {
 
   let cum = 0;
   const points = [{ x: 0, y: 0 }];
-  trades.forEach((t, i) => { cum += (t.pnl || 0); points.push({ x: i + 1, y: cum }); });
+  trades.forEach((t, i) => { cum += (t.pnl || 0); points.push({ x: i + 1, y: cum, trade: t }); });
 
   const ys = points.map(p => p.y);
   const minY = Math.min(0, ...ys);
@@ -317,12 +349,130 @@ function drawEquityCurve(trades) {
   });
   ctx.stroke();
 
-  // rounded end marker
+  // one marker per closed trade: green if won, red if lost, with a thin
+  // surface-color ring so it reads as a distinct mark on top of the line
+  points.forEach((p, i) => {
+    if (!p.trade) return; // skip the synthetic (0,0) baseline point
+    const x = xScale(i), y = yScale(p.y);
+    const color = p.trade.won ? good : critical;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = surface;
+    ctx.stroke();
+    equityMarkers.push({ x, y, trade: p.trade });
+  });
+
+  // rounded end marker (equity line's own endpoint, not a trade outcome)
   const last = points[points.length - 1];
   ctx.fillStyle = series;
   ctx.beginPath();
-  ctx.arc(xScale(points.length - 1), yScale(last.y), 3, 0, Math.PI * 2);
+  ctx.arc(xScale(points.length - 1), yScale(last.y), 2, 0, Math.PI * 2);
   ctx.fill();
+}
+
+const HIT_RADIUS_PX = 15; // generous hit target -- markers can sit only a few px apart
+
+function findNearestMarker(canvasX, canvasY) {
+  let nearest = null;
+  let nearestDist = Infinity;
+  for (const m of equityMarkers) {
+    const dist = Math.hypot(m.x - canvasX, m.y - canvasY);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearest = m;
+    }
+  }
+  return nearestDist <= HIT_RADIUS_PX ? nearest : null;
+}
+
+function formatPnl(pnl) {
+  return pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
+}
+
+function buildTooltipContent(container, trade) {
+  container.replaceChildren();
+
+  const title = document.createElement("div");
+  title.className = "tt-title";
+  const closedAt = new Date(trade.closed_at);
+  const hh = String(closedAt.getUTCHours()).padStart(2, "0");
+  const mm = String(closedAt.getUTCMinutes()).padStart(2, "0");
+  title.textContent = `${hh}:${mm} UTC`;
+  container.appendChild(title);
+
+  const rows = [
+    ["Asset", trade.asset],
+    ["Side", trade.side],
+    ["Entry price", fmt(trade.entry_price, 3)],
+    ["Size", `$${fmt(trade.size_usd, 2)}`],
+  ];
+  for (const [label, value] of rows) {
+    const row = document.createElement("div");
+    row.className = "tt-row";
+    const labelEl = document.createElement("span");
+    labelEl.className = "tt-label";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("span");
+    valueEl.className = "tt-value";
+    valueEl.textContent = value;
+    row.append(labelEl, valueEl);
+    container.appendChild(row);
+  }
+
+  const pnlRow = document.createElement("div");
+  pnlRow.className = "tt-row";
+  const pnlLabel = document.createElement("span");
+  pnlLabel.className = "tt-label";
+  pnlLabel.textContent = "PnL";
+  const pnlValue = document.createElement("span");
+  pnlValue.className = "tt-value";
+  pnlValue.style.color = trade.won ? "var(--good-text)" : "var(--critical)";
+  pnlValue.textContent = formatPnl(trade.pnl || 0);
+  pnlRow.append(pnlLabel, pnlValue);
+  container.appendChild(pnlRow);
+}
+
+function setupEquityTooltip() {
+  const canvas = document.getElementById("equity-canvas");
+  const tooltip = document.getElementById("equity-tooltip");
+
+  canvas.addEventListener("mousemove", (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const marker = findNearestMarker(x, y);
+
+    if (!marker) {
+      tooltip.classList.remove("visible");
+      canvas.style.cursor = "default";
+      return;
+    }
+
+    canvas.style.cursor = "pointer";
+    buildTooltipContent(tooltip, marker.trade);
+
+    const margin = 12;
+    let left = event.clientX + margin;
+    let top = event.clientY + margin;
+    const tooltipRect = tooltip.getBoundingClientRect();
+    if (left + tooltipRect.width > window.innerWidth - 8) {
+      left = event.clientX - tooltipRect.width - margin;
+    }
+    if (top + tooltipRect.height > window.innerHeight - 8) {
+      top = event.clientY - tooltipRect.height - margin;
+    }
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+    tooltip.classList.add("visible");
+  });
+
+  canvas.addEventListener("mouseleave", () => {
+    tooltip.classList.remove("visible");
+    canvas.style.cursor = "default";
+  });
 }
 
 async function fetchJson(url) {
@@ -358,6 +508,7 @@ async function refresh() {
   }
 }
 
+setupEquityTooltip();
 refresh();
 setInterval(refresh, POLL_MS);
 setInterval(tickExpiryCountdown, 1000);
