@@ -135,6 +135,30 @@
   .chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; padding: 1px 0; }
   .chart-tooltip .tt-label { color: var(--text-muted); }
   .chart-tooltip .tt-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .equity-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .equity-pager.hidden { display: none; }
+  .equity-pager button {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .equity-pager button:hover:not(:disabled) { background: var(--gridline); }
+  .equity-pager button:disabled { opacity: 0.4; cursor: default; }
 </style>
 </head>
 <body>
@@ -147,6 +171,11 @@
   <div class="panel">
     <p class="panel-title">Equity curve (today)</p>
     <canvas id="equity-canvas"></canvas>
+    <div class="equity-pager hidden" id="equity-pager">
+      <button id="equity-prev">&larr; Назад</button>
+      <span id="equity-page-label"></span>
+      <button id="equity-next">Вперёд &rarr;</button>
+    </div>
   </div>
   <div class="chart-tooltip" id="equity-tooltip"></div>
 
@@ -282,7 +311,43 @@ function modelExamplesBreakdown(modelExamples) {
 // for nearest-point hit testing.
 let equityMarkers = [];
 
+// Pagination: the chart windows into the full (always-continuous)
+// cumulative series 50 trades at a time. equityPageIndex is an absolute
+// page number (page 0 = oldest 50); equityFollowLatest keeps it pinned to
+// the newest page as new trades arrive, until the user clicks "Назад".
+const EQUITY_PAGE_SIZE = 50;
+let equityPageIndex = 0;
+let equityFollowLatest = true;
+let lastTradesForChart = [];
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function updateEquityPagerUI(totalTrades) {
+  const pager = document.getElementById("equity-pager");
+  const totalPages = Math.max(1, Math.ceil(totalTrades / EQUITY_PAGE_SIZE));
+  if (totalTrades <= EQUITY_PAGE_SIZE) {
+    pager.classList.add("hidden");
+    return;
+  }
+  pager.classList.remove("hidden");
+  const startIdx = equityPageIndex * EQUITY_PAGE_SIZE;
+  const endIdx = Math.min(startIdx + EQUITY_PAGE_SIZE, totalTrades);
+  document.getElementById("equity-page-label").textContent =
+    `${startIdx + 1}–${endIdx} of ${totalTrades}`;
+  document.getElementById("equity-prev").disabled = equityPageIndex <= 0;
+  document.getElementById("equity-next").disabled = equityPageIndex >= totalPages - 1;
+}
+
 function drawEquityCurve(trades) {
+  lastTradesForChart = trades;
   const canvas = document.getElementById("equity-canvas");
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -313,12 +378,29 @@ function drawEquityCurve(trades) {
     ctx.fillStyle = muted;
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillText("No resolved trades yet", pad.left, h / 2);
+    document.getElementById("equity-pager").classList.add("hidden");
     return;
   }
 
-  let cum = 0;
-  const points = [{ x: 0, y: 0 }];
-  trades.forEach((t, i) => { cum += (t.pnl || 0); points.push({ x: i + 1, y: cum, trade: t }); });
+  // full continuous cumulative series (this is the true "balance" at each
+  // trade, independent of which 50-trade page is currently in view)
+  let runningCum = 0;
+  const fullSeries = trades.map(t => { runningCum += (t.pnl || 0); return { cum: runningCum, trade: t }; });
+  const totalPnl = fullSeries[fullSeries.length - 1].cum;
+
+  const totalPages = Math.max(1, Math.ceil(trades.length / EQUITY_PAGE_SIZE));
+  if (equityFollowLatest) equityPageIndex = totalPages - 1;
+  equityPageIndex = Math.min(Math.max(equityPageIndex, 0), totalPages - 1);
+  updateEquityPagerUI(trades.length);
+
+  const startIdx = equityPageIndex * EQUITY_PAGE_SIZE;
+  const endIdx = Math.min(startIdx + EQUITY_PAGE_SIZE, trades.length);
+  const baselineCum = startIdx > 0 ? fullSeries[startIdx - 1].cum : 0;
+
+  const points = [{ x: 0, y: baselineCum }];
+  for (let i = startIdx; i < endIdx; i++) {
+    points.push({ x: points.length, y: fullSeries[i].cum, trade: fullSeries[i].trade });
+  }
 
   const ys = points.map(p => p.y);
   const minY = Math.min(0, ...ys);
@@ -352,7 +434,7 @@ function drawEquityCurve(trades) {
   // one marker per closed trade: green if won, red if lost, with a thin
   // surface-color ring so it reads as a distinct mark on top of the line
   points.forEach((p, i) => {
-    if (!p.trade) return; // skip the synthetic (0,0) baseline point
+    if (!p.trade) return; // skip the synthetic page-baseline point
     const x = xScale(i), y = yScale(p.y);
     const color = p.trade.won ? good : critical;
     ctx.beginPath();
@@ -362,7 +444,7 @@ function drawEquityCurve(trades) {
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = surface;
     ctx.stroke();
-    equityMarkers.push({ x, y, trade: p.trade });
+    equityMarkers.push({ x, y, trade: p.trade, balance: p.y });
   });
 
   // rounded end marker (equity line's own endpoint, not a trade outcome)
@@ -371,6 +453,28 @@ function drawEquityCurve(trades) {
   ctx.beginPath();
   ctx.arc(xScale(points.length - 1), yScale(last.y), 2, 0, Math.PI * 2);
   ctx.fill();
+
+  // big current-total annotation, top-right -- always the true overall
+  // cumulative PnL (not just the visible page), refreshed every tick
+  const bigLabel = formatPnl(totalPnl);
+  ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  const textW = ctx.measureText(bigLabel).width;
+  const boxPad = 7;
+  const boxW = textW + boxPad * 2;
+  const boxH = 30;
+  const boxX = w - pad.right - boxW;
+  const boxY = pad.top - 2;
+  ctx.globalAlpha = 0.88;
+  ctx.fillStyle = surface;
+  drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 6);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = totalPnl >= 0 ? good : critical;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  ctx.fillText(bigLabel, w - pad.right - boxPad, boxY + boxH / 2 + 1);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 }
 
 const HIT_RADIUS_PX = 15; // generous hit target -- markers can sit only a few px apart
@@ -392,7 +496,7 @@ function formatPnl(pnl) {
   return pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
 }
 
-function buildTooltipContent(container, trade) {
+function buildTooltipContent(container, trade, balance) {
   container.replaceChildren();
 
   const title = document.createElement("div");
@@ -408,6 +512,7 @@ function buildTooltipContent(container, trade) {
     ["Side", trade.side],
     ["Entry price", fmt(trade.entry_price, 3)],
     ["Size", `$${fmt(trade.size_usd, 2)}`],
+    ["Balance", `$${fmt(balance, 2)}`],
   ];
   for (const [label, value] of rows) {
     const row = document.createElement("div");
@@ -452,7 +557,7 @@ function setupEquityTooltip() {
     }
 
     canvas.style.cursor = "pointer";
-    buildTooltipContent(tooltip, marker.trade);
+    buildTooltipContent(tooltip, marker.trade, marker.balance);
 
     const margin = 12;
     let left = event.clientX + margin;
@@ -472,6 +577,20 @@ function setupEquityTooltip() {
   canvas.addEventListener("mouseleave", () => {
     tooltip.classList.remove("visible");
     canvas.style.cursor = "default";
+  });
+}
+
+function setupEquityPager() {
+  document.getElementById("equity-prev").addEventListener("click", () => {
+    equityFollowLatest = false;
+    equityPageIndex -= 1;
+    drawEquityCurve(lastTradesForChart);
+  });
+  document.getElementById("equity-next").addEventListener("click", () => {
+    const totalPages = Math.max(1, Math.ceil(lastTradesForChart.length / EQUITY_PAGE_SIZE));
+    equityPageIndex = Math.min(equityPageIndex + 1, totalPages - 1);
+    equityFollowLatest = equityPageIndex >= totalPages - 1;
+    drawEquityCurve(lastTradesForChart);
   });
 }
 
@@ -509,6 +628,7 @@ async function refresh() {
 }
 
 setupEquityTooltip();
+setupEquityPager();
 refresh();
 setInterval(refresh, POLL_MS);
 setInterval(tickExpiryCountdown, 1000);
