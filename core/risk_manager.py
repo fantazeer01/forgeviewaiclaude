@@ -35,9 +35,13 @@ class RiskManager:
             try:
                 with open(self.state_file) as f:
                     data = json.load(f)
-                return int(data.get("trades_closed", 0))
+                loaded = int(data.get("trades_closed", 0))
+                logger.info(f"RiskManager: loaded trades_closed={loaded} from {self.state_file}")
+                return loaded
             except Exception as e:
                 logger.warning(f"RiskManager state load error, starting from 0: {e}")
+        else:
+            logger.info(f"RiskManager: no state file at {self.state_file}, starting trades_closed=0")
         return 0
 
     def _save_trades_closed(self):
