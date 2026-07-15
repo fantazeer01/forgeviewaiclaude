@@ -86,7 +86,11 @@ RISK_STATE_FILE = "data/trades/risk_state.json"
 STATS_TRACKER_FILE = "data/trades/stats_tracker.json"
 # Dashboard-facing snapshot (mirrors BOT_STATUS_FILE's role for bot_status.json).
 STATS_EXPORT_FILE = "data/market/stats.json"
-STATS_MIN_SAMPLES = 20
+# RAISED 20 -> 50 (2026-07-15): buckets like n=15/win_rate=20% were being
+# waved through as "not enough data" when 20% over 15 trades is already a
+# real signal the bucket is bad. 50 trades before the filter trusts a
+# bucket's win rate is a more conservative, reliable bar.
+STATS_MIN_SAMPLES = 50
 STATS_MIN_WIN_RATE = 0.52
 
 # ---- dashboard ----

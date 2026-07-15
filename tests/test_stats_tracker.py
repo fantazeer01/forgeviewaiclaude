@@ -12,28 +12,28 @@ def _tracker(tmp_path, trades_log_path=None):
 
 def test_should_trade_true_when_insufficient_samples(tmp_path):
     tracker = _tracker(tmp_path)
-    for _ in range(10):
-        tracker.record(0.46, 12, False)  # 0/10 win rate, but n < 20
+    for _ in range(30):
+        tracker.record(0.46, 12, False)  # 0/30 win rate, but n < 50
     assert tracker.should_trade(0.46, 12) is True
 
 
 def test_should_trade_true_when_win_rate_above_threshold(tmp_path):
     tracker = _tracker(tmp_path)
-    for _ in range(15):
+    for _ in range(30):
         tracker.record(0.46, 12, True)
-    for _ in range(5):
+    for _ in range(20):
         tracker.record(0.46, 12, False)
-    # 15/20 = 75% >= 0.52
+    # 30/50 = 60% >= 0.52
     assert tracker.should_trade(0.46, 12) is True
 
 
 def test_should_trade_false_when_win_rate_below_threshold_and_enough_samples(tmp_path):
     tracker = _tracker(tmp_path)
-    for _ in range(8):
+    for _ in range(20):
         tracker.record(0.46, 12, True)
-    for _ in range(12):
+    for _ in range(30):
         tracker.record(0.46, 12, False)
-    # 8/20 = 40% < 0.52
+    # 20/50 = 40% < 0.52
     assert tracker.should_trade(0.46, 12) is False
 
 
