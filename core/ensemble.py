@@ -53,9 +53,16 @@ class Ensemble:
         (seconds_remaining >= 240), buys whichever side (YES or NO) is
         priced below its 0.50 fair value, betting on the ~50/50 UP/DOWN
         base rate rather than any model signal. No trade in the 0.47-0.53
-        dead zone (edge too thin after slippage) or once price has moved
-        further than the 0.43/0.57 bounds (no longer "cheap", a real move
-        is likely already underway)."""
+        dead zone (edge too thin after slippage).
+
+        Bands narrowed 2026-07-15: a 204-trade breakdown found the outer
+        edges of the original 0.43-0.47/0.53-0.57 band (0.43-0.45 and
+        0.55-0.57) ran 38.6%/41.7% win rate -- a real negative edge vs.
+        breakeven (n=80, n=36), not noise -- while the inner 0.45-0.47/
+        0.53-0.55 sub-bands ran 51.6% (n=124, n=62), +5.7pp over breakeven.
+        The outer edges are dropped entirely rather than kept as "still
+        cheap enough": beyond 0.45/0.55 a real move is likely already
+        underway, not just noise around fair value."""
         yes_price = features.get("yes_price", 0.5)
         seconds_remaining = features.get("seconds_remaining", 0)
 
@@ -70,9 +77,9 @@ class Ensemble:
         if seconds_remaining < 240:
             return {**base, "decision": None, "reason": "too_late_for_fv"}
 
-        if 0.43 <= yes_price < 0.47:
+        if 0.45 <= yes_price < 0.47:
             return {**base, "decision": "YES", "reason": f"yes_price={yes_price:.3f} < 0.47"}
-        elif 0.53 < yes_price <= 0.57:
+        elif 0.53 < yes_price <= 0.55:
             return {**base, "decision": "NO", "reason": f"yes_price={yes_price:.3f} > 0.53"}
         else:
             return {**base, "decision": None, "reason": "price_near_fair_value"}

@@ -126,6 +126,33 @@ def test_fair_value_no_entry_when_price_too_far_from_fair_value():
     assert result["decision"] is None
 
 
+def test_fair_value_no_entry_in_dropped_outer_yes_band():
+    # 0.43-0.45 was dropped (2026-07-15): 38.6% win rate over n=80, a real
+    # negative edge vs. breakeven, not the "still cheap" zone it looks like.
+    ensemble = _fv_ensemble()
+    result = ensemble.decide({"yes_price": 0.44, "seconds_remaining": 250}, fear_greed=50, hour_utc=12)
+    assert result["decision"] is None
+
+
+def test_fair_value_no_entry_in_dropped_outer_no_band():
+    # 0.55-0.57 was dropped (2026-07-15): 41.7% win rate over n=36.
+    ensemble = _fv_ensemble()
+    result = ensemble.decide({"yes_price": 0.56, "seconds_remaining": 250}, fear_greed=50, hour_utc=12)
+    assert result["decision"] is None
+
+
+def test_fair_value_yes_boundary_at_045_still_fires():
+    ensemble = _fv_ensemble()
+    result = ensemble.decide({"yes_price": 0.45, "seconds_remaining": 250}, fear_greed=50, hour_utc=12)
+    assert result["decision"] == "YES"
+
+
+def test_fair_value_no_boundary_at_055_still_fires():
+    ensemble = _fv_ensemble()
+    result = ensemble.decide({"yes_price": 0.55, "seconds_remaining": 250}, fear_greed=50, hour_utc=12)
+    assert result["decision"] == "NO"
+
+
 def test_fair_value_never_consults_models():
     # ExplodingModel would raise AssertionError if predict_up() were called --
     # decide() completing without error across all branches proves the models
