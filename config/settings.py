@@ -79,6 +79,16 @@ BOT_STATUS_FILE = "data/market/bot_status.json"
 # (daily_pnl in particular must keep resetting fresh each UTC day).
 RISK_STATE_FILE = "data/trades/risk_state.json"
 
+# ---- stats-based trading filter ----
+# Persisted (price_bucket, hour_bucket) win-rate table -- StatsTracker's own
+# state file. Rebuilt once from PAPER_TRADES_LOG the first time it's missing,
+# then updated incrementally on every real trade close.
+STATS_TRACKER_FILE = "data/trades/stats_tracker.json"
+# Dashboard-facing snapshot (mirrors BOT_STATUS_FILE's role for bot_status.json).
+STATS_EXPORT_FILE = "data/market/stats.json"
+STATS_MIN_SAMPLES = 20
+STATS_MIN_WIN_RATE = 0.52
+
 # ---- dashboard ----
 DASHBOARD_PORT = 8080
 

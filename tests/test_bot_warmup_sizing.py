@@ -6,6 +6,8 @@ def _make_bot(monkeypatch, tmp_path):
     monkeypatch.setattr("bot.momentum_weights_path", lambda a: str(tmp_path / f"momentum_{a}.pkl"))
     monkeypatch.setattr("bot.volume_weights_path", lambda a: str(tmp_path / f"volume_{a}.pkl"))
     monkeypatch.setattr("bot.RISK_STATE_FILE", str(tmp_path / "risk_state.json"))
+    monkeypatch.setattr("bot.STATS_TRACKER_FILE", str(tmp_path / "stats_tracker.json"))
+    monkeypatch.setattr("bot.PAPER_TRADES_LOG", str(tmp_path / "no_history.jsonl"))
     return bot_module.Bot()
 
 

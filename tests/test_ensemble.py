@@ -153,6 +153,41 @@ def test_fair_value_no_boundary_at_055_still_fires():
     assert result["decision"] == "NO"
 
 
+class StubStatsTracker:
+    def __init__(self, allow):
+        self.allow = allow
+        self.calls = []
+
+    def should_trade(self, yes_price, hour_utc):
+        self.calls.append((yes_price, hour_utc))
+        return self.allow
+
+
+def test_fair_value_blocked_by_stats_filter():
+    tracker = StubStatsTracker(allow=False)
+    ensemble = Ensemble(ExplodingModel(), ExplodingModel(), asset="BTC", stats_tracker=tracker)
+    result = ensemble.decide({"yes_price": 0.45, "seconds_remaining": 250}, fear_greed=50, hour_utc=12)
+    assert result["decision"] is None
+    assert result["reason"] == "stats_filter_blocked"
+    assert tracker.calls == [(0.45, 12)]
+
+
+def test_fair_value_allowed_by_stats_filter():
+    tracker = StubStatsTracker(allow=True)
+    ensemble = Ensemble(ExplodingModel(), ExplodingModel(), asset="BTC", stats_tracker=tracker)
+    result = ensemble.decide({"yes_price": 0.45, "seconds_remaining": 250}, fear_greed=50, hour_utc=12)
+    assert result["decision"] == "YES"
+
+
+def test_fair_value_stats_filter_not_consulted_when_price_out_of_band():
+    # No candidate side was even selected -- the stats filter should never
+    # be asked about a trade that was never going to happen anyway.
+    tracker = StubStatsTracker(allow=True)
+    ensemble = Ensemble(ExplodingModel(), ExplodingModel(), asset="BTC", stats_tracker=tracker)
+    ensemble.decide({"yes_price": 0.50, "seconds_remaining": 250}, fear_greed=50, hour_utc=12)
+    assert tracker.calls == []
+
+
 def test_fair_value_never_consults_models():
     # ExplodingModel would raise AssertionError if predict_up() were called --
     # decide() completing without error across all branches proves the models

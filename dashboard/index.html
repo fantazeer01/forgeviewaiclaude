@@ -190,12 +190,24 @@
   </div>
 
   <div class="tiles" id="stat-tiles"></div>
+
+  <div class="panel">
+    <p class="panel-title">Stats Filter</p>
+    <table id="stats-filter-table">
+      <thead>
+        <tr><th>Price bucket</th><th>Hour (UTC)</th><th>Trades</th><th>Win rate</th><th>Trading?</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
 const STATUS_URL = "/data/market/bot_status.json";
 const TRADES_URL = "/data/trades/paper_trades.jsonl";
+const STATS_URL = "/data/market/stats.json";
 const POLL_MS = 3000;
+const STATS_POLL_MS = 30000;
 
 function fmt(n, digits) {
   if (n === null || n === undefined || Number.isNaN(n)) return "n/a";
@@ -304,6 +316,37 @@ function modelExamplesTotal(modelExamples) {
 function modelExamplesBreakdown(modelExamples) {
   if (!modelExamples || typeof modelExamples !== "object") return "";
   return Object.entries(modelExamples).map(([asset, n]) => `${asset}: ${n}`).join(" · ");
+}
+
+function renderStatsFilter(stats) {
+  const tbody = document.querySelector("#stats-filter-table tbody");
+  const buckets = (stats && stats.buckets) || [];
+  if (buckets.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">No stats yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = buckets.map(b => {
+    const hourEnd = (b.hour_bucket + 6) % 24;
+    const hourLabel = `${String(b.hour_bucket).padStart(2, "0")}-${String(hourEnd).padStart(2, "0")}`;
+    const wrLabel = b.win_rate === null || b.win_rate === undefined ? "n/a" : fmt(b.win_rate * 100, 1) + "%";
+    const cls = b.trading ? "delta-good" : "delta-bad";
+    return `<tr>
+      <td>${fmt(b.price_bucket, 2)}</td>
+      <td>${hourLabel}</td>
+      <td>${b.trades}</td>
+      <td>${wrLabel}</td>
+      <td class="${cls}">${b.trading ? "Yes" : "No"}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function refreshStats() {
+  try {
+    const stats = await fetchJson(STATS_URL);
+    renderStatsFilter(stats);
+  } catch (e) {
+    // leave the table as-is -- bot.py hasn't written stats.json yet
+  }
 }
 
 // Trade markers from the most recent drawEquityCurve() call, in canvas
@@ -630,7 +673,9 @@ async function refresh() {
 setupEquityTooltip();
 setupEquityPager();
 refresh();
+refreshStats();
 setInterval(refresh, POLL_MS);
+setInterval(refreshStats, STATS_POLL_MS);
 setInterval(tickExpiryCountdown, 1000);
 </script>
 </body>

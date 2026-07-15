@@ -10,13 +10,14 @@ import time
 from config.settings import (
     ASSETS, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC, BOT_STATUS_FILE,
     momentum_weights_path, volume_weights_path, WARMUP_TRADE_SIZE_USD, FAIR_VALUE_TRADE_SIZE_USD,
-    KELLY_WARMUP_TRADES, RISK_STATE_FILE,
+    KELLY_WARMUP_TRADES, RISK_STATE_FILE, STATS_EXPORT_FILE, STATS_TRACKER_FILE, PAPER_TRADES_LOG,
 )
 from core.market_context import MarketContext
 from core.feature_engine import build_features
 from core.ensemble import Ensemble
 from core.risk_manager import RiskManager
 from core.executor import Executor
+from core.stats_tracker import StatsTracker
 from models.momentum_model import MomentumModel
 from models.volume_model import VolumeModel
 
@@ -38,7 +39,13 @@ class Bot:
         # trains BTC's weights, never SOL's or ETH's.
         self.momentum_models = {a: MomentumModel(weights_file=momentum_weights_path(a)) for a in ASSETS}
         self.volume_models = {a: VolumeModel(weights_file=volume_weights_path(a)) for a in ASSETS}
-        self.ensembles = {a: Ensemble(self.momentum_models[a], self.volume_models[a], asset=a) for a in ASSETS}
+        # Shared across assets -- buckets are keyed by (yes_price, hour_utc)
+        # only, not asset, so all three ensembles consult the same table.
+        self.stats_tracker = StatsTracker(state_file=STATS_TRACKER_FILE, trades_log_path=PAPER_TRADES_LOG)
+        self.ensembles = {
+            a: Ensemble(self.momentum_models[a], self.volume_models[a], asset=a, stats_tracker=self.stats_tracker)
+            for a in ASSETS
+        }
         self.risk_manager = RiskManager(state_file=RISK_STATE_FILE)  # shared: bankroll/exposure limits are portfolio-wide
         self.executors = {
             a: Executor(self.momentum_models[a], self.volume_models[a], self.risk_manager) for a in ASSETS
@@ -76,6 +83,7 @@ class Bot:
         self._check_shadow_resolutions()
         self._maybe_print_summary()
         self._export_status()
+        self._export_stats()
 
     def _maybe_trade(self, asset, snapshot, features, result):
         market_id = snapshot.get("market_id")
@@ -120,13 +128,21 @@ class Bot:
                 continue
             outcome_up = outcome == "UP"
             executor = self.executors[info["asset"]]
-            position_size_usd = executor.open_positions.get(info["position_id"], {}).get("size_usd")
+            position_before_close = executor.open_positions.get(info["position_id"], {})
+            position_size_usd = position_before_close.get("size_usd")
+            entry_price = position_before_close.get("entry_price")
+            side = position_before_close.get("side")
             pnl = executor.close_position(info["position_id"], outcome_up)
+            won = (side == "YES" and outcome_up) or (side == "NO" and not outcome_up)
             if pnl > 0:
                 self.day_wins += 1
             else:
                 self.day_losses += 1
             logger.info(f"CLOSE [{info['asset']}] outcome={outcome} pnl=${pnl:+.2f}")
+            if entry_price is not None and side is not None:
+                yes_price_at_entry = entry_price if side == "YES" else round(1 - entry_price, 10)
+                hour_utc_now = datetime.datetime.now(datetime.timezone.utc).hour
+                self.stats_tracker.record(yes_price_at_entry, hour_utc_now, won)
             kelly_active = self.risk_manager.trades_closed >= KELLY_WARMUP_TRADES
             size_str = f"${position_size_usd:.2f}" if position_size_usd is not None else "n/a"
             logger.info(
@@ -228,6 +244,17 @@ class Bot:
             os.replace(tmp, BOT_STATUS_FILE)
         except Exception as e:
             logger.error(f"status export error: {e}")
+
+    def _export_stats(self):
+        try:
+            data = self.stats_tracker.get_stats()
+            os.makedirs(os.path.dirname(STATS_EXPORT_FILE), exist_ok=True)
+            tmp = STATS_EXPORT_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp, STATS_EXPORT_FILE)
+        except Exception as e:
+            logger.error(f"stats export error: {e}")
 
 
 if __name__ == "__main__":
