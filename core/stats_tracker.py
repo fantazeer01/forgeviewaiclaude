@@ -10,7 +10,10 @@ import json
 import logging
 import os
 
-from config.settings import PAPER_TRADES_LOG, STATS_TRACKER_FILE, STATS_MIN_SAMPLES, STATS_MIN_WIN_RATE
+from config.settings import (
+    PAPER_TRADES_LOG, STATS_TRACKER_FILE, STATS_MIN_SAMPLES, STATS_MIN_WIN_RATE,
+    STATS_EARLY_BLOCK_MIN_SAMPLES, STATS_EARLY_BLOCK_MAX_WIN_RATE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +99,13 @@ class StatsTracker:
         price_bucket, hour_bucket = bucket_key(yes_price, hour_utc)
         key = f"{price_bucket}_{hour_bucket}"
         entry = self.buckets.get(key)
-        if entry is None or entry["total"] < STATS_MIN_SAMPLES:
-            return True
+        if entry is None or entry["total"] < STATS_EARLY_BLOCK_MIN_SAMPLES:
+            return True  # no data at all yet
         win_rate = entry["wins"] / entry["total"]
+        if win_rate < STATS_EARLY_BLOCK_MAX_WIN_RATE:
+            return False  # already a clear losing signal, don't wait for n=50
+        if entry["total"] < STATS_MIN_SAMPLES:
+            return True  # not yet a clear loser -- keep accumulating toward n=50
         return win_rate >= STATS_MIN_WIN_RATE
 
     def get_stats(self) -> dict:

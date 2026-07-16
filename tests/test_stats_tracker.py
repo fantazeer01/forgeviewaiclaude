@@ -11,9 +11,34 @@ def _tracker(tmp_path, trades_log_path=None):
 
 
 def test_should_trade_true_when_insufficient_samples(tmp_path):
+    # n < 10 (STATS_EARLY_BLOCK_MIN_SAMPLES) -- no data at all yet, trade
+    # regardless of win rate to start accumulating.
     tracker = _tracker(tmp_path)
-    for _ in range(30):
-        tracker.record(0.46, 12, False)  # 0/30 win rate, but n < 50
+    for _ in range(5):
+        tracker.record(0.46, 12, False)  # 0/5 win rate, but n < 10
+    assert tracker.should_trade(0.46, 12) is True
+
+
+def test_should_trade_false_early_block_when_win_rate_below_045_at_n10(tmp_path):
+    # n >= 10 with win_rate < 0.45 -- blocked immediately, doesn't wait for n=50.
+    tracker = _tracker(tmp_path)
+    for _ in range(4):
+        tracker.record(0.46, 12, True)
+    for _ in range(6):
+        tracker.record(0.46, 12, False)
+    # 4/10 = 40% < 0.45
+    assert tracker.should_trade(0.46, 12) is False
+
+
+def test_should_trade_true_when_win_rate_above_045_but_below_50_samples(tmp_path):
+    # Not early-blocked (win_rate >= 0.45) and not yet at n=50 -- keeps
+    # accumulating normally, same as the old "insufficient data" behavior.
+    tracker = _tracker(tmp_path)
+    for _ in range(10):
+        tracker.record(0.46, 12, True)
+    for _ in range(10):
+        tracker.record(0.46, 12, False)
+    # 10/20 = 50% -- above the 0.45 early-block bar, below n=50
     assert tracker.should_trade(0.46, 12) is True
 
 
@@ -28,12 +53,14 @@ def test_should_trade_true_when_win_rate_above_threshold(tmp_path):
 
 
 def test_should_trade_false_when_win_rate_below_threshold_and_enough_samples(tmp_path):
+    # Above the 0.45 early-block bar (so this exercises the n>=50 final
+    # check specifically, not the early block) but below the 0.52 bar.
     tracker = _tracker(tmp_path)
-    for _ in range(20):
+    for _ in range(24):
         tracker.record(0.46, 12, True)
-    for _ in range(30):
+    for _ in range(26):
         tracker.record(0.46, 12, False)
-    # 20/50 = 40% < 0.52
+    # 24/50 = 48% -- >= 0.45 but < 0.52
     assert tracker.should_trade(0.46, 12) is False
 
 

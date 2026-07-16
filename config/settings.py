@@ -92,6 +92,13 @@ STATS_EXPORT_FILE = "data/market/stats.json"
 # bucket's win rate is a more conservative, reliable bar.
 STATS_MIN_SAMPLES = 50
 STATS_MIN_WIN_RATE = 0.52
+# Early block (2026-07-16): a bucket with win_rate < 0.45 at n >= 10 is
+# already a real losing signal -- don't wait for n=50 to veto it. Buckets
+# that clear this bar keep accumulating normally (should_trade() still
+# returns True) until they hit STATS_MIN_SAMPLES and get judged by the
+# full STATS_MIN_WIN_RATE bar above.
+STATS_EARLY_BLOCK_MIN_SAMPLES = 10
+STATS_EARLY_BLOCK_MAX_WIN_RATE = 0.45
 
 # ---- dashboard ----
 DASHBOARD_PORT = 8080
