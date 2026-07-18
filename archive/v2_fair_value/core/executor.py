@@ -1,6 +1,6 @@
 """Paper-mode order execution: opens/closes positions, logs to
-data/trades/paper_trades_v3.jsonl, and feeds resolved outcomes back into the
-online model for training."""
+data/trades/paper_trades.jsonl, and feeds resolved outcomes back into the
+online models for training."""
 
 import datetime
 import json
@@ -8,19 +8,20 @@ import logging
 import os
 import uuid
 
-from config.settings import PAPER_MODE, PAPER_TRADES_LOG, TAKER_FEE_RATE
+from config.settings import PAPER_MODE, PAPER_TRADES_LOG
 
 logger = logging.getLogger(__name__)
 
 
 class Executor:
-    def __init__(self, model, risk_manager, paper_mode: bool = PAPER_MODE):
+    def __init__(self, momentum_model, volume_model, risk_manager, paper_mode: bool = PAPER_MODE):
         self.paper_mode = paper_mode
-        self.model = model
+        self.momentum_model = momentum_model
+        self.volume_model = volume_model
         self.risk_manager = risk_manager
         self.open_positions = {}
 
-    def open_position(self, asset: str, timeframe: str, side: str, entry_price: float, size_usd: float,
+    def open_position(self, asset: str, side: str, entry_price: float, size_usd: float,
                        features: dict, market_id: str) -> str:
         if not self.paper_mode:
             raise NotImplementedError("live trading is not implemented -- PAPER_MODE must stay True")
@@ -28,7 +29,6 @@ class Executor:
         self.open_positions[position_id] = {
             "position_id": position_id,
             "asset": asset,
-            "timeframe": timeframe,
             "side": side,
             "entry_price": entry_price,
             "size_usd": size_usd,
@@ -36,7 +36,7 @@ class Executor:
             "market_id": market_id,
             "opened_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
-        self.risk_manager.register_open(timeframe)
+        self.risk_manager.register_open()
         return position_id
 
     def close_position(self, position_id: str, outcome_up: bool) -> float:
@@ -46,26 +46,18 @@ class Executor:
         won = (position["side"] == "YES" and outcome_up) or (position["side"] == "NO" and not outcome_up)
         pnl = self._settle_pnl(position, won)
         self._log_trade(position, outcome_up, won, pnl)
-        self.risk_manager.register_close(position["timeframe"], pnl)
-        self.model.learn(position["features"], outcome_up)
+        self.risk_manager.register_close(pnl)
+        self.momentum_model.learn(position["features"], outcome_up)
+        self.volume_model.learn(position["features"], outcome_up)
         return pnl
 
     def _settle_pnl(self, position: dict, won: bool) -> float:
-        """shares = size_usd / entry_price
-        fee = shares * TAKER_FEE_RATE * entry_price * (1 - entry_price)
-        pnl_win  = shares * (1 - entry_price) - fee
-        pnl_loss = -size_usd - fee
-        TAKER_FEE_RATE is 0.0 for now -- the formula is wired in for when
-        it isn't."""
-        entry_price = position["entry_price"]
+        contract_price = position["entry_price"]
         size = position["size_usd"]
-        if not entry_price or entry_price <= 0:
+        if not contract_price or contract_price <= 0:
             return 0.0
-        shares = size / entry_price
-        fee = shares * TAKER_FEE_RATE * entry_price * (1 - entry_price)
-        if won:
-            return round(shares * (1 - entry_price) - fee, 2)
-        return round(-size - fee, 2)
+        shares = size / contract_price
+        return round(shares * (1 - contract_price), 2) if won else round(-size, 2)
 
     def _log_trade(self, position: dict, outcome_up: bool, won: bool, pnl: float):
         record = {

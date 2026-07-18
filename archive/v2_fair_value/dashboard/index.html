@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Quant Bot v3 Dashboard</title>
+<title>Quant Bot Dashboard</title>
 <style>
   .viz-root {
     --surface-1:      #fcfcfb;
@@ -13,11 +13,11 @@
     --gridline:       #e1e0d9;
     --baseline:       #c3c2b7;
     --border:         rgba(11,11,11,0.10);
-    --series-1:       #2a78d6;
+    --series-1:       #2a78d6; /* BTC */
+    --series-2:       #1baf7a; /* ETH */
     --good:           #0ca30c;
     --critical:       #d03b3b;
     --good-text:      #006300;
-    --warn-text:      #9a6b00;
   }
   @media (prefers-color-scheme: dark) {
     .viz-root {
@@ -30,23 +30,37 @@
       --baseline:       #383835;
       --border:         rgba(255,255,255,0.10);
       --series-1:       #3987e5;
+      --series-2:       #199e70;
       --good:           #0ca30c;
-      --critical:       #e66767;
+      --critical:       #d03b3b;
       --good-text:      #0ca30c;
-      --warn-text:      #e0ac4a;
     }
   }
   :root[data-theme="dark"] .viz-root {
-    --surface-1: #1a1a19; --page-plane: #0d0d0d; --text-primary: #ffffff;
-    --text-secondary: #c3c2b7; --text-muted: #898781; --gridline: #2c2c2a;
-    --baseline: #383835; --border: rgba(255,255,255,0.10); --series-1: #3987e5;
-    --good-text: #0ca30c; --critical: #e66767; --warn-text: #e0ac4a;
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #199e70;
+    --good-text:      #0ca30c;
   }
   :root[data-theme="light"] .viz-root {
-    --surface-1: #fcfcfb; --page-plane: #f9f9f7; --text-primary: #0b0b0b;
-    --text-secondary: #52514e; --text-muted: #898781; --gridline: #e1e0d9;
-    --baseline: #c3c2b7; --border: rgba(11,11,11,0.10); --series-1: #2a78d6;
-    --good-text: #006300; --critical: #d03b3b; --warn-text: #9a6b00;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --series-2:       #1baf7a;
+    --good-text:      #006300;
   }
 
   * { box-sizing: border-box; }
@@ -60,27 +74,32 @@
   h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
   .subtitle { color: var(--text-secondary); font-size: 13px; margin: 0 0 20px; }
 
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
   .tile-label { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
   .tile-value { font-size: 22px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .tile-sub { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
   .delta-good { color: var(--good-text); }
   .delta-bad { color: var(--critical); }
-  .delta-warn { color: var(--warn-text); }
 
-  .panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
   .panel-title { font-size: 13px; font-weight: 600; margin: 0 0 12px; }
-
-  .market-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .market-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
-  .market-card .mc-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
-  .market-card .mc-pup { font-size: 26px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
-  .market-card .mc-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-  .market-card .mc-decision { display: inline-block; margin-top: 8px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; }
-  .mc-decision.yes { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good-text); }
-  .mc-decision.no { background: color-mix(in srgb, var(--critical) 18%, transparent); color: var(--critical); }
-  .mc-decision.hold { background: var(--gridline); color: var(--text-muted); }
 
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
@@ -92,33 +111,65 @@
   @keyframes expires-blink { 50% { opacity: 0.25; } }
 
   #equity-canvas { width: 100%; height: 180px; display: block; cursor: default; }
-  .equity-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-  .equity-pager.hidden { display: none; }
-  .equity-pager button { background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; font-family: inherit; color: var(--text-primary); cursor: pointer; }
-  .equity-pager button:hover:not(:disabled) { background: var(--gridline); }
-  .equity-pager button:disabled { opacity: 0.4; cursor: default; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 10px; height: 2px; border-radius: 2px; }
 
   .chart-tooltip {
-    position: fixed; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-    z-index: 100; opacity: 0; transform: translateY(2px); transition: opacity 0.08s ease-out; min-width: 150px;
+    position: fixed;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    z-index: 100;
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 0.08s ease-out;
+    min-width: 150px;
   }
   .chart-tooltip.visible { opacity: 1; }
   .chart-tooltip .tt-title { font-weight: 600; margin-bottom: 4px; }
   .chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; padding: 1px 0; }
   .chart-tooltip .tt-label { color: var(--text-muted); }
   .chart-tooltip .tt-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .equity-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .equity-pager.hidden { display: none; }
+  .equity-pager button {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .equity-pager button:hover:not(:disabled) { background: var(--gridline); }
+  .equity-pager button:disabled { opacity: 0.4; cursor: default; }
 </style>
 </head>
 <body>
 <div class="viz-root">
-  <h1>Quant Bot v3 &mdash; live dashboard</h1>
+  <h1>Quant Bot &mdash; live dashboard</h1>
   <p class="subtitle" id="last-updated">Loading&hellip;</p>
 
-  <div class="market-grid" id="market-grid"></div>
+  <div class="tiles" id="score-tiles"></div>
 
   <div class="panel">
-    <p class="panel-title">Equity curve</p>
+    <p class="panel-title">Equity curve (today)</p>
     <canvas id="equity-canvas"></canvas>
     <div class="equity-pager hidden" id="equity-pager">
       <button id="equity-prev">&larr; Назад</button>
@@ -132,44 +183,49 @@
     <p class="panel-title">Open positions</p>
     <table id="positions-table">
       <thead>
-        <tr><th>Market</th><th>Side</th><th>Entry</th><th>Size</th><th>Unrealized P&amp;L</th><th>Expires in</th></tr>
+        <tr><th>Asset</th><th>Side</th><th>Entry</th><th>Size</th><th>Unrealized P&amp;L</th><th>Expires in</th></tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
 
   <div class="tiles" id="stat-tiles"></div>
+
+  <div class="panel">
+    <p class="panel-title">Stats Filter</p>
+    <table id="stats-filter-table">
+      <thead>
+        <tr><th>Price bucket</th><th>Hour (UTC)</th><th>Trades</th><th>Win rate</th><th>Trading?</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
 const STATUS_URL = "/data/market/bot_status.json";
-const TRADES_URL = "/data/trades/paper_trades_v3.jsonl";
+const TRADES_URL = "/data/trades/paper_trades.jsonl";
+const STATS_URL = "/data/market/stats.json";
 const POLL_MS = 3000;
-const TIMEFRAMES = { "5m": 300, "15m": 900 };
-const ASSETS = ["BTC", "ETH", "SOL"];
+const STATS_POLL_MS = 30000;
 
 function fmt(n, digits) {
   if (n === null || n === undefined || Number.isNaN(n)) return "n/a";
   return Number(n).toFixed(digits);
 }
 
-function renderMarketGrid(status) {
-  const el = document.getElementById("market-grid");
-  const scores = status.scores || {};
-  el.innerHTML = ["5m", "15m"].flatMap(tf => ASSETS.map(asset => {
-    const key = `${asset}-${tf}`;
-    const s = scores[key] || {};
-    const decision = s.decision || "HOLD";
-    const decisionCls = decision === "YES" ? "yes" : decision === "NO" ? "no" : "hold";
-    const pUp = s.p_up;
-    const pCls = pUp === null || pUp === undefined ? "" : (pUp > 0.55 ? "delta-good" : pUp < 0.45 ? "delta-bad" : "");
-    return `<div class="market-card">
-      <div class="mc-title">${asset}-${tf}</div>
-      <div class="mc-pup ${pCls}">${pUp === null || pUp === undefined ? "n/a" : fmt(pUp, 2)}</div>
-      <div class="mc-sub">yes=${fmt(s.yes_price, 2)} spot=${fmt(s.spot_price, 0)}</div>
-      <span class="mc-decision ${decisionCls}">${decision}</span>
+function renderScoreTiles(status) {
+  const el = document.getElementById("score-tiles");
+  const assets = Object.keys(status.scores || {});
+  el.innerHTML = assets.map(asset => {
+    const s = status.scores[asset];
+    const decision = s.decision ? s.decision : "—";
+    return `<div class="tile">
+      <div class="tile-label">${asset}</div>
+      <div class="tile-value">${fmt(s.final_score, 2)}</div>
+      <div class="tile-sub">spot=${fmt(s.spot_price, 0)} yes=${fmt(s.yes_price, 2)} decision=${decision}</div>
     </div>`;
-  })).join("");
+  }).join("") || `<div class="tile"><div class="tile-label">Score</div><div class="tile-sub">waiting for data…</div></div>`;
 }
 
 function renderPositions(status) {
@@ -180,27 +236,29 @@ function renderPositions(status) {
     return;
   }
   tbody.innerHTML = positions.map(p => {
-    const scoreKey = `${p.asset}-${p.timeframe}`;
-    const spot = ((status.scores || {})[scoreKey] || {}).yes_price;
+    const spot = (status.scores[p.asset] || {}).yes_price;
     const unrealized = spot !== undefined && spot !== null
       ? (p.side === "YES" ? (spot - p.entry_price) : ((1 - spot) - p.entry_price)) * (p.size_usd / p.entry_price)
       : null;
     const cls = unrealized === null ? "" : (unrealized >= 0 ? "delta-good" : "delta-bad");
-    return `<tr data-timeframe="${p.timeframe}">
-      <td>${p.asset}-${p.timeframe}</td>
+    return `<tr>
+      <td>${p.asset}</td>
       <td>${p.side}</td>
       <td>${fmt(p.entry_price, 3)}</td>
       <td>$${fmt(p.size_usd, 2)}</td>
       <td class="${cls}">${unrealized === null ? "n/a" : (unrealized >= 0 ? "+" : "") + "$" + fmt(unrealized, 2)}</td>
-      <td class="expires-cell" data-timeframe="${p.timeframe}">--:--</td>
+      <td class="expires-cell">--:--</td>
     </tr>`;
   }).join("");
   tickExpiryCountdown();
 }
 
-function secondsUntilWindowClose(windowSec) {
+// 5-min Polymarket windows all align to the same UTC 300s grid, so every
+// open position's window closes at the same boundary -- computed purely
+// client-side from wall-clock time, no per-position field needed.
+function secondsUntilWindowClose() {
   const nowSec = Date.now() / 1000;
-  return windowSec - (nowSec % windowSec);
+  return 300 - (nowSec % 300);
 }
 
 function formatCountdown(totalSeconds) {
@@ -211,11 +269,10 @@ function formatCountdown(totalSeconds) {
 }
 
 function tickExpiryCountdown() {
+  const remaining = secondsUntilWindowClose();
+  const text = formatCountdown(remaining);
   document.querySelectorAll(".expires-cell").forEach(cell => {
-    const tf = cell.getAttribute("data-timeframe");
-    const windowSec = TIMEFRAMES[tf] || 300;
-    const remaining = secondsUntilWindowClose(windowSec);
-    cell.textContent = formatCountdown(remaining);
+    cell.textContent = text;
     cell.classList.toggle("expires-warn", remaining < 60);
     cell.classList.toggle("expires-blink", remaining < 30);
   });
@@ -229,11 +286,6 @@ function renderStatTiles(status, trades) {
   const winRate = total > 0 ? (wins / total * 100) : null;
   const avgPnl = trades.length > 0 ? trades.reduce((a, t) => a + (t.pnl || 0), 0) / trades.length : null;
   const pnlCls = (status.day_pnl || 0) >= 0 ? "delta-good" : "delta-bad";
-  const streak = status.loss_streak || 0;
-  const paused = !!status.paused;
-  const examples = status.model_examples || {};
-  const examplesStr = Object.entries(examples).map(([k, n]) => `${k}=${n}`).join(" · ");
-
   el.innerHTML = `
     <div class="tile">
       <div class="tile-label">Today P&amp;L</div>
@@ -249,19 +301,63 @@ function renderStatTiles(status, trades) {
       <div class="tile-value">${avgPnl === null ? "n/a" : (avgPnl >= 0 ? "+" : "") + "$" + fmt(avgPnl, 2)}</div>
     </div>
     <div class="tile">
-      <div class="tile-label">Loss streak</div>
-      <div class="tile-value ${streak > 0 ? 'delta-warn' : ''}">${streak}</div>
-      <div class="tile-sub">${paused ? "PAUSED" : "active"}</div>
-    </div>
-    <div class="tile">
       <div class="tile-label">Model examples</div>
-      <div class="tile-sub">${examplesStr}</div>
+      <div class="tile-value">${modelExamplesTotal(status.model_examples)}</div>
+      <div class="tile-sub">${modelExamplesBreakdown(status.model_examples)}</div>
     </div>
   `;
 }
 
-// ---- equity curve (canvas): markers per trade, hover tooltip, 50-trade pagination, big total annotation ----
+function modelExamplesTotal(modelExamples) {
+  if (!modelExamples || typeof modelExamples !== "object") return modelExamples ?? "n/a";
+  return Object.values(modelExamples).reduce((a, b) => a + b, 0);
+}
+
+function modelExamplesBreakdown(modelExamples) {
+  if (!modelExamples || typeof modelExamples !== "object") return "";
+  return Object.entries(modelExamples).map(([asset, n]) => `${asset}: ${n}`).join(" · ");
+}
+
+function renderStatsFilter(stats) {
+  const tbody = document.querySelector("#stats-filter-table tbody");
+  const buckets = (stats && stats.buckets) || [];
+  if (buckets.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">No stats yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = buckets.map(b => {
+    const hourEnd = (b.hour_bucket + 6) % 24;
+    const hourLabel = `${String(b.hour_bucket).padStart(2, "0")}-${String(hourEnd).padStart(2, "0")}`;
+    const wrLabel = b.win_rate === null || b.win_rate === undefined ? "n/a" : fmt(b.win_rate * 100, 1) + "%";
+    const cls = b.trading ? "delta-good" : "delta-bad";
+    return `<tr>
+      <td>${fmt(b.price_bucket, 2)}</td>
+      <td>${hourLabel}</td>
+      <td>${b.trades}</td>
+      <td>${wrLabel}</td>
+      <td class="${cls}">${b.trading ? "Yes" : "No"}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function refreshStats() {
+  try {
+    const stats = await fetchJson(STATS_URL);
+    renderStatsFilter(stats);
+  } catch (e) {
+    // leave the table as-is -- bot.py hasn't written stats.json yet
+  }
+}
+
+// Trade markers from the most recent drawEquityCurve() call, in canvas
+// CSS-pixel space -- rebuilt on every redraw, read by the hover handler
+// for nearest-point hit testing.
 let equityMarkers = [];
+
+// Pagination: the chart windows into the full (always-continuous)
+// cumulative series 50 trades at a time. equityPageIndex is an absolute
+// page number (page 0 = oldest 50); equityFollowLatest keeps it pinned to
+// the newest page as new trades arrive, until the user clicks "Назад".
 const EQUITY_PAGE_SIZE = 50;
 let equityPageIndex = 0;
 let equityFollowLatest = true;
@@ -280,17 +376,17 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
 function updateEquityPagerUI(totalTrades) {
   const pager = document.getElementById("equity-pager");
   const totalPages = Math.max(1, Math.ceil(totalTrades / EQUITY_PAGE_SIZE));
-  if (totalTrades <= EQUITY_PAGE_SIZE) { pager.classList.add("hidden"); return; }
+  if (totalTrades <= EQUITY_PAGE_SIZE) {
+    pager.classList.add("hidden");
+    return;
+  }
   pager.classList.remove("hidden");
   const startIdx = equityPageIndex * EQUITY_PAGE_SIZE;
   const endIdx = Math.min(startIdx + EQUITY_PAGE_SIZE, totalTrades);
-  document.getElementById("equity-page-label").textContent = `${startIdx + 1}–${endIdx} of ${totalTrades}`;
+  document.getElementById("equity-page-label").textContent =
+    `${startIdx + 1}–${endIdx} of ${totalTrades}`;
   document.getElementById("equity-prev").disabled = equityPageIndex <= 0;
   document.getElementById("equity-next").disabled = equityPageIndex >= totalPages - 1;
-}
-
-function formatPnl(pnl) {
-  return pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
 }
 
 function drawEquityCurve(trades) {
@@ -306,6 +402,7 @@ function drawEquityCurve(trades) {
   const ctx = canvas.getContext("2d");
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
+
   equityMarkers = [];
 
   const styles = getComputedStyle(document.querySelector(".viz-root"));
@@ -328,6 +425,8 @@ function drawEquityCurve(trades) {
     return;
   }
 
+  // full continuous cumulative series (this is the true "balance" at each
+  // trade, independent of which 50-trade page is currently in view)
   let runningCum = 0;
   const fullSeries = trades.map(t => { runningCum += (t.pnl || 0); return { cum: runningCum, trade: t }; });
   const totalPnl = fullSeries[fullSeries.length - 1].cum;
@@ -342,111 +441,193 @@ function drawEquityCurve(trades) {
   const baselineCum = startIdx > 0 ? fullSeries[startIdx - 1].cum : 0;
 
   const points = [{ x: 0, y: baselineCum }];
-  for (let i = startIdx; i < endIdx; i++) points.push({ x: points.length, y: fullSeries[i].cum, trade: fullSeries[i].trade });
+  for (let i = startIdx; i < endIdx; i++) {
+    points.push({ x: points.length, y: fullSeries[i].cum, trade: fullSeries[i].trade });
+  }
 
   const ys = points.map(p => p.y);
   const minY = Math.min(0, ...ys);
   const maxY = Math.max(0, ...ys);
   const range = (maxY - minY) || 1;
+
   const xScale = i => pad.left + (i / (points.length - 1)) * plotW;
   const yScale = v => pad.top + plotH - ((v - minY) / range) * plotH;
 
-  ctx.strokeStyle = grid; ctx.lineWidth = 1; ctx.beginPath();
-  const zeroY = yScale(0);
-  ctx.moveTo(pad.left, zeroY); ctx.lineTo(pad.left + plotW, zeroY); ctx.stroke();
-
-  ctx.strokeStyle = series; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  // zero baseline
+  ctx.strokeStyle = grid;
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  points.forEach((p, i) => { const x = xScale(i), y = yScale(p.y); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  const zeroY = yScale(0);
+  ctx.moveTo(pad.left, zeroY);
+  ctx.lineTo(pad.left + plotW, zeroY);
   ctx.stroke();
 
+  // equity line
+  ctx.strokeStyle = series;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
   points.forEach((p, i) => {
-    if (!p.trade) return;
+    const x = xScale(i), y = yScale(p.y);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // one marker per closed trade: green if won, red if lost, with a thin
+  // surface-color ring so it reads as a distinct mark on top of the line
+  points.forEach((p, i) => {
+    if (!p.trade) return; // skip the synthetic page-baseline point
     const x = xScale(i), y = yScale(p.y);
     const color = p.trade.won ? good : critical;
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = surface; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = surface;
+    ctx.stroke();
     equityMarkers.push({ x, y, trade: p.trade, balance: p.y });
   });
 
+  // rounded end marker (equity line's own endpoint, not a trade outcome)
   const last = points[points.length - 1];
-  ctx.fillStyle = series; ctx.beginPath();
-  ctx.arc(xScale(points.length - 1), yScale(last.y), 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = series;
+  ctx.beginPath();
+  ctx.arc(xScale(points.length - 1), yScale(last.y), 2, 0, Math.PI * 2);
+  ctx.fill();
 
+  // big current-total annotation, top-right -- always the true overall
+  // cumulative PnL (not just the visible page), refreshed every tick
   const bigLabel = formatPnl(totalPnl);
   ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', sans-serif";
   const textW = ctx.measureText(bigLabel).width;
-  const boxPad = 7, boxW = textW + boxPad * 2, boxH = 30;
-  const boxX = w - pad.right - boxW, boxY = pad.top - 2;
-  ctx.globalAlpha = 0.88; ctx.fillStyle = surface;
-  drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 6); ctx.fill();
-  ctx.globalAlpha = 1; ctx.fillStyle = totalPnl >= 0 ? good : critical;
-  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  const boxPad = 7;
+  const boxW = textW + boxPad * 2;
+  const boxH = 30;
+  const boxX = w - pad.right - boxW;
+  const boxY = pad.top - 2;
+  ctx.globalAlpha = 0.88;
+  ctx.fillStyle = surface;
+  drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 6);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = totalPnl >= 0 ? good : critical;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
   ctx.fillText(bigLabel, w - pad.right - boxPad, boxY + boxH / 2 + 1);
-  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 }
 
-const HIT_RADIUS_PX = 15;
-function findNearestMarker(x, y) {
-  let nearest = null, nearestDist = Infinity;
+const HIT_RADIUS_PX = 15; // generous hit target -- markers can sit only a few px apart
+
+function findNearestMarker(canvasX, canvasY) {
+  let nearest = null;
+  let nearestDist = Infinity;
   for (const m of equityMarkers) {
-    const dist = Math.hypot(m.x - x, m.y - y);
-    if (dist < nearestDist) { nearestDist = dist; nearest = m; }
+    const dist = Math.hypot(m.x - canvasX, m.y - canvasY);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearest = m;
+    }
   }
   return nearestDist <= HIT_RADIUS_PX ? nearest : null;
 }
 
+function formatPnl(pnl) {
+  return pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
+}
+
 function buildTooltipContent(container, trade, balance) {
   container.replaceChildren();
+
   const title = document.createElement("div");
   title.className = "tt-title";
   const closedAt = new Date(trade.closed_at);
-  title.textContent = `${String(closedAt.getUTCHours()).padStart(2,"0")}:${String(closedAt.getUTCMinutes()).padStart(2,"0")} UTC`;
+  const hh = String(closedAt.getUTCHours()).padStart(2, "0");
+  const mm = String(closedAt.getUTCMinutes()).padStart(2, "0");
+  title.textContent = `${hh}:${mm} UTC`;
   container.appendChild(title);
+
   const rows = [
-    ["Market", `${trade.asset}-${trade.timeframe}`],
+    ["Asset", trade.asset],
     ["Side", trade.side],
     ["Entry price", fmt(trade.entry_price, 3)],
     ["Size", `$${fmt(trade.size_usd, 2)}`],
     ["Balance", `$${fmt(balance, 2)}`],
   ];
   for (const [label, value] of rows) {
-    const row = document.createElement("div"); row.className = "tt-row";
-    const l = document.createElement("span"); l.className = "tt-label"; l.textContent = label;
-    const v = document.createElement("span"); v.className = "tt-value"; v.textContent = value;
-    row.append(l, v); container.appendChild(row);
+    const row = document.createElement("div");
+    row.className = "tt-row";
+    const labelEl = document.createElement("span");
+    labelEl.className = "tt-label";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("span");
+    valueEl.className = "tt-value";
+    valueEl.textContent = value;
+    row.append(labelEl, valueEl);
+    container.appendChild(row);
   }
-  const pnlRow = document.createElement("div"); pnlRow.className = "tt-row";
-  const pl = document.createElement("span"); pl.className = "tt-label"; pl.textContent = "PnL";
-  const pv = document.createElement("span"); pv.className = "tt-value";
-  pv.style.color = trade.won ? "var(--good-text)" : "var(--critical)";
-  pv.textContent = formatPnl(trade.pnl || 0);
-  pnlRow.append(pl, pv); container.appendChild(pnlRow);
+
+  const pnlRow = document.createElement("div");
+  pnlRow.className = "tt-row";
+  const pnlLabel = document.createElement("span");
+  pnlLabel.className = "tt-label";
+  pnlLabel.textContent = "PnL";
+  const pnlValue = document.createElement("span");
+  pnlValue.className = "tt-value";
+  pnlValue.style.color = trade.won ? "var(--good-text)" : "var(--critical)";
+  pnlValue.textContent = formatPnl(trade.pnl || 0);
+  pnlRow.append(pnlLabel, pnlValue);
+  container.appendChild(pnlRow);
 }
 
 function setupEquityTooltip() {
   const canvas = document.getElementById("equity-canvas");
   const tooltip = document.getElementById("equity-tooltip");
+
   canvas.addEventListener("mousemove", (event) => {
     const rect = canvas.getBoundingClientRect();
-    const marker = findNearestMarker(event.clientX - rect.left, event.clientY - rect.top);
-    if (!marker) { tooltip.classList.remove("visible"); canvas.style.cursor = "default"; return; }
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const marker = findNearestMarker(x, y);
+
+    if (!marker) {
+      tooltip.classList.remove("visible");
+      canvas.style.cursor = "default";
+      return;
+    }
+
     canvas.style.cursor = "pointer";
     buildTooltipContent(tooltip, marker.trade, marker.balance);
+
     const margin = 12;
-    let left = event.clientX + margin, top = event.clientY + margin;
-    const tr = tooltip.getBoundingClientRect();
-    if (left + tr.width > window.innerWidth - 8) left = event.clientX - tr.width - margin;
-    if (top + tr.height > window.innerHeight - 8) top = event.clientY - tr.height - margin;
-    tooltip.style.left = `${left}px`; tooltip.style.top = `${top}px`;
+    let left = event.clientX + margin;
+    let top = event.clientY + margin;
+    const tooltipRect = tooltip.getBoundingClientRect();
+    if (left + tooltipRect.width > window.innerWidth - 8) {
+      left = event.clientX - tooltipRect.width - margin;
+    }
+    if (top + tooltipRect.height > window.innerHeight - 8) {
+      top = event.clientY - tooltipRect.height - margin;
+    }
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
     tooltip.classList.add("visible");
   });
-  canvas.addEventListener("mouseleave", () => { tooltip.classList.remove("visible"); canvas.style.cursor = "default"; });
+
+  canvas.addEventListener("mouseleave", () => {
+    tooltip.classList.remove("visible");
+    canvas.style.cursor = "default";
+  });
 }
 
 function setupEquityPager() {
   document.getElementById("equity-prev").addEventListener("click", () => {
-    equityFollowLatest = false; equityPageIndex -= 1; drawEquityCurve(lastTradesForChart);
+    equityFollowLatest = false;
+    equityPageIndex -= 1;
+    drawEquityCurve(lastTradesForChart);
   });
   document.getElementById("equity-next").addEventListener("click", () => {
     const totalPages = Math.max(1, Math.ceil(lastTradesForChart.length / EQUITY_PAGE_SIZE));
@@ -467,8 +648,12 @@ async function fetchTrades() {
     const resp = await fetch(TRADES_URL, { cache: "no-store" });
     if (!resp.ok) return [];
     const text = await resp.text();
-    return text.split("\n").filter(Boolean).map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
-  } catch { return []; }
+    return text.split("\n").filter(Boolean).map(line => {
+      try { return JSON.parse(line); } catch { return null; }
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 async function refresh() {
@@ -476,7 +661,7 @@ async function refresh() {
     const status = await fetchJson(STATUS_URL);
     const trades = await fetchTrades();
     document.getElementById("last-updated").textContent = "Updated " + new Date(status.updated_at).toLocaleTimeString();
-    renderMarketGrid(status);
+    renderScoreTiles(status);
     renderPositions(status);
     renderStatTiles(status, trades);
     drawEquityCurve(trades);
@@ -488,7 +673,9 @@ async function refresh() {
 setupEquityTooltip();
 setupEquityPager();
 refresh();
+refreshStats();
 setInterval(refresh, POLL_MS);
+setInterval(refreshStats, STATS_POLL_MS);
 setInterval(tickExpiryCountdown, 1000);
 </script>
 </body>
