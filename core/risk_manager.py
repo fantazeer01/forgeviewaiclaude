@@ -10,8 +10,9 @@ import time
 
 from config.settings import (
     BANKROLL_USD, FIXED_POSITION_USD, KELLY_MIN_EXAMPLES, KELLY_MAX_FRACTION,
-    MAX_DAILY_LOSS_USD, MAX_OPEN_POSITIONS_5M, MAX_OPEN_POSITIONS_15M,
+    KELLY_MAX_POSITION_USD, MAX_DAILY_LOSS_USD, MAX_OPEN_POSITIONS_5M, MAX_OPEN_POSITIONS_15M,
     MAX_CONSECUTIVE_LOSSES, CONSECUTIVE_LOSS_PAUSE_MINUTES, RISK_STATE_FILE,
+    TRADING_HOURS_START_UTC, TRADING_HOURS_END_UTC,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,12 @@ class RiskManager:
             return 0.0
         edge = (win_probability * b - (1 - win_probability)) / b
         fraction = max(0.0, min(edge, KELLY_MAX_FRACTION))
-        return round(self.bankroll * fraction, 2)
+        size = self.bankroll * fraction
+        return round(min(size, KELLY_MAX_POSITION_USD), 2)
+
+    def is_trading_hours(self) -> bool:
+        hour = datetime.datetime.now(datetime.timezone.utc).hour
+        return TRADING_HOURS_START_UTC <= hour < TRADING_HOURS_END_UTC
 
     def register_open(self, timeframe: str):
         self.open_positions[timeframe] = self.open_positions.get(timeframe, 0) + 1

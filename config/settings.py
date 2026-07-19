@@ -20,6 +20,7 @@ CONSECUTIVE_LOSS_PAUSE_MINUTES = 20     # temporary pause, not a permanent block
 # (core/risk_manager.py) -- the spec gives one number for both.
 KELLY_MIN_EXAMPLES = 100
 KELLY_MAX_FRACTION = 0.05               # Kelly capped at 5% of bankroll
+KELLY_MAX_POSITION_USD = 5.0            # absolute cap, regardless of bankroll growth
 FIXED_POSITION_USD = 2.0                # flat size before KELLY_MIN_EXAMPLES is reached
 
 # ---- entry filters ----
@@ -29,6 +30,12 @@ ENTRY_YES_PRICE_MIN = 0.35
 ENTRY_YES_PRICE_MAX = 0.65
 MODEL_TRADE_THRESHOLD_YES = 0.55        # P(UP) > this -> YES
 MODEL_TRADE_THRESHOLD_NO = 0.45         # P(UP) < this -> NO
+
+# ---- trading hours ----
+# 2026-07-19 trade log: 06-12 UTC was the only profitable 6h block (60.8% win
+# rate, +$1.48 avg pnl); the other three blocks were flat-to-negative.
+TRADING_HOURS_START_UTC = 6
+TRADING_HOURS_END_UTC = 12
 
 # ---- execution ----
 TAKER_FEE_RATE = 0.0                    # fee formula wired in now, rate is 0 for the moment

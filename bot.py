@@ -6,7 +6,12 @@ import datetime
 import json
 import logging
 import os
+import sys
 import time
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from config.settings import (
     ASSETS, TIMEFRAMES, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC,
@@ -99,6 +104,8 @@ class Bot:
         decision = result.get("decision")
         market_id = snapshot.get("market_id")
         if decision not in ("YES", "NO") or market_id is None or market_id in self.pending:
+            return
+        if not self.risk_manager.is_trading_hours():
             return
         ok, reason = self.risk_manager.can_open_trade(timeframe)
         if not ok:
