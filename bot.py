@@ -106,8 +106,6 @@ class Bot:
         market_id = snapshot.get("market_id")
         if decision not in ("YES", "NO") or market_id is None or market_id in self.pending:
             return
-        if not self.risk_manager.is_trading_hours():
-            return
         ok, reason = self.risk_manager.can_open_trade(timeframe)
         if not ok:
             logger.info(f"SKIP [{asset}-{timeframe}] risk blocked: {reason}")
