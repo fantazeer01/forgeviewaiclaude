@@ -14,10 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 class Executor:
-    def __init__(self, model, risk_manager, paper_mode: bool = PAPER_MODE):
+    def __init__(self, model, risk_manager, paper_mode: bool = PAPER_MODE, trade_history=None):
         self.paper_mode = paper_mode
         self.model = model
         self.risk_manager = risk_manager
+        self.trade_history = trade_history
         self.open_positions = {}
 
     def open_position(self, asset: str, timeframe: str, side: str, entry_price: float, size_usd: float,
@@ -45,9 +46,12 @@ class Executor:
             return 0.0
         won = (position["side"] == "YES" and outcome_up) or (position["side"] == "NO" and not outcome_up)
         pnl = self._settle_pnl(position, won)
-        self._log_trade(position, outcome_up, won, pnl)
+        closed_at = datetime.datetime.now(datetime.timezone.utc)
+        self._log_trade(position, outcome_up, won, pnl, closed_at)
         self.risk_manager.register_close(position["timeframe"], pnl)
         self.model.learn(position["features"], outcome_up)
+        if self.trade_history is not None:
+            self.trade_history.record_close(closed_at, won)
         return pnl
 
     def _settle_pnl(self, position: dict, won: bool) -> float:
@@ -67,13 +71,13 @@ class Executor:
             return round(shares * (1 - entry_price) - fee, 2)
         return round(-size - fee, 2)
 
-    def _log_trade(self, position: dict, outcome_up: bool, won: bool, pnl: float):
+    def _log_trade(self, position: dict, outcome_up: bool, won: bool, pnl: float, closed_at: datetime.datetime):
         record = {
             **{k: v for k, v in position.items() if k != "features"},
             "outcome_up": outcome_up,
             "won": won,
             "pnl": pnl,
-            "closed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "closed_at": closed_at.isoformat(),
         }
         try:
             os.makedirs(os.path.dirname(PAPER_TRADES_LOG), exist_ok=True)

@@ -1,10 +1,13 @@
-"""Turns a MarketFeed snapshot into the model's feature vector. BTC gets 17
-features; ETH and SOL get 20 -- the 3 cross-market features (btc_momentum_5m,
+"""Turns a MarketFeed snapshot into the model's feature vector. BTC gets 19
+features; ETH and SOL get 22 -- the 3 cross-market features (btc_momentum_5m,
 btc_yes_price, correlation_btc_eth) only make sense relative to another
 asset, so BTC's own vector never carries them."""
 
 import collections
+import datetime
+import json
 import math
+import os
 
 BASE_FEATURE_NAMES = [
     "yes_price", "yes_price_momentum_60s", "yes_price_momentum_120s",
@@ -13,10 +16,57 @@ BASE_FEATURE_NAMES = [
     "volume_ratio", "bid_ask_imbalance",
     "book_imbalance", "volume_ratio_window",
     "seconds_remaining_pct", "hour_sin", "hour_cos", "day_of_week_sin", "day_of_week_cos",
+    "rolling_win_rate_1h", "rolling_win_rate_6h",
 ]
 CROSS_MARKET_FEATURE_NAMES = ["btc_momentum_5m", "btc_yes_price", "correlation_btc_eth"]
 
 CORRELATION_WINDOW = 20
+ROLLING_WIN_RATE_NEUTRAL = 0.5
+
+
+class TradeHistory:
+    """Rolling record of closed-trade outcomes (across all assets/timeframes),
+    used to derive the rolling_win_rate_1h / rolling_win_rate_6h features so
+    the model can learn which regimes are good to trade in, rather than that
+    being hard-coded as a fixed trading-hours window."""
+
+    def __init__(self, log_path: str = None):
+        self._log_path = log_path
+        self._closes = collections.deque()  # (closed_at: datetime, won: bool)
+        if log_path and os.path.exists(log_path):
+            self._load(log_path)
+
+    def _load(self, log_path: str):
+        with open(log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                closed_at = record.get("closed_at")
+                if closed_at is None or "won" not in record:
+                    continue
+                self._closes.append((_parse_iso(closed_at), bool(record["won"])))
+
+    def record_close(self, closed_at, won: bool):
+        if isinstance(closed_at, str):
+            closed_at = _parse_iso(closed_at)
+        self._closes.append((closed_at, bool(won)))
+
+    def win_rate(self, hours: float, now: datetime.datetime = None) -> float:
+        now = now or datetime.datetime.now(datetime.timezone.utc)
+        cutoff = now - datetime.timedelta(hours=hours)
+        recent = [won for closed_at, won in self._closes if closed_at >= cutoff]
+        if not recent:
+            return ROLLING_WIN_RATE_NEUTRAL
+        return sum(recent) / len(recent)
+
+
+def _parse_iso(value: str) -> datetime.datetime:
+    return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 class CrossMarketState:
@@ -53,7 +103,8 @@ class CrossMarketState:
         return cov / denom
 
 
-def build_features(snapshot: dict, window_sec: int, btc_snapshot: dict = None, correlation: float = None) -> dict:
+def build_features(snapshot: dict, window_sec: int, btc_snapshot: dict = None, correlation: float = None,
+                    trade_history: TradeHistory = None) -> dict:
     yes_price = snapshot.get("yes_price")
     yes_price = yes_price if yes_price is not None else 0.5
 
@@ -62,6 +113,13 @@ def build_features(snapshot: dict, window_sec: int, btc_snapshot: dict = None, c
 
     hour = snapshot.get("hour_utc") if snapshot.get("hour_utc") is not None else 0
     weekday = snapshot.get("weekday") if snapshot.get("weekday") is not None else 0
+
+    if trade_history is not None:
+        rolling_win_rate_1h = trade_history.win_rate(1)
+        rolling_win_rate_6h = trade_history.win_rate(6)
+    else:
+        rolling_win_rate_1h = ROLLING_WIN_RATE_NEUTRAL
+        rolling_win_rate_6h = ROLLING_WIN_RATE_NEUTRAL
 
     features = {
         "yes_price": yes_price,
@@ -81,6 +139,8 @@ def build_features(snapshot: dict, window_sec: int, btc_snapshot: dict = None, c
         "hour_cos": math.cos(2 * math.pi * hour / 24),
         "day_of_week_sin": math.sin(2 * math.pi * weekday / 7),
         "day_of_week_cos": math.cos(2 * math.pi * weekday / 7),
+        "rolling_win_rate_1h": rolling_win_rate_1h,
+        "rolling_win_rate_6h": rolling_win_rate_6h,
     }
 
     if snapshot.get("asset") != "BTC" and btc_snapshot is not None:

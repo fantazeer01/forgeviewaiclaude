@@ -15,10 +15,10 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from config.settings import (
     ASSETS, TIMEFRAMES, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC,
-    BOT_STATUS_FILE, RISK_STATE_FILE, model_weights_path,
+    BOT_STATUS_FILE, RISK_STATE_FILE, PAPER_TRADES_LOG, model_weights_path,
 )
 from core.market_feed import MarketFeed
-from core.feature_engine import build_features, CrossMarketState
+from core.feature_engine import build_features, CrossMarketState, TradeHistory
 from core.model import OnlineModel
 from core.risk_manager import RiskManager
 from core.executor import Executor
@@ -36,6 +36,7 @@ class Bot:
         self.market_feed = MarketFeed()
         self.cross_market = CrossMarketState()
         self.risk_manager = RiskManager(state_file=RISK_STATE_FILE)
+        self.trade_history = TradeHistory(log_path=PAPER_TRADES_LOG)
 
         self.models = {}
         self.executors = {}
@@ -46,7 +47,7 @@ class Bot:
                     weights_file=model_weights_path(asset, timeframe), asset=asset, timeframe=timeframe
                 )
                 self.models[key] = model
-                self.executors[key] = Executor(model, self.risk_manager)
+                self.executors[key] = Executor(model, self.risk_manager, trade_history=self.trade_history)
 
         self.pending = {}          # market_id -> {position_id, asset, timeframe, seconds_remaining, opened_at}
         self.pending_learning = {}  # market_id -> {asset, timeframe, features, captured_at, seconds_remaining}
@@ -93,7 +94,7 @@ class Bot:
 
     def _process(self, key, snapshot, window_sec, btc_snapshot, correlation):
         asset, timeframe = key
-        features = build_features(snapshot, window_sec, btc_snapshot, correlation)
+        features = build_features(snapshot, window_sec, btc_snapshot, correlation, self.trade_history)
         result = self.models[key].decide(features, snapshot.get("seconds_remaining"))
         self.last_scores[key] = {**result, "snapshot": snapshot, "features": features}
         self._maybe_trade(key, snapshot, features, result)
