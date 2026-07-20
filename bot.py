@@ -30,7 +30,7 @@ from layer1_eyes.fear_greed import FearGreedIndex
 from layer1_eyes.whale_tracker import WhaleTracker
 from layer2_brain.feature_engine import build_features, CrossMarketState
 from layer2_brain.model import OnlineModel
-from layer3_conscience import confidence_filter, liquidity_filter, timing_filter
+from layer3_conscience import confidence_filter, liquidity_filter, timing_filter, price_band_filter
 from layer3_conscience.regime_detector import RegimeDetector, RANGE
 from layer4_wallet.risk_manager import RiskManager
 from layer4_wallet.take_profit import TakeProfitManager
@@ -228,7 +228,7 @@ class Bot:
         decision = decision_result["decision"]
         self.last_scores[key] = {"p_up": p_up, "decision": decision, "snapshot": snapshot, "features": features}
         self._maybe_trade(key, snapshot, features, p_up, decision)
-        self._maybe_capture_window(key, snapshot, features, window_sec)
+        self._maybe_capture_window(key, snapshot, features, window_sec, p_up)
 
     def _maybe_trade(self, key, snapshot, features, p_up, decision):
         asset, timeframe = key
@@ -236,6 +236,9 @@ class Bot:
         if decision not in ("YES", "NO") or market_id is None or market_id in self.pending:
             return
 
+        ok, reason = price_band_filter.passes(snapshot.get("yes_price"))
+        if not ok:
+            return
         ok, reason = liquidity_filter.passes(snapshot)
         if not ok:
             return
@@ -247,6 +250,8 @@ class Bot:
             logger.info(f"SKIP [{asset}-{timeframe}] risk blocked: {reason}")
             return
         if self.take_profit.take_profit_hit(self.risk_manager.daily_pnl):
+            return
+        if self.adaptive_state.is_cold(timeframe):
             return
 
         conditions = {
@@ -265,7 +270,7 @@ class Bot:
         if self.current_regime == RANGE:
             size *= REGIME_RANGE_SIZE_MULTIPLIER
         size *= self.take_profit.drawdown_size_multiplier(self.risk_manager.bankroll)
-        size *= self.adaptive_state.size_multiplier()
+        size *= self.adaptive_state.size_multiplier(timeframe)
         size = round(size, 2)
         if size <= 0:
             return
@@ -295,7 +300,7 @@ class Bot:
             key = (info["asset"], info["timeframe"])
             pnl = self.executors[key].close_position(info["trade_id"], outcome_up)
             won = pnl > 0
-            self.adaptive_state.record_close(won)
+            self.adaptive_state.record_close(info["timeframe"], won)
             if won:
                 self.day_wins += 1
             else:
@@ -303,14 +308,14 @@ class Bot:
             logger.info(f"CLOSE [{info['asset']}-{info['timeframe']}] outcome={outcome} pnl=${pnl:+.2f}")
             del self.pending[market_id]
 
-    def _maybe_capture_window(self, key, snapshot, features, window_sec):
+    def _maybe_capture_window(self, key, snapshot, features, window_sec, p_up):
         market_id = snapshot.get("market_id")
         seconds_remaining = snapshot.get("seconds_remaining")
         if market_id is None or seconds_remaining is None or market_id in self.pending_learning:
             return
         if seconds_remaining <= window_sec * WINDOW_LEARN_FRACTION:
             self.pending_learning[market_id] = {
-                "asset": key[0], "timeframe": key[1], "features": features,
+                "asset": key[0], "timeframe": key[1], "features": features, "p_up": p_up,
                 "captured_at": time.time(), "seconds_remaining": seconds_remaining,
             }
 
@@ -325,6 +330,14 @@ class Bot:
             outcome_up = outcome == "UP"
             key = (info["asset"], info["timeframe"])
             self.models[key].learn(info["features"], outcome_up)
+            # Feed the model's own directional accuracy into the same
+            # per-timeframe temperature rolling window as real trades, so a
+            # timeframe paused by is_cold() can still recover from shadow
+            # learning alone -- real trades on it have stopped by definition.
+            p_up = info.get("p_up")
+            if p_up is not None:
+                shadow_won = (p_up > 0.5) == outcome_up
+                self.adaptive_state.record_close(info["timeframe"], shadow_won)
             logger.info(
                 f"LEARN [{info['asset']}-{info['timeframe']}] outcome={outcome} "
                 f"(n_examples={self.models[key].n_examples})"
@@ -362,8 +375,8 @@ class Bot:
             f"[{ts} UTC]\n"
             f"5M:  {row('5m')}\n"
             f"15M: {row('15m')}\n"
-            f"Regime: {self.current_regime} | Temp: {self.adaptive_state.temperature} | "
-            f"News: neutral({news_sent:+.1f})\n"
+            f"Regime: {self.current_regime} | Temp: 5m={self.adaptive_state.temperature('5m')} "
+            f"15m={self.adaptive_state.temperature('15m')} | News: neutral({news_sent:+.1f})\n"
             f"Open: 5M={open_5m} 15M={open_15m} | Today: {self.risk_manager.daily_pnl:+.2f} "
             f"({self.day_wins}W/{self.day_losses}L {win_rate:.1f}%)\n"
             f"Streak: {'+' if self.risk_manager.loss_streak == 0 else '-'}{self.risk_manager.loss_streak} | "
@@ -399,7 +412,7 @@ class Bot:
             "loss_streak": self.risk_manager.loss_streak,
             "paused": time.time() < self.risk_manager.paused_until,
             "regime": self.current_regime,
-            "temperature": self.adaptive_state.temperature,
+            "temperatures": {tf: self.adaptive_state.temperature(tf) for tf in TIMEFRAMES},
             "news_sentiment_1h": self.news.sentiment_1h(),
             "fear_greed": self.fear_greed.normalized(),
             "take_profit_remaining": self.take_profit.take_profit_remaining(self.risk_manager.daily_pnl),

@@ -251,7 +251,7 @@ function slugify(s) { return (s || "").toLowerCase().replace(/_/g, "-"); }
 function renderRegimePanel(status) {
   const el = document.getElementById("regime-panel");
   const regime = status.regime || "RANGE";
-  const temp = status.temperature || "neutral";
+  const temps = status.temperatures || {};
   const news = status.news_sentiment_1h;
   const fg = status.fear_greed;
   el.innerHTML = `
@@ -260,8 +260,9 @@ function renderRegimePanel(status) {
       <span class="regime-pill ${slugify(regime)}">${regime}</span>
     </div>
     <div class="tile">
-      <div class="tile-label">Model temperature</div>
-      <span class="regime-pill ${slugify(temp)}">${temp}</span>
+      <div class="tile-label">Temperature 5m / 15m</div>
+      <span class="regime-pill ${slugify(temps["5m"] || "neutral")}">${temps["5m"] || "neutral"}</span>
+      <span class="regime-pill ${slugify(temps["15m"] || "neutral")}">${temps["15m"] || "neutral"}</span>
     </div>
     <div class="tile">
       <div class="tile-label">News sentiment (1h)</div>

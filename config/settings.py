@@ -15,6 +15,8 @@ MAX_OPEN_POSITIONS_5M = 5
 MAX_OPEN_POSITIONS_15M = 5
 MAX_CONSECUTIVE_LOSSES = 10
 CONSECUTIVE_LOSS_PAUSE_MINUTES = 20
+TIMEFRAME_MAX_CONSECUTIVE_LOSSES = 5   # stricter, faster breaker scoped to one timeframe only
+TIMEFRAME_LOSS_PAUSE_MINUTES = 30
 KELLY_MIN_EXAMPLES = 200               # raised from v3's 100 -- fewer, better-trained trades
 KELLY_MAX_FRACTION = 0.03              # 3% of bankroll, more conservative than v3's 5%
 KELLY_MAX_POSITION_USD = 5.0
@@ -28,6 +30,14 @@ DRAWDOWN_FROM_PEAK_PCT = 0.30          # halve position size once bankroll falls
 CONFIDENCE_YES_THRESHOLD = 0.57
 CONFIDENCE_NO_THRESHOLD = 0.43
 HIGH_VOLATILITY_CONFIDENCE_THRESHOLD = 0.60  # overrides CONFIDENCE_YES_THRESHOLD in that regime
+
+# ---- layer3_conscience: price_band_filter ----
+# Present in v3 (inside model.decide()) but dropped by accident during the
+# v4 rebuild -- restored as its own layer3 filter. Without it, a market
+# already sitting at yes_price=0.835 (or 0.165) can still open a trade with
+# almost no room to profit if right and a near-certain loss if wrong.
+ENTRY_YES_PRICE_MIN = 0.35
+ENTRY_YES_PRICE_MAX = 0.65
 
 # ---- layer3_conscience: liquidity_filter ----
 MIN_BOOK_DEPTH_USD = 100.0

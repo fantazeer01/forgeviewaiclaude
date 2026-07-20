@@ -1,6 +1,7 @@
 """Layer 4 (wallet): bankroll and trade-frequency guardrails -- independent
 open-position caps per timeframe, Kelly sizing after warmup, a temporary
-(not permanent) pause on a losing streak, and full state persistence."""
+(not permanent) pause on a losing streak (both bot-wide and, more strictly,
+per timeframe), and full state persistence."""
 
 import datetime
 import json
@@ -11,7 +12,8 @@ import time
 from config.settings import (
     BANKROLL_USD, WARMUP_POSITION_SIZE, KELLY_MIN_EXAMPLES, KELLY_MAX_FRACTION, KELLY_MAX_POSITION_USD,
     MAX_DAILY_LOSS_USD, MAX_OPEN_POSITIONS_5M, MAX_OPEN_POSITIONS_15M,
-    MAX_CONSECUTIVE_LOSSES, CONSECUTIVE_LOSS_PAUSE_MINUTES, RISK_STATE_FILE,
+    MAX_CONSECUTIVE_LOSSES, CONSECUTIVE_LOSS_PAUSE_MINUTES,
+    TIMEFRAME_MAX_CONSECUTIVE_LOSSES, TIMEFRAME_LOSS_PAUSE_MINUTES, RISK_STATE_FILE,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,8 @@ class RiskManager:
         self.trades_closed = state.get("trades_closed", 0)
         self.loss_streak = state.get("loss_streak", 0)
         self.paused_until = state.get("paused_until", 0.0)
+        self.timeframe_loss_streak = state.get("timeframe_loss_streak", {"5m": 0, "15m": 0})
+        self.timeframe_paused_until = state.get("timeframe_paused_until", {"5m": 0.0, "15m": 0.0})
         self.daily_pnl = 0.0
         self.daily_date = datetime.datetime.now(datetime.timezone.utc).date()
         self.open_positions = {"5m": 0, "15m": 0}
@@ -57,6 +61,8 @@ class RiskManager:
                     "trades_closed": self.trades_closed,
                     "loss_streak": self.loss_streak,
                     "paused_until": self.paused_until,
+                    "timeframe_loss_streak": self.timeframe_loss_streak,
+                    "timeframe_paused_until": self.timeframe_paused_until,
                 }, f)
             os.replace(tmp, self.state_file)
         except Exception as e:
@@ -73,6 +79,8 @@ class RiskManager:
         self._roll_day()
         if now < self.paused_until:
             return False, f"loss-streak pause until {self.paused_until}"
+        if now < self.timeframe_paused_until.get(timeframe, 0.0):
+            return False, f"{timeframe} loss-streak pause until {self.timeframe_paused_until[timeframe]}"
         if self.daily_pnl <= -MAX_DAILY_LOSS_USD:
             return False, "daily loss limit reached"
         cap = MAX_OPEN_POSITIONS.get(timeframe, 0)
@@ -104,6 +112,7 @@ class RiskManager:
         self.trades_closed += 1
         self.daily_pnl += pnl
         self.bankroll += pnl
+        tf_streak = self.timeframe_loss_streak.get(timeframe, 0)
         if pnl < 0:
             self.loss_streak += 1
             if self.loss_streak >= MAX_CONSECUTIVE_LOSSES:
@@ -112,6 +121,15 @@ class RiskManager:
                     f"RiskManager: {self.loss_streak} consecutive losses, "
                     f"pausing {CONSECUTIVE_LOSS_PAUSE_MINUTES}min"
                 )
+            tf_streak += 1
+            self.timeframe_loss_streak[timeframe] = tf_streak
+            if tf_streak >= TIMEFRAME_MAX_CONSECUTIVE_LOSSES:
+                self.timeframe_paused_until[timeframe] = time.time() + TIMEFRAME_LOSS_PAUSE_MINUTES * 60
+                logger.warning(
+                    f"RiskManager: {tf_streak} consecutive losses on {timeframe}, "
+                    f"pausing {timeframe} for {TIMEFRAME_LOSS_PAUSE_MINUTES}min"
+                )
         else:
             self.loss_streak = 0
+            self.timeframe_loss_streak[timeframe] = 0
         self._save_state()

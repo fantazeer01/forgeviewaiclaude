@@ -5,6 +5,7 @@ from config.settings import (
     BANKROLL_USD, WARMUP_POSITION_SIZE, KELLY_MIN_EXAMPLES, KELLY_MAX_FRACTION, KELLY_MAX_POSITION_USD,
     MAX_DAILY_LOSS_USD, MAX_OPEN_POSITIONS_5M, MAX_OPEN_POSITIONS_15M,
     MAX_CONSECUTIVE_LOSSES, CONSECUTIVE_LOSS_PAUSE_MINUTES,
+    TIMEFRAME_MAX_CONSECUTIVE_LOSSES, TIMEFRAME_LOSS_PAUSE_MINUTES,
 )
 
 
@@ -63,9 +64,60 @@ def test_trading_resumes_after_pause_expires(tmp_path):
     rm = _rm(tmp_path)
     for _ in range(MAX_CONSECUTIVE_LOSSES):
         rm.register_close("5m", -1.0)
-    future = rm.paused_until + 1
+    # both the bot-wide and the (stricter, longer) per-timeframe breaker
+    # fired on this streak -- resuming needs whichever clears last
+    future = max(rm.paused_until, rm.timeframe_paused_until["5m"]) + 1
     ok, _ = rm.can_open_trade("5m", now=future)
     assert ok is True
+
+
+# Per-timeframe breaker: 5 losses in a row on ONE timeframe pauses only that
+# timeframe for 30 minutes, leaving the other timeframe (and the bot as a
+# whole) free to keep trading.
+def test_timeframe_breaker_pauses_only_that_timeframe(tmp_path):
+    rm = _rm(tmp_path)
+    assert TIMEFRAME_MAX_CONSECUTIVE_LOSSES == 5
+    assert TIMEFRAME_LOSS_PAUSE_MINUTES == 30
+    for _ in range(TIMEFRAME_MAX_CONSECUTIVE_LOSSES):
+        rm.register_close("5m", -1.0)
+    assert rm.timeframe_loss_streak["5m"] == 5
+    assert rm.loss_streak == 5  # bot-wide streak also moved, but MAX_CONSECUTIVE_LOSSES(10) not reached
+
+    ok_5m, reason = rm.can_open_trade("5m")
+    assert ok_5m is False
+    assert "5m" in reason
+
+    ok_15m, _ = rm.can_open_trade("15m")
+    assert ok_15m is True  # the other timeframe is untouched
+
+
+def test_timeframe_breaker_resumes_after_its_own_pause(tmp_path):
+    rm = _rm(tmp_path)
+    for _ in range(TIMEFRAME_MAX_CONSECUTIVE_LOSSES):
+        rm.register_close("15m", -1.0)
+    future = rm.timeframe_paused_until["15m"] + 1
+    ok, _ = rm.can_open_trade("15m", now=future)
+    assert ok is True
+
+
+def test_timeframe_streak_resets_on_win(tmp_path):
+    rm = _rm(tmp_path)
+    for _ in range(TIMEFRAME_MAX_CONSECUTIVE_LOSSES - 1):
+        rm.register_close("5m", -1.0)
+    rm.register_close("5m", 2.0)  # a win resets the streak before the breaker fires
+    assert rm.timeframe_loss_streak["5m"] == 0
+    ok, _ = rm.can_open_trade("5m")
+    assert ok is True
+
+
+def test_timeframe_breaker_state_persists_across_restart(tmp_path):
+    state_file = str(tmp_path / "risk_state.json")
+    rm = RiskManager(state_file=state_file)
+    for _ in range(TIMEFRAME_MAX_CONSECUTIVE_LOSSES):
+        rm.register_close("5m", -1.0)
+    restarted = RiskManager(state_file=state_file)
+    assert restarted.timeframe_loss_streak["5m"] == 5
+    assert restarted.timeframe_paused_until["5m"] == rm.timeframe_paused_until["5m"]
 
 
 def test_max_open_positions_enforced_independently(tmp_path):
