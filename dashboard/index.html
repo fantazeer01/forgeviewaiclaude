@@ -71,7 +71,7 @@
   .grid-3 { grid-template-columns: 1fr 1fr 1.6fr; }
   .grid-3b { grid-template-columns: 1.1fr 1fr 1fr; }
   .grid-2 { grid-template-columns: 1fr 1fr; }
-  .grid-6 { grid-template-columns: repeat(6, 1fr); }
+  .grid-6 { grid-template-columns: repeat(6, 1fr); gap: 8px; }
 
   .panel {
     background: rgba(17, 24, 39, 0.8);
@@ -138,19 +138,23 @@
   .exec-line { width: 28px; height: 1px; background: #334155; flex-shrink: 0; }
 
   /* ---- decision tree ---- */
-  .decision-card { background: rgba(56,189,248,0.04); border: 1px solid rgba(56,189,248,0.08); border-radius: 12px; padding: 12px 14px; }
+  .decision-card { background: rgba(56,189,248,0.04); border: 1px solid rgba(56,189,248,0.08); border-radius: 12px; padding: 8px 8px; min-width: 0; overflow: hidden; }
   .decision-card:hover { border-color: rgba(56,189,248,0.25); }
-  .decision-card .dc-head { display: flex; justify-content: space-between; align-items: center; }
-  .decision-card .dc-title { font-size: 11.5px; font-weight: 700; color: #e2e8f0; letter-spacing: 0.5px; }
-  .decision-card .dc-decision { font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .decision-card .dc-head { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+  .decision-card .dc-title { font-size: 10.5px; font-weight: 700; color: #e2e8f0; letter-spacing: 0.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .decision-card .dc-decision { font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0; }
   .dc-decision.yes { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid #10b981; }
   .dc-decision.no { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid #ef4444; }
   .dc-decision.hold { background: rgba(100,116,139,0.15); color: #64748b; border: 1px solid #64748b; }
-  .dc-body { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-  .dc-body canvas { flex: 1; height: 36px; display: block; }
+  .dc-body { display: flex; align-items: center; gap: 5px; margin: 6px 0; min-width: 0; }
+  .dc-body canvas { flex: 1; min-width: 0; height: 40px; display: block; }
   .dc-gauge { flex-shrink: 0; }
-  .dc-metrics { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: #94a3b8; }
-  .dc-sub { font-size: 9.5px; color: #64748b; margin-top: 8px; border-top: 1px solid rgba(56,189,248,0.08); padding-top: 6px; }
+  .dc-metrics { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #94a3b8; }
+  .dc-sub { font-size: 9px; color: #64748b; margin-top: 6px; border-top: 1px solid rgba(56,189,248,0.08); padding-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  tfoot { position: sticky; bottom: 0; }
+  .positions-total-label { text-align: right; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; font-size: 10.5px; border-top: 2px solid rgba(56,189,248,0.15); }
+  .positions-total-value { font-size: 20px; font-weight: 700; border-top: 2px solid rgba(56,189,248,0.15); }
 
   /* ---- tables ---- */
   table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
@@ -258,17 +262,16 @@
     <div class="grid grid-6" style="margin-bottom:0;" id="decision-tree"></div>
   </div>
 
-  <div class="grid grid-2">
-    <div class="panel">
-      <p class="panel-title">📋 Open positions</p>
-      <div class="scroll-table">
-        <table id="positions-table">
-          <thead><tr><th>Market</th><th>Side</th><th>Entry</th><th>Size</th><th>Unrealized P&amp;L</th><th>Expires in</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+  <div class="panel" style="margin-bottom:14px;">
+    <p class="panel-title">📋 Open positions</p>
+    <p class="pnl-sub" id="positions-subtitle" style="margin:-6px 0 12px;"></p>
+    <div class="scroll-table">
+      <table id="positions-table">
+        <thead><tr><th>Market</th><th>Side</th><th>Entry</th><th>Size</th><th>Unrealized P&amp;L</th><th>Expires in</th></tr></thead>
+        <tbody></tbody>
+        <tfoot><tr id="positions-total-row"></tr></tfoot>
+      </table>
     </div>
-    <div class="panel" id="unrealized-panel"></div>
   </div>
 
   <div class="grid grid-3b">
@@ -672,11 +675,17 @@ function renderPriceChart(status) {
   ctx.shadowBlur = 0;
 }
 
-function sizeCanvas(canvas, cssHeight) {
+function sizeCanvas(canvas, cssHeight, minWidth = 260) {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
-  const w = Math.max(rect.width, 260), h = cssHeight;
-  canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.height = h + "px";
+  const w = Math.max(rect.width, minWidth), h = cssHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  // must set CSS width explicitly -- otherwise the browser renders the
+  // canvas at its width ATTRIBUTE (w*dpr CSS px), ignoring flexbox/grid
+  // shrinking entirely and blowing out any parent that needs to shrink
+  // below minWidth (this is what broke the 6-across decision tree grid).
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
   const ctx = canvas.getContext("2d");
   ctx.scale(dpr, dpr);
   return { ctx, w, h };
@@ -699,7 +708,7 @@ function renderExecCycle() {
 // strategy decision tree (6 cards, sparkline + radial gauge)
 // ============================================================
 function drawSparkline(canvas, values, color) {
-  const { ctx, w, h } = sizeCanvas(canvas, 36);
+  const { ctx, w, h } = sizeCanvas(canvas, 40, 20);
   ctx.clearRect(0, 0, w, h);
   if (values.length < 2) return;
   const min = Math.min(...values), max = Math.max(...values);
@@ -719,7 +728,7 @@ function drawSparkline(canvas, values, color) {
 }
 
 function pUpGauge(pUp) {
-  const size = 34, r = 14, stroke = 3.5;
+  const size = 36, r = 14.5, stroke = 3.5;
   const c = 2 * Math.PI * r;
   if (pUp === null || pUp === undefined) {
     return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
@@ -783,14 +792,23 @@ function renderDecisionTree(status, trades) {
 // ============================================================
 function renderOpenPositions(status) {
   const tbody = document.querySelector("#positions-table tbody");
+  const totalRow = document.getElementById("positions-total-row");
+  const subtitle = document.getElementById("positions-subtitle");
   const positions = status.open_positions || [];
   const scores = status.scores || {};
+
   if (!positions.length) {
     tbody.innerHTML = `<tr class="empty-row"><td colspan="6">no open positions</td></tr>`;
+    totalRow.innerHTML = "";
+    subtitle.textContent = "no open positions";
     return;
   }
-  tbody.innerHTML = positions.map(p => {
-    const unrealized = computeUnrealized(p, scores);
+
+  const rows = positions.map(p => ({ p, unrealized: computeUnrealized(p, scores) }));
+  const total = rows.reduce((s, r) => s + (r.unrealized || 0), 0);
+  subtitle.innerHTML = `${fmtUsd(total)} unrealized across ${positions.length} position${positions.length === 1 ? '' : 's'}`;
+
+  tbody.innerHTML = rows.map(({ p, unrealized }) => {
     const cls = unrealized === null ? "" : (unrealized >= 0 ? "profit" : "loss");
     const windowSec = TIMEFRAMES[p.timeframe] || 300;
     return `<tr data-timeframe="${p.timeframe}">
@@ -802,6 +820,13 @@ function renderOpenPositions(status) {
       <td class="mono muted expires-cell" data-timeframe="${p.timeframe}" data-window="${windowSec}">--:--</td>
     </tr>`;
   }).join("");
+
+  totalRow.innerHTML = `
+    <td colspan="4" class="positions-total-label">Total</td>
+    <td class="mono positions-total-value ${total >= 0 ? 'profit glow-profit' : 'loss glow-loss'}" id="positions-total-value">${fmtUsd(total)}</td>
+    <td class="positions-total-label"></td>
+  `;
+  flashIfChanged(document.getElementById("positions-total-value"), "positions-total-value", total.toFixed(2));
   tickExpiryCountdown();
 }
 
@@ -815,30 +840,6 @@ function tickExpiryCountdown() {
     const windowSec = Number(cell.getAttribute("data-window")) || 300;
     cell.textContent = formatCountdown(secondsUntilWindowClose(windowSec));
   });
-}
-
-function renderUnrealizedPnl(status) {
-  const el = document.getElementById("unrealized-panel");
-  const positions = status.open_positions || [];
-  const scores = status.scores || {};
-  if (!positions.length) {
-    el.innerHTML = `<p class="panel-title">📊 Unrealized P&amp;L</p><p class="na">no open positions</p>`;
-    return;
-  }
-  const rows = positions.map(p => ({ p, unrealized: computeUnrealized(p, scores) }));
-  const total = rows.reduce((s, r) => s + (r.unrealized || 0), 0);
-  el.innerHTML = `
-    <p class="panel-title">📊 Unrealized P&amp;L</p>
-    <div class="big-pnl mono ${total >= 0 ? 'profit glow-profit' : 'loss glow-loss'}" id="unrealized-total" style="font-size:36px;">${fmtUsd(total)}</div>
-    <div class="pnl-sub" style="margin-bottom:10px;">across ${positions.length} open position${positions.length === 1 ? '' : 's'}</div>
-    ${rows.map(({ p, unrealized }) => `
-      <div class="stat-row">
-        <span class="k mono">${ASSET_ICON[p.asset] || ''} ${p.asset}-${p.timeframe} ${p.side} @ ${fmt(p.entry_price, 3)}</span>
-        <span class="mono ${unrealized === null ? 'na' : (unrealized >= 0 ? 'profit' : 'loss')}">${unrealized === null ? 'n/a' : fmtUsd(unrealized)}</span>
-      </div>
-    `).join("")}
-  `;
-  flashIfChanged(document.getElementById("unrealized-total"), "unrealized-total", total.toFixed(2));
 }
 
 // ============================================================
@@ -1203,7 +1204,6 @@ async function refresh() {
     renderExecCycle();
     renderDecisionTree(status, trades);
     renderOpenPositions(status);
-    renderUnrealizedPnl(status);
     renderLiveTrades(status, trades);
     renderMonteCarlo(trades);
     drawEquityCurve(trades);
@@ -1216,9 +1216,10 @@ async function refresh() {
   }
 }
 
-// Unrealized P&L is re-rendered every second (cosmetic tick against the
-// last-fetched status) in addition to the main 3s poll, per spec.
-setInterval(() => { if (lastFullStatus) renderUnrealizedPnl(lastFullStatus); }, 1000);
+// Open positions (incl. the unrealized total) re-render every second
+// (cosmetic tick against the last-fetched status) in addition to the
+// main 3s poll, so the merged total feels live between fetches.
+setInterval(() => { if (lastFullStatus) renderOpenPositions(lastFullStatus); }, 1000);
 setInterval(tickExpiryCountdown, 1000);
 
 setupChartTabs();
