@@ -1,4 +1,4 @@
-"""All tunable parameters for the v3 quant bot."""
+"""All tunable parameters for the v4 six-layer quant bot."""
 
 # ---- mode ----
 PAPER_MODE = True
@@ -6,71 +6,105 @@ PAPER_MODE = True
 # ---- assets / timeframes ----
 ASSETS = ["BTC", "ETH", "SOL"]
 BINANCE_SYMBOLS = {"BTC": "btcusdt", "ETH": "ethusdt", "SOL": "solusdt"}
-# window size in seconds per timeframe label
 TIMEFRAMES = {"5m": 300, "15m": 900}
 
-# ---- risk (exact values, 2026-07-18 spec) ----
-BANKROLL_USD = 100.0                    # paper bankroll
-MAX_DAILY_LOSS_USD = 100.0              # daily stop-loss
-MAX_OPEN_POSITIONS_5M = 5               # max concurrent on 5-min markets
-MAX_OPEN_POSITIONS_15M = 5              # max concurrent on 15-min markets
-MAX_CONSECUTIVE_LOSSES = 10             # stop after this many losses in a row
-CONSECUTIVE_LOSS_PAUSE_MINUTES = 20     # temporary pause, not a permanent block
-# Shared by both the model's own trade gate (core/model.py) and Kelly sizing
-# (core/risk_manager.py) -- the spec gives one number for both.
-KELLY_MIN_EXAMPLES = 100
-KELLY_MAX_FRACTION = 0.05               # Kelly capped at 5% of bankroll
-KELLY_MAX_POSITION_USD = 5.0            # absolute cap, regardless of bankroll growth
-FIXED_POSITION_USD = 2.0                # flat size before KELLY_MIN_EXAMPLES is reached
+# ---- layer4_wallet: risk ----
+BANKROLL_USD = 100.0
+MAX_DAILY_LOSS_USD = 100.0
+MAX_OPEN_POSITIONS_5M = 5
+MAX_OPEN_POSITIONS_15M = 5
+MAX_CONSECUTIVE_LOSSES = 10
+CONSECUTIVE_LOSS_PAUSE_MINUTES = 20
+KELLY_MIN_EXAMPLES = 200               # raised from v3's 100 -- fewer, better-trained trades
+KELLY_MAX_FRACTION = 0.03              # 3% of bankroll, more conservative than v3's 5%
+KELLY_MAX_POSITION_USD = 5.0
+WARMUP_POSITION_SIZE = 2.0             # flat size before KELLY_MIN_EXAMPLES real trades close
 
-# ---- entry filters ----
-MIN_SECONDS_REMAINING_5M = 120          # don't enter in the last 2 min of a 5-min window
-MIN_SECONDS_REMAINING_15M = 360         # don't enter in the last 6 min of a 15-min window
-ENTRY_YES_PRICE_MIN = 0.35
-ENTRY_YES_PRICE_MAX = 0.65
-MODEL_TRADE_THRESHOLD_YES = 0.55        # P(UP) > this -> YES
-MODEL_TRADE_THRESHOLD_NO = 0.45         # P(UP) < this -> NO
+# ---- layer4_wallet: take profit / drawdown ----
+DAILY_TAKE_PROFIT_USD = 50.0           # stop trading for the day once hit
+DRAWDOWN_FROM_PEAK_PCT = 0.30          # halve position size once bankroll falls 30% off its daily peak
 
-# ---- trading hours ----
-# 2026-07-19 trade log: 06-12 UTC was the only profitable 6h block (60.8% win
-# rate, +$1.48 avg pnl); the other three blocks were flat-to-negative.
-TRADING_HOURS_START_UTC = 6
-TRADING_HOURS_END_UTC = 12
+# ---- layer3_conscience: confidence_filter ----
+CONFIDENCE_YES_THRESHOLD = 0.57
+CONFIDENCE_NO_THRESHOLD = 0.43
+HIGH_VOLATILITY_CONFIDENCE_THRESHOLD = 0.60  # overrides CONFIDENCE_YES_THRESHOLD in that regime
+
+# ---- layer3_conscience: liquidity_filter ----
+MIN_BOOK_DEPTH_USD = 100.0
+MAX_BID_ASK_SPREAD_PCT = 0.05
+
+# ---- layer3_conscience: timing_filter ----
+MIN_SECONDS_REMAINING_5M = 120
+MIN_SECONDS_REMAINING_15M = 360
+MIN_WINDOW_AGE_SEC = 30                # skip the first 30s of a window -- prices are still settling
+
+# ---- layer3_conscience: regime_detector ----
+REGIME_TREND_MOMENTUM_BPS = 10.0       # |spot_momentum_15m| above this + low vol => trending
+REGIME_HIGH_VOL_MULTIPLIER = 2.0       # volatility_5m > this * median => HIGH_VOLATILITY
+REGIME_RANGE_SIZE_MULTIPLIER = 0.5     # halve position size while regime == RANGE
+REGIME_HISTORY_WINDOW = 50             # samples of volatility_5m kept for the median
+
+# ---- layer6_memory: adaptive_state ----
+ADAPTIVE_LOOKBACK_TRADES = 20
+ADAPTIVE_HOT_WIN_RATE = 0.55
+ADAPTIVE_COLD_WIN_RATE = 0.45
+ADAPTIVE_COLD_SIZE_MULTIPLIER = 0.5
+
+# ---- layer6_memory: pattern_memory ----
+PATTERN_MIN_TRADES_FOR_SIGNAL = 10     # need at least this many historical matches to trust the stat
+PATTERN_BREAKEVEN_AVG_PNL = 0.0        # below this -> skip the trade
 
 # ---- execution ----
-TAKER_FEE_RATE = 0.0                    # fee formula wired in now, rate is 0 for the moment
+TAKER_FEE_RATE = 0.0
 
-# ---- market feed ----
+# ---- layer1_eyes: market feed ----
 CONTEXT_POLL_INTERVAL_SEC = 3
 BINANCE_WS_BASE = "wss://stream.binance.com:9443/stream"
-# Enough finalized 1m bars for the 30m momentum feature plus headroom.
-BINANCE_KLINE_HISTORY_MIN = 35
+BINANCE_KLINE_HISTORY_MIN = 65         # enough finalized 1m bars for the 60m momentum feature
 BINANCE_RECONNECT_BACKOFF_SEC = 5
 
 POLYMARKET_API_BASE = "https://clob.polymarket.com"
 POLYMARKET_GAMMA_BASE = "https://gamma-api.polymarket.com"
 
-# rolling window (in resolved windows) for the BTC<->ETH/SOL correlation feature
 CORRELATION_WINDOW = 20
 
-# ---- models ----
+# ---- layer1_eyes: news_feed ----
+import os  # noqa: E402
+
+CRYPTOPANIC_API_BASE = "https://cryptopanic.com/api/v1/posts/"
+CRYPTOPANIC_API_KEY = os.environ.get("CRYPTOPANIC_API_KEY", "")
+NEWS_POLL_INTERVAL_SEC = 60
+NEWS_SENTIMENT_WINDOW_HOURS = 1
+NEWS_CACHE_FILE = "data/market/news_cache.json"
+NEWS_MAJOR_SOURCES = {"coindesk", "cointelegraph", "reuters", "bloomberg", "theblock"}
+
+# ---- layer1_eyes: fear_greed ----
+FEAR_GREED_API_URL = "https://api.alternative.me/fng/"
+FEAR_GREED_POLL_INTERVAL_SEC = 900     # 15 minutes
+FEAR_GREED_CACHE_FILE = "data/market/fear_greed.json"
+
+# ---- layer1_eyes: whale_tracker ----
+WHALE_POLL_INTERVAL_SEC = 10
+WHALE_TRADE_MIN_USD = 500.0
+WHALE_WINDOW_MINUTES = 5
+
+# ---- layer2_brain: models ----
+# Same path/convention as v3 on purpose -- data/models/ was preserved across
+# the archive move, so shadow-learned examples carry over instead of
+# starting from zero.
 def model_weights_path(asset: str, timeframe: str) -> str:
     return f"data/models/model_{asset.lower()}_{timeframe}.pkl"
 
 
 # ---- trades / logs ----
-# A new filename on purpose -- keeps v3's trade history from mixing with the
-# v2 paper_trades.jsonl history preserved during the archive move.
-PAPER_TRADES_LOG = "data/trades/paper_trades_v3.jsonl"
-RISK_STATE_FILE = "data/trades/risk_state_v3.json"
+# New filenames on purpose -- v4's risk state and trade log start fresh
+# under the new rules (KELLY_MIN_EXAMPLES=200, take-profit, drawdown) even
+# though the models themselves keep learning continuously.
+PAPER_TRADES_LOG = "data/trades/paper_trades_v4.jsonl"
+RISK_STATE_FILE = "data/trades/risk_state_v4.json"
 BOT_STATUS_FILE = "data/market/bot_status.json"
-
-# ---- latency probe (measurement only, never feeds back into trading) ----
-LATENCY_LOG_FILE = "data/latency_log.jsonl"
-LATENCY_MOVEMENT_THRESHOLD_BPS = 5.0    # Binance spot move over one 3s tick that counts as "a move"
-LATENCY_CONFIRM_THRESHOLD_PCT = 2.0     # yes_price move (percentage points) that counts as Polymarket "catching up"
-LATENCY_PENDING_EXPIRY_SEC = 60.0       # give up waiting for Polymarket to react after this long
-LATENCY_STATS_INTERVAL_SEC = 600        # how often to log the summary stats block
+ADAPTIVE_STATE_FILE = "data/market/adaptive_state.json"
+PATTERN_MEMORY_FILE = "data/memory/patterns.json"
 
 # ---- dashboard ----
 DASHBOARD_PORT = 8080

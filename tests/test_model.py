@@ -1,14 +1,18 @@
-from core.model import OnlineModel
-from config.settings import KELLY_MIN_EXAMPLES, MIN_SECONDS_REMAINING_5M, MIN_SECONDS_REMAINING_15M
+from layer2_brain.model import OnlineModel
+from config.settings import KELLY_MIN_EXAMPLES
 
 FEATURES_BTC = {
-    "yes_price": 0.5, "yes_price_momentum_60s": 0.0, "yes_price_momentum_120s": 0.0,
-    "distance_from_half": 0.0, "is_above_half": 0,
-    "spot_momentum_1m": 0.0, "spot_momentum_5m": 0.0, "spot_momentum_15m": 0.0,
-    "volume_ratio": 0.0, "bid_ask_imbalance": 0.0,
-    "book_imbalance": 0.0, "volume_ratio_window": 0.0,
-    "seconds_remaining_pct": 0.5, "hour_sin": 0.0, "hour_cos": 1.0,
-    "day_of_week_sin": 0.0, "day_of_week_cos": 1.0,
+    "spot_momentum_1m": 0.0, "spot_momentum_5m": 0.0, "spot_momentum_15m": 0.0, "spot_momentum_30m": 0.0,
+    "volume_ratio_5m": 0.0, "volume_trend": 0.0, "bid_ask_imbalance_binance": 0.0,
+    "volatility_5m": 0.0, "volatility_15m": 0.0, "price_acceleration": 0.0,
+    "yes_price": 0.5, "yes_momentum_60s": 0.0, "yes_momentum_120s": 0.0, "distance_from_half": 0.0,
+    "book_imbalance_polymarket": 0.0, "book_depth_ratio": 0.5, "volume_ratio_window": 0.0,
+    "seconds_remaining_pct": 0.5,
+    "news_sentiment_1h": 0.0, "news_count_1h": 0, "news_has_major": 0,
+    "fear_greed_normalized": 0.5, "fear_greed_change": 0.0,
+    "whale_imbalance": 0.0, "whale_volume_total": 0.0, "whale_activity": 0,
+    "hour_sin": 0.0, "hour_cos": 1.0, "day_sin": 0.0, "day_cos": 1.0,
+    "rolling_win_rate_1h": 0.5, "rolling_win_rate_6h": 0.5, "regime_score": 0.0,
 }
 
 
@@ -16,69 +20,54 @@ def _model(tmp_path, asset="BTC", timeframe="5m"):
     return OnlineModel(weights_file=str(tmp_path / f"model_{asset}_{timeframe}.pkl"), asset=asset, timeframe=timeframe)
 
 
-# 2. Model doesn't trade until 100 examples.
-def test_model_no_trade_before_100_examples(tmp_path):
+def test_kelly_min_examples_is_200():
+    assert KELLY_MIN_EXAMPLES == 200
+
+
+def test_model_not_warmed_up_before_200_examples(tmp_path):
     model = _model(tmp_path)
     for _ in range(KELLY_MIN_EXAMPLES - 1):
         model.learn(FEATURES_BTC, True)
-    result = model.decide(FEATURES_BTC, seconds_remaining=250)
-    assert result["decision"] == "HOLD"
-    assert "warmup" in result["reason"]
+    assert model.is_warmed_up() is False
 
 
-def test_model_trades_once_100_examples_reached(tmp_path):
+def test_model_warmed_up_at_200_examples(tmp_path):
     model = _model(tmp_path)
     for _ in range(KELLY_MIN_EXAMPLES):
         model.learn(FEATURES_BTC, True)
-    result = model.decide(FEATURES_BTC, seconds_remaining=250)
-    assert result["decision"] != "HOLD" or result["reason"] != f"warmup {KELLY_MIN_EXAMPLES}/{KELLY_MIN_EXAMPLES}"
-    assert result["p_up"] is not None
+    assert model.is_warmed_up() is True
 
 
-# 3. Model NEVER auto-resets.
+# 27. Model NEVER auto-resets.
 def test_model_never_auto_resets(tmp_path):
     model = _model(tmp_path)
-    for i in range(300):
+    for i in range(400):
         model.learn(FEATURES_BTC, i % 2 == 0)
-    assert model.n_examples == 300
-    # no reset/health-check method exists at all on the class
+    assert model.n_examples == 400
     assert not hasattr(model, "_reset_to_fresh")
     assert not hasattr(model, "_run_health_check")
     assert not hasattr(model, "_run_stability_monitor")
 
 
-# 11. seconds_remaining filter works for both timeframes.
-def test_seconds_remaining_filter_5m(tmp_path):
-    model = _model(tmp_path, timeframe="5m")
-    for _ in range(KELLY_MIN_EXAMPLES):
-        model.learn(FEATURES_BTC, True)
-    too_late = model.decide(FEATURES_BTC, seconds_remaining=MIN_SECONDS_REMAINING_5M - 1)
-    assert too_late["decision"] == "HOLD"
-    assert too_late["reason"] == "too_late"
-
-    still_ok = model.decide(FEATURES_BTC, seconds_remaining=MIN_SECONDS_REMAINING_5M + 1)
-    assert still_ok["reason"] != "too_late"
-
-
-def test_seconds_remaining_filter_15m(tmp_path):
-    model = _model(tmp_path, timeframe="15m")
-    for _ in range(KELLY_MIN_EXAMPLES):
-        model.learn(FEATURES_BTC, True)
-    too_late = model.decide(FEATURES_BTC, seconds_remaining=MIN_SECONDS_REMAINING_15M - 1)
-    assert too_late["decision"] == "HOLD"
-    assert too_late["reason"] == "too_late"
-
-    still_ok = model.decide(FEATURES_BTC, seconds_remaining=MIN_SECONDS_REMAINING_15M + 1)
-    assert still_ok["reason"] != "too_late"
-
-
-# Persistence: save and load model weights.
 def test_model_weights_persist_across_restart(tmp_path):
     weights_file = str(tmp_path / "model_btc_5m.pkl")
     model = OnlineModel(weights_file=weights_file, asset="BTC", timeframe="5m")
     for i in range(37):
         model.learn(FEATURES_BTC, i % 2 == 0)
-    assert model.n_examples == 37
-
     reloaded = OnlineModel(weights_file=weights_file, asset="BTC", timeframe="5m")
     assert reloaded.n_examples == 37
+
+
+def test_top_feature_names_falls_back_before_training(tmp_path):
+    model = _model(tmp_path)
+    names = model.top_feature_names(10)
+    assert len(names) == 10
+    assert all(n in FEATURES_BTC for n in names)
+
+
+def test_top_feature_names_after_training(tmp_path):
+    model = _model(tmp_path, asset="ETH")
+    for i in range(50):
+        model.learn(FEATURES_BTC, i % 2 == 0)
+    names = model.top_feature_names(10)
+    assert len(names) == 10

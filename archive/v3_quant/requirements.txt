@@ -1,0 +1,8 @@
+requests>=2.31
+python-dotenv>=1.0
+river>=0.21
+websocket-client>=1.7
+pandas>=2.1
+numpy>=1.26
+pytest>=7.4
+pytest-mock>=3.11
