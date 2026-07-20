@@ -65,6 +65,13 @@ PAPER_TRADES_LOG = "data/trades/paper_trades_v3.jsonl"
 RISK_STATE_FILE = "data/trades/risk_state_v3.json"
 BOT_STATUS_FILE = "data/market/bot_status.json"
 
+# ---- latency probe (measurement only, never feeds back into trading) ----
+LATENCY_LOG_FILE = "data/latency_log.jsonl"
+LATENCY_MOVEMENT_THRESHOLD_BPS = 5.0    # Binance spot move over one 3s tick that counts as "a move"
+LATENCY_CONFIRM_THRESHOLD_PCT = 2.0     # yes_price move (percentage points) that counts as Polymarket "catching up"
+LATENCY_PENDING_EXPIRY_SEC = 60.0       # give up waiting for Polymarket to react after this long
+LATENCY_STATS_INTERVAL_SEC = 600        # how often to log the summary stats block
+
 # ---- dashboard ----
 DASHBOARD_PORT = 8080
 

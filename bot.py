@@ -22,6 +22,7 @@ from core.feature_engine import build_features, CrossMarketState, TradeHistory
 from core.model import OnlineModel
 from core.risk_manager import RiskManager
 from core.executor import Executor
+from core.latency_probe import LatencyProbe
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ class Bot:
         self.cross_market = CrossMarketState()
         self.risk_manager = RiskManager(state_file=RISK_STATE_FILE)
         self.trade_history = TradeHistory(log_path=PAPER_TRADES_LOG)
+        self.latency_probe = LatencyProbe()  # measurement only -- never read by the trading loop
 
         self.models = {}
         self.executors = {}
@@ -79,6 +81,8 @@ class Bot:
 
         for timeframe, window_sec in TIMEFRAMES.items():
             btc_snapshot = self.market_feed.snapshot("BTC", timeframe)
+            if timeframe == "5m":
+                self.latency_probe.update(btc_snapshot.get("spot_price"), btc_snapshot.get("yes_price"))
             self._process(("BTC", timeframe), btc_snapshot, window_sec, None, None)
             for asset in ASSETS:
                 if asset == "BTC":
