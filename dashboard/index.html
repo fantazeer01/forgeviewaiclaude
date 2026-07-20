@@ -338,7 +338,7 @@ const STATUS_URL = "/data/market/bot_status.json";
 const TRADES_URL = "/data/trades/paper_trades_v4.jsonl";
 const RISK_STATE_URL = "/data/trades/risk_state_v4.json";
 const LATENCY_URL = "/data/latency_log.jsonl";
-const POLL_MS = 3000;
+const POLL_MS = 500;
 const TIMEFRAMES = { "5m": 300, "15m": 900 };
 const ASSETS = ["BTC", "ETH", "SOL"];
 const ASSET_ICON = { BTC: "₿", ETH: "Ξ", SOL: "◎" };
@@ -1216,10 +1216,11 @@ async function refresh() {
   }
 }
 
-// Open positions (incl. the unrealized total) re-render every second
-// (cosmetic tick against the last-fetched status) in addition to the
-// main 3s poll, so the merged total feels live between fetches.
-setInterval(() => { if (lastFullStatus) renderOpenPositions(lastFullStatus); }, 1000);
+// Unrealized P&L now lives inside renderOpenPositions() (merged into the
+// Open Positions table in a prior pass), so its fast 200ms cycle re-renders
+// that same function against the last-fetched status, 5x/sec, independent
+// of the main POLL_MS fetch loop.
+setInterval(() => { if (lastFullStatus) renderOpenPositions(lastFullStatus); }, 200);
 setInterval(tickExpiryCountdown, 1000);
 
 setupChartTabs();
