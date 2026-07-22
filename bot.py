@@ -19,7 +19,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 from config.settings import (
-    ASSETS, TIMEFRAMES, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC,
+    ASSETS, TIMEFRAMES, ENABLED_TIMEFRAMES, CONTEXT_POLL_INTERVAL_SEC, CONSOLE_SUMMARY_INTERVAL_SEC,
     BOT_STATUS_FILE, RISK_STATE_FILE, PAPER_TRADES_LOG, model_weights_path,
     REGIME_RANGE_SIZE_MULTIPLIER,
 )
@@ -233,7 +233,12 @@ class Bot:
     def _maybe_trade(self, key, snapshot, features, p_up, decision):
         asset, timeframe = key
         market_id = snapshot.get("market_id")
+        if timeframe not in ENABLED_TIMEFRAMES:
+            return
         if decision not in ("YES", "NO") or market_id is None or market_id in self.pending:
+            return
+        if self.current_regime == RANGE and decision == "YES":
+            logger.info(f"SKIP [{asset}-{timeframe}] reason=range_no_yes")
             return
 
         ok, reason = price_band_filter.passes(snapshot.get("yes_price"))

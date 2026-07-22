@@ -7,6 +7,10 @@ PAPER_MODE = True
 ASSETS = ["BTC", "ETH", "SOL"]
 BINANCE_SYMBOLS = {"BTC": "btcusdt", "ETH": "ethusdt", "SOL": "solusdt"}
 TIMEFRAMES = {"5m": 300, "15m": 900}
+# 5m real-money trading disabled (2026-07-22: post-peak analysis showed 45%
+# win rate on 5m vs 60.6% on 15m) -- shadow learning still runs on ALL of
+# TIMEFRAMES so 5m models keep training; only real trade entry is gated.
+ENABLED_TIMEFRAMES = ["15m"]
 
 # ---- layer4_wallet: risk ----
 BANKROLL_USD = 100.0
@@ -27,7 +31,9 @@ DAILY_TAKE_PROFIT_USD = 50.0           # stop trading for the day once hit
 DRAWDOWN_FROM_PEAK_PCT = 0.30          # halve position size once bankroll falls 30% off its daily peak
 
 # ---- layer3_conscience: confidence_filter ----
-CONFIDENCE_YES_THRESHOLD = 0.57
+# YES raised 0.57->0.60 (2026-07-22: YES win rate 45.3% vs NO's 56.2% in the
+# post-peak sample -- YES needs more conviction to justify a trade at all).
+CONFIDENCE_YES_THRESHOLD = 0.60
 CONFIDENCE_NO_THRESHOLD = 0.43
 HIGH_VOLATILITY_CONFIDENCE_THRESHOLD = 0.60  # overrides CONFIDENCE_YES_THRESHOLD in that regime
 
